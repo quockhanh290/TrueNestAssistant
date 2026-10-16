@@ -11,7 +11,13 @@ if (-not $env:TELEGRAM_BOT_TOKEN) {
     exit 1
 }
 
-$env:WEBAPP_URL = "https://celebration-workers-knowledgestorm-yard.trycloudflare.com"
+# WEBAPP_URL: doc tu webapp_url.txt neu co (de doi tunnel URL khong can pull), khong thi dung default
+$urlFile = Join-Path $PSScriptRoot "webapp_url.txt"
+if (Test-Path $urlFile) {
+    $env:WEBAPP_URL = (Get-Content $urlFile -Raw).Trim()
+} else {
+    $env:WEBAPP_URL = "https://celebration-workers-knowledgestorm-yard.trycloudflare.com"
+}
 
 Write-Host "Starting webapp..." -ForegroundColor Green
 Start-Process powershell -WindowStyle Hidden -ArgumentList "-Command", "cd '$PSScriptRoot'; `$env:TELEGRAM_BOT_TOKEN='$env:TELEGRAM_BOT_TOKEN'; `$env:WEBAPP_URL='$env:WEBAPP_URL'; pythonw webapp/server.py"
