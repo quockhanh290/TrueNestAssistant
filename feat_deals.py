@@ -261,10 +261,10 @@ async def _handle_add_deal(update, ctx, ad, text):
         await update.message.reply_text(
             "Em chưa hiểu số tiền, anh nhập lại giúp em nhé? (vd: 15tr)")
         return
-    db.create_deal(uid, client_id=ad.get("client_id"),
-                   client_name=ad.get("client_name") or "",
-                   listing_id=ad.get("listing_id"),
-                   commission_vnd=val)
+    deal_id = db.create_deal(uid, client_id=ad.get("client_id"),
+                             client_name=ad.get("client_name") or "",
+                             listing_id=ad.get("listing_id"),
+                             commission_vnd=val)
     c = db.get_client(ad["client_id"]) if ad.get("client_id") else None
     if c and c["status"] != "rented":
         db.update_client(ad["client_id"], status="rented")
@@ -272,6 +272,13 @@ async def _handle_add_deal(update, ctx, ad, text):
     await update.message.reply_text(
         f"Đã lưu deal ✓ Hoa hồng {fmt_price(val)} 🎉",
         reply_markup=MENU_KB)
+    # Ask for the platform fee transfer + receipt photo.
+    import feat_payment  # lazy: avoid cycle
+    deal = db.get_deal(deal_id)
+    if deal:
+        await update.message.reply_text(
+            feat_payment.payment_instructions_text(deal),
+            parse_mode="HTML")
 
 
 # ---------------------------------------------------------------- auto prompt

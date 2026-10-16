@@ -740,11 +740,19 @@ async def on_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             "(gõ /huy để hủy)")
         return
 
+    # 1c. receipt? broker has unpaid debt and sent a SINGLE photo
+    # (albums go through the normal listing flow — a receipt is 1 photo).
+    mg_id = msg.media_group_id
+    if not mg_id and not ctx.user_data.get("receipt_pending") \
+            and db.has_unpaid_debt(uid):
+        import feat_payment  # lazy: avoid cycle
+        await feat_payment.ask_is_receipt(update, ctx, uid, file_id)
+        return
+
     # 2. part of an album? buffer by media_group_id, debounce, then merge
     # Note: forwarded albums keep a (fresh) media_group_id, so this path
     # works for forwards too. If media_group_id is ever missing on a
     # forward, the photo falls through to step 3 and the 5s buffer groups it.
-    mg_id = msg.media_group_id
     if mg_id:
         key = f"{uid}:{mg_id}"
         entry = _media_groups.get(key)
@@ -767,6 +775,14 @@ async def on_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
 
     # 3. single photo — caption goes through the same pipeline as text
+    await _handle_single_photo(update, ctx, uid, msg, file_id, caption)
+
+
+async def _handle_single_photo(update, ctx, uid, msg, file_id, caption=""):
+    """Step 3 of on_photo, extracted so the receipt flow can re-enter it.
+
+    `msg` needs `.chat.id`; `update` needs `.message.reply_text`.
+    """
     fwd_source = get_forward_source(msg)
     if fwd_source and caption:
         caption = strip_forward_noise(caption)
