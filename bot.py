@@ -494,6 +494,12 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await feat_templates._handle_add_template(update, ctx, at, text)
         return
 
+    # 1b8. relaying a message to another broker (cross-broker match)?
+    rl = ctx.user_data.get("relaying")
+    if rl:
+        await feat_match._handle_relay_message(update, ctx, rl, text)
+        return
+
     # 1c. adding photos to a listing? text is not expected here
     if ctx.user_data.get("adding_photos"):
         await update.message.reply_text(
@@ -620,6 +626,12 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await feat_match.match_requests_list(update, ctx)
     elif data.startswith("mreq:close:"):
         await feat_match.match_request_close(update, ctx)
+    elif data.startswith("mresp:view:"):
+        await feat_match.match_responses_view(update, ctx)
+    elif data.startswith("mresp:msg:") or data.startswith("mresp:back:"):
+        await feat_match.match_relay_prompt(update, ctx)
+    elif data == "mresp:cancel":
+        await feat_match.match_relay_cancel(update, ctx)
     elif data.startswith("client:match:"):
         await feat_clients.client_match(update, ctx)
     elif data.startswith("client:seturg:"):

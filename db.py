@@ -119,6 +119,7 @@ CREATE TABLE IF NOT EXISTS match_requests (
     requirements_summary TEXT NOT NULL DEFAULT '',
     urgency             TEXT NOT NULL DEFAULT 'normal',
     status              TEXT NOT NULL DEFAULT 'open',
+    closed_reason       TEXT,
     group_message_id    INTEGER,
     created_at          REAL NOT NULL,
     updated_at          REAL NOT NULL
@@ -126,6 +127,19 @@ CREATE TABLE IF NOT EXISTS match_requests (
 CREATE INDEX IF NOT EXISTS idx_mreq_broker ON match_requests(broker_id);
 CREATE INDEX IF NOT EXISTS idx_mreq_status ON match_requests(status);
 CREATE INDEX IF NOT EXISTS idx_mreq_groupmsg ON match_requests(group_message_id);
+
+CREATE TABLE IF NOT EXISTS match_responses (
+    id                  TEXT PRIMARY KEY,
+    request_id          TEXT NOT NULL REFERENCES match_requests(id),
+    responder_broker_id INTEGER NOT NULL,
+    responder_username  TEXT,
+    listing_id          TEXT,
+    messages            TEXT NOT NULL DEFAULT '[]',
+    created_at          REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_mresp_request ON match_responses(request_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_mresp_unique
+    ON match_responses(request_id, responder_broker_id);
 """
 
 
@@ -140,6 +154,7 @@ def init_db(path=None):
     conn.executescript(SCHEMA)
     _migrate_brokers(conn)
     _migrate_clients(conn)
+    _migrate_match_requests(conn)
     conn.commit()
     conn.close()
 
@@ -162,6 +177,13 @@ def _migrate_brokers(conn):
     for col in ("name", "zalo", "facebook", "pronoun"):
         if col not in cols:
             conn.execute(f"ALTER TABLE brokers ADD COLUMN {col} TEXT")
+
+
+def _migrate_match_requests(conn):
+    """Add closed_reason to match_requests on pre-existing DBs (no data loss)."""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(match_requests)")}
+    if "closed_reason" not in cols:
+        conn.execute("ALTER TABLE match_requests ADD COLUMN closed_reason TEXT")
 
 
 def _now():
@@ -1092,6 +1114,7 @@ def get_match_request(mr_id, path=None):
 
 def get_match_request_by_group_message(group_message_id, path=None):
     """Find an OPEN request by its Telegram group message id."""
+    expire_old_requests(path=path)
     conn = connect(path)
     row = conn.execute(
         "SELECT * FROM match_requests"
@@ -1103,6 +1126,7 @@ def get_match_request_by_group_message(group_message_id, path=None):
 
 
 def list_broker_requests(broker_id, status=None, limit=50, path=None):
+    expire_old_requests(path=path)
     conds = ["broker_id = ?"]
     vals = [broker_id]
     if status:
@@ -1121,6 +1145,7 @@ def list_broker_requests(broker_id, status=None, limit=50, path=None):
 
 def list_open_requests(broker_id=None, path=None):
     """All open requests; optionally scoped to one broker."""
+    expire_old_requests(path=path)
     if broker_id is None:
         sql = ("SELECT * FROM match_requests WHERE status = 'open'"
                " ORDER BY updated_at DESC")
@@ -1136,7 +1161,8 @@ def list_open_requests(broker_id=None, path=None):
 
 
 def update_match_request(mr_id, path=None, **fields):
-    allowed = {"status", "group_message_id", "requirements_summary"}
+    allowed = {"status", "group_message_id", "requirements_summary",
+               "closed_reason"}
     sets = ", ".join(f"{k} = ?" for k in fields if k in allowed)
     if not sets:
         return
@@ -1153,6 +1179,208 @@ def update_match_request(mr_id, path=None, **fields):
 
 def close_match_request(mr_id, path=None):
     update_match_request(mr_id, path=path, status="closed")
+
+
+# ---- broadcast anti-spam ----
+
+BROADCAST_EXPIRE_DAYS = 7  # broadcasts auto-close after this long
+MAX_RESPONDERS = 3         # max brokers that can respond to one broadcast
+
+
+def expire_old_requests(days=BROADCAST_EXPIRE_DAYS, path=None):
+    """Auto-close stale open/matched requests. Returns count closed."""
+    cutoff = _now() - days * 86400
+    now = _now()
+    conn = connect(path)
+    cur = conn.execute(
+        "UPDATE match_requests SET status = 'closed',"
+        " closed_reason = 'expired', updated_at = ?"
+        " WHERE status IN ('open', 'matched') AND created_at < ?",
+        (now, cutoff),
+    )
+    n = cur.rowcount
+    conn.commit()
+    conn.close()
+    return n
+
+
+def broadcast_stats(broker_id, path=None):
+    """Broadcast counts for rate limits. Every successful broadcast creates
+    a match_requests row, so stats derive from it (no separate table)."""
+    now = _now()
+    conn = connect(path)
+    row = conn.execute(
+        "SELECT"
+        " SUM(CASE WHEN created_at > ? THEN 1 ELSE 0 END) AS d24,"
+        " SUM(CASE WHEN created_at > ? THEN 1 ELSE 0 END) AS d7,"
+        " MAX(created_at) AS last_at"
+        " FROM match_requests WHERE broker_id = ?",
+        (now - 86400, now - 7 * 86400, broker_id),
+    ).fetchone()
+    conn.close()
+    return {
+        "last_24h": row["d24"] or 0,
+        "last_7d": row["d7"] or 0,
+        "last_at": row["last_at"],
+    }
+
+
+def open_request_for_client(broker_id, client_id, path=None):
+    """Any active (open/matched) broadcast request for this client?"""
+    conn = connect(path)
+    row = conn.execute(
+        "SELECT * FROM match_requests WHERE broker_id = ? AND client_id = ?"
+        " AND status IN ('open', 'matched')"
+        " ORDER BY updated_at DESC LIMIT 1",
+        (broker_id, client_id),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def can_broadcast(broker_id, client=None, path=None):
+    """All anti-spam checks before posting to the group.
+
+    Returns (ok, reason, info). reason is None when ok, otherwise one of:
+    not_qualified | low_urgency | already_open |
+    daily_limit | weekly_limit | cooldown.
+    """
+    expire_old_requests(path=path)
+    now = _now()
+
+    # 1. qualification gate: >= 10 submitted listings
+    n_listings = count_broker_listings(broker_id, statuses=["submitted"])
+    if n_listings < 10:
+        return False, "not_qualified", {"listing_count": n_listings}
+
+    # 2. urgency filter: only urgent/normal can broadcast
+    urg = (client or {}).get("urgency") or "normal"
+    if urg not in ("urgent", "normal"):
+        return False, "low_urgency", {"urgency": urg}
+
+    # 3. one active broadcast per client
+    cid = (client or {}).get("id")
+    if cid and open_request_for_client(broker_id, cid, path=path):
+        return False, "already_open", {"client_name": client.get("name")}
+
+    # 4/5/6. rate limits
+    stats = broadcast_stats(broker_id, path=path)
+    if stats["last_24h"] >= config.BROADCAST_DAILY_LIMIT:
+        return False, "daily_limit", {
+            "daily_limit": config.BROADCAST_DAILY_LIMIT}
+    if stats["last_7d"] >= config.BROADCAST_WEEKLY_LIMIT:
+        return False, "weekly_limit", {
+            "weekly_limit": config.BROADCAST_WEEKLY_LIMIT}
+    if stats["last_at"]:
+        hours_since = (now - stats["last_at"]) / 3600
+        if hours_since < config.BROADCAST_COOLDOWN_HOURS:
+            return False, "cooldown", {
+                "hours_since": hours_since,
+                "hours_left": config.BROADCAST_COOLDOWN_HOURS - hours_since}
+    return True, None, stats
+
+
+def record_broadcast(broker_id, path=None):
+    """Hook called right after a broadcast posts successfully. The
+    match_requests row created by create_match_request() IS the record —
+    broadcast_stats() reads it — so this returns current stats as a
+    confirmation hook for the anti-spam flow."""
+    return broadcast_stats(broker_id, path=path)
+
+
+# ---- broadcast responses (max 3 responders) ----
+
+def add_match_response(request_id, responder_broker_id, responder_username=None,
+                       listing_id=None, path=None):
+    """Record one broker's response. Returns (ok, response_count).
+    ok=False when this broker already responded (deduped)."""
+    conn = connect(path)
+    exists = conn.execute(
+        "SELECT 1 FROM match_responses"
+        " WHERE request_id = ? AND responder_broker_id = ?",
+        (request_id, responder_broker_id),
+    ).fetchone()
+    if exists:
+        n = conn.execute(
+            "SELECT COUNT(*) c FROM match_responses WHERE request_id = ?",
+            (request_id,),
+        ).fetchone()["c"]
+        conn.close()
+        return False, n
+    conn.execute(
+        "INSERT INTO match_responses (id, request_id, responder_broker_id,"
+        " responder_username, listing_id, messages, created_at)"
+        " VALUES (?, ?, ?, ?, ?, '[]', ?)",
+        ("mresp:" + uuid.uuid4().hex[:12], request_id, responder_broker_id,
+         responder_username, listing_id, _now()),
+    )
+    n = conn.execute(
+        "SELECT COUNT(*) c FROM match_responses WHERE request_id = ?",
+        (request_id,),
+    ).fetchone()["c"]
+    conn.commit()
+    conn.close()
+    return True, n
+
+
+def has_responded(request_id, responder_broker_id, path=None):
+    conn = connect(path)
+    row = conn.execute(
+        "SELECT 1 FROM match_responses"
+        " WHERE request_id = ? AND responder_broker_id = ?",
+        (request_id, responder_broker_id),
+    ).fetchone()
+    conn.close()
+    return bool(row)
+
+
+def count_responses(request_id, path=None):
+    conn = connect(path)
+    n = conn.execute(
+        "SELECT COUNT(*) c FROM match_responses WHERE request_id = ?",
+        (request_id,),
+    ).fetchone()["c"]
+    conn.close()
+    return n
+
+
+def list_responses(request_id, path=None):
+    conn = connect(path)
+    rows = conn.execute(
+        "SELECT * FROM match_responses WHERE request_id = ?"
+        " ORDER BY created_at ASC",
+        (request_id,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def log_relay_message(request_id, responder_broker_id, sender_id, text,
+                      path=None):
+    """Append one relayed message to the response thread's log."""
+    conn = connect(path)
+    row = conn.execute(
+        "SELECT messages FROM match_responses"
+        " WHERE request_id = ? AND responder_broker_id = ?",
+        (request_id, responder_broker_id),
+    ).fetchone()
+    if not row:
+        conn.close()
+        return False
+    try:
+        msgs = json.loads(row["messages"] or "[]")
+    except (ValueError, TypeError):
+        msgs = []
+    msgs.append({"from": sender_id, "text": text, "ts": _now()})
+    conn.execute(
+        "UPDATE match_responses SET messages = ?"
+        " WHERE request_id = ? AND responder_broker_id = ?",
+        (json.dumps(msgs, ensure_ascii=False), request_id,
+         responder_broker_id),
+    )
+    conn.commit()
+    conn.close()
+    return True
 
 
 if __name__ == "__main__":
