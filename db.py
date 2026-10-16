@@ -208,7 +208,7 @@ def set_listing_status(listing_id, new_status, changed_by="broker", path=None):
         " VALUES (?, ?, ?, ?, ?)",
         (listing_id, old_status, new_status, changed_by, now),
     )
-    if new_status == "approved":
+    if new_status == "submitted":
         conn.execute(
             "UPDATE brokers SET approved_count = approved_count + 1"
             " WHERE user_id = ?", (row["broker_id"],),
@@ -273,7 +273,7 @@ def count_recent_listings(broker_id, hours=1, path=None):
     return n
 
 
-def stale_listings(older_than_days=7, statuses=("approved",), path=None):
+def stale_listings(older_than_days=7, statuses=("submitted",), path=None):
     """Listings not updated in N days — candidates for availability nudge."""
     conn = connect(path)
     ph = ", ".join("?" for _ in statuses)
