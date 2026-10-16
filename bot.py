@@ -445,6 +445,12 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     text = update.message.text or ""
 
+    # 0-. anti-spam: muted or banned users are blocked entirely
+    blocked, block_msg = db.is_muted_or_banned(uid)
+    if blocked:
+        await update.message.reply_text(block_msg, reply_markup=MENU_KB)
+        return
+
     # 0. onboarding (phone/name collection) takes priority
     ob = ctx.user_data.get("onboarding")
     if ob:
@@ -577,20 +583,50 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     # spam/relevance check first
     is_rel, reason = listing_parser.is_rental_relevant(text)
     if not is_rel:
+        # 3rd spam submission in 1h → automatic strike
+        action = db.maybe_strike_for_repeated_event(uid, "spam_content")
         await natural_delay(update)
-        await update.message.reply_text(
-            f"Tin này em thấy {reason}, không giống tin cho thuê nhà 😅\n"
-            f"Anh gửi tin cho thuê giúp em nhé!",
-            reply_markup=MENU_KB,
-        )
+        if action:
+            await update.message.reply_text(
+                db.spam_violation_message(action, "spam_content", text),
+                reply_markup=MENU_KB,
+            )
+        else:
+            await update.message.reply_text(
+                f"Tin này em thấy {reason}, không giống tin cho thuê nhà 😅\n"
+                f"Anh gửi tin cho thuê giúp em nhé!",
+                reply_markup=MENU_KB,
+            )
+        return
+    # duplicate-text check: same raw text submitted repeatedly → spam
+    if db.count_recent_identical_texts(uid, text, hours=1) >= 2:
+        # 3rd identical submission in 1h → automatic strike
+        action = db.maybe_strike_for_repeated_event(uid, "duplicate")
+        await natural_delay(update)
+        if action:
+            await update.message.reply_text(
+                db.spam_violation_message(action, "duplicate"),
+                reply_markup=MENU_KB,
+            )
+        else:
+            await update.message.reply_text(
+                "Tin này anh gửi trùng rồi 😅 Em bỏ qua nhé!",
+                reply_markup=MENU_KB,
+            )
         return
     # Tier-based rate limit
     tier = db.get_tier(uid)
     hourly_limit = config.RATE_LIMITS_PER_HOUR.get(tier, 10)
-    if db.count_recent_listings(uid, hours=1) >= hourly_limit:
+    recent_count = db.count_recent_listings(uid, hours=1)
+    if recent_count >= hourly_limit:
+        # rate-limit breach → immediate strike (fully automatic)
+        action = db.record_spam_violation(uid, "rate_limit")
         await natural_delay(update)
         await update.message.reply_text(
-            f"Anh gửi nhiều quá rồi 😅 Gói {tier} tối đa {hourly_limit} tin/giờ thôi ạ.",
+            db.spam_violation_message(
+                action, "rate_limit",
+                f"Gói {tier} tối đa {hourly_limit} tin/giờ,"
+                f" anh đã gửi {recent_count} tin"),
             reply_markup=MENU_KB,
         )
         return

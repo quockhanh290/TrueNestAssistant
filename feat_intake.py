@@ -697,11 +697,18 @@ async def _handle_photo_answer(update, ctx, awaiting, file_id, caption):
 
 async def on_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await react_heart(update.message)
+    uid = update.effective_user.id
+
+    # anti-spam: muted or banned users are blocked entirely
+    blocked, block_msg = db.is_muted_or_banned(uid)
+    if blocked:
+        await update.message.reply_text(block_msg, reply_markup=MENU_KB)
+        return
+
     if ctx.user_data.get("onboarding") or ctx.user_data.get("editing_contact"):
         await update.message.reply_text(
             "Anh trả lời tin nhắn trên giúp em trước nhé? 😊")
         return
-    uid = update.effective_user.id
     msg = update.message
     file_id = msg.photo[-1].file_id  # largest size
     caption = (msg.caption or "").strip()
