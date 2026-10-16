@@ -25,6 +25,7 @@ STATIC_DIR = os.path.join(HERE, "static")
 
 sys.path.insert(0, HERE)
 import api  # noqa: E402
+import share  # noqa: E402
 
 PORT = int(os.environ.get("WEBAPP_PORT", "8080"))
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
@@ -127,6 +128,15 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/health":
             return self._json(200, {"ok": True})
 
+        # Public share pages — no auth (client-facing, outside Telegram).
+        if path.startswith("/s/"):
+            token = path[len("/s/"):].split("/")[0]
+            if token and path.rstrip("/") == f"/s/{token}":
+                html_body, code = share.render_share_page(token)
+                return self._send(code, html_body,
+                                  "text/html; charset=utf-8")
+            return self._json(404, {"error": "not_found"})
+
         if path.startswith("/api/"):
             broker_id = self._auth(query)
             if not broker_id:
@@ -151,12 +161,22 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         query = dict(parse_qsl(parsed.query))
         path = parsed.path
+        # Public share-page booking — no auth.
+        if path.startswith("/s/"):
+            rest = path[len("/s/"):]
+            if "/" in rest:
+                token, action = rest.split("/", 1)
+                if token and action == "book":
+                    data, code = share.handle_booking(token, self._body())
+                    return self._json(code, data)
+            return self._json(404, {"error": "not_found"})
         if not path.startswith("/api/"):
             return self._json(404, {"error": "not_found"})
         broker_id = self._auth(query)
         if not broker_id:
             return self._json(401, {"error": "unauthorized"})
-        return self._api_post(broker_id, path[len("/api/"):], query)
+        body = self._body()
+        return self._api_post(broker_id, path[len("/api/"):], query, body)
 
     # -- static -------------------------------------------------------
     def _static(self, name):
@@ -207,6 +227,9 @@ class Handler(BaseHTTPRequestHandler):
         if parts[0] == "trial" and len(parts) == 2:
             data, code = api.get_trial(broker_id, parts[1])
             return self._json(code, data)
+        if parts[0] == "shares" and len(parts) == 1:
+            data, code = api.list_shares(broker_id)
+            return self._json(code, data)
         return self._json(404, {"error": "not_found"})
 
     def _api_put(self, broker_id, rest, query, body):
@@ -226,10 +249,18 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(code, data)
         return self._json(404, {"error": "not_found"})
 
-    def _api_post(self, broker_id, rest, query):
+    def _api_post(self, broker_id, rest, query, body):
         parts = rest.split("/")
         if parts[0] == "trial" and len(parts) == 3 and parts[2] == "use":
             data, code = api.use_trial(broker_id, parts[1])
+            return self._json(code, data)
+        if parts[0] == "share" and len(parts) == 1:
+            data, code = api.create_share(
+                broker_id,
+                body.get("listing_ids"),
+                title=body.get("title", ""),
+                client_id=body.get("client_id"),
+            )
             return self._json(code, data)
         return self._json(404, {"error": "not_found"})
 
