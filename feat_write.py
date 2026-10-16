@@ -103,6 +103,16 @@ def generate_post(listing, lang="vi"):
     furn = p.get("furnishing")
     pet = p.get("pet_friendly")
     phone = p.get("primary_phone") or ""
+    desc = (p.get("description") or "").strip()
+    amenities = p.get("amenities") or []
+    if isinstance(amenities, str):
+        try:
+            import json as _json
+            amenities = _json.loads(amenities)
+        except Exception:
+            amenities = [amenities]
+    deposit = p.get("deposit_months")
+    n_photos = len(p.get("photos") or [])
 
     def build_vi():
         title_br = f" {br_vi}" if br_vi else ""
@@ -113,6 +123,8 @@ def generate_post(listing, lang="vi"):
             lines.append(f"📍 Địa chỉ: {address}")
         if price_vi:
             lines.append(f"💰 Giá: {price_vi}")
+        if deposit:
+            lines.append(f"🔑 Cọc: {deposit} tháng")
         specs = []
         if br_vi:
             specs.append(f"🛏️ {br_vi}")
@@ -128,6 +140,13 @@ def generate_post(listing, lang="vi"):
             lines.append("🐾 Cho nuôi pet")
         elif pet is False:
             lines.append("🐾 Không nuôi pet")
+        if amenities:
+            lines.append(f"✨ Tiện ích: {', '.join(amenities)}")
+        if desc:
+            lines.append("")
+            lines.append(f"📝 {desc}")
+        if n_photos:
+            lines.append(f"📸 {n_photos} ảnh chi tiết")
         lines.append("")
         if phone:
             lines.append(f"📞 Liên hệ: {phone} (Zalo/Call)")
@@ -157,6 +176,13 @@ def generate_post(listing, lang="vi"):
             lines.append("🐾 Pet-friendly")
         elif pet is False:
             lines.append("🐾 No pets")
+        if amenities:
+            lines.append(f"✨ Amenities: {', '.join(amenities)}")
+        if desc:
+            lines.append("")
+            lines.append(f"📝 {desc}")
+        if n_photos:
+            lines.append(f"📸 {n_photos} detailed photos")
         lines.append("")
         if phone:
             lines.append(f"📞 Contact: {phone} (Zalo/Call)")
@@ -186,6 +212,13 @@ def generate_post(listing, lang="vi"):
             lines.append("🐾 반려동물 가능")
         elif pet is False:
             lines.append("🐾 반려동물 불가")
+        if amenities:
+            lines.append(f"✨ 편의시설: {', '.join(amenities)}")
+        if desc:
+            lines.append("")
+            lines.append(f"📝 {desc}")
+        if n_photos:
+            lines.append(f"📸 상세 사진 {n_photos}장")
         lines.append("")
         if phone:
             lines.append(f"📞 연락처: {phone} (Zalo/Call)")
@@ -215,6 +248,13 @@ def generate_post(listing, lang="vi"):
             lines.append("🐾 可养宠物")
         elif pet is False:
             lines.append("🐾 不可养宠物")
+        if amenities:
+            lines.append(f"✨ 设施: {', '.join(amenities)}")
+        if desc:
+            lines.append("")
+            lines.append(f"📝 {desc}")
+        if n_photos:
+            lines.append(f"📸 {n_photos}张详细照片")
         lines.append("")
         if phone:
             lines.append(f"📞 联系: {phone} (Zalo/Call)")
@@ -244,6 +284,13 @@ def generate_post(listing, lang="vi"):
             lines.append("🐾 Можно с животными")
         elif pet is False:
             lines.append("🐾 Без животных")
+        if amenities:
+            lines.append(f"✨ Удобства: {', '.join(amenities)}")
+        if desc:
+            lines.append("")
+            lines.append(f"📝 {desc}")
+        if n_photos:
+            lines.append(f"📸 {n_photos} детальных фото")
         lines.append("")
         if phone:
             lines.append(f"📞 Контакт: {phone} (Zalo/Call)")
