@@ -29,7 +29,7 @@ from utils import (
     natural_delay, PROCESSING_HINTS, react_heart,
     maybe_send_hint, maybe_send_hint_to_chat,
     fmt_price, listing_line, _confirm_summary,
-    get_forward_source, strip_forward_noise,
+    get_forward_source, strip_forward_noise, content_hash_for_listing,
 )
 
 log = logging.getLogger("linh")
@@ -56,11 +56,11 @@ async def on_new_listing_prompt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.user_data.pop("guided", None)
     await natural_delay(update)
     await q.edit_message_text(
-        "Anh muốn thêm tin kiểu nào ạ?",
+        "Anh muốn nhập căn mới kiểu nào ạ?",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("✍️ Viết từ đầu (em hỏi từng bước)",
+            [InlineKeyboardButton("✍️ Nhập từ đầu (em hỏi từng bước)",
                                   callback_data="guided:mode:guided")],
-            [InlineKeyboardButton("📋 Nhập từ tin có sẵn (paste bài FB)",
+            [InlineKeyboardButton("📋 Nhập từ tin có sẵn (forward/paste bài FB)",
                                   callback_data="guided:mode:free")],
         ]),
     )
@@ -185,7 +185,31 @@ async def stray_confirm_new(update, ctx):
 
 # ---------------------------------------------------------------- full pre-save confirmation
 
-async def _process_buffer(uid, buf, ctx, field_overrides=None):
+async def handle_forward_text(update, ctx, uid, text, fwd_source):
+    """Forwarded text message: complete content → parse and create a draft
+    IMMEDIATELY (no 5s collection wait). Replies to the forwarded message.
+    Each forward = its own listing; manual buffers are untouched.
+    """
+    msg = update.message
+    clean = strip_forward_noise(text)
+    if not clean:
+        await msg.reply_text(
+            "Tin forward này trống, anh kiểm tra lại giúp em nhé 😅",
+            reply_to_message_id=msg.message_id)
+        return
+    buf = {
+        "texts": [clean],
+        "photos": [],
+        "deadline": time.time(),
+        "chat_id": msg.chat.id,
+        "forward_source": fwd_source,
+    }
+    await _process_buffer(uid, buf, ctx,
+                          reply_to_message_id=msg.message_id)
+
+
+async def _process_buffer(uid, buf, ctx, field_overrides=None,
+                          reply_to_message_id=None):
     chat_id = buf["chat_id"]
     raw = "\n".join(buf["texts"])
     photos = buf["photos"]
@@ -210,21 +234,67 @@ async def _process_buffer(uid, buf, ctx, field_overrides=None):
     await asyncio.sleep(random.uniform(1.0, 1.5))
 
     # create as DRAFT — the broker must confirm the full summary first
+    chash = content_hash_for_listing(buf["texts"], photos)
     listing_id = db.create_listing(
         uid, raw_text=raw, photo_file_ids=photos,
         parsed=result["fields"], missing_fields=result["missing"],
-        status="draft",
+        status="draft", content_hash=chash,
     )
     pn = get_pronoun(uid)
     phone_note = f" (SĐT của {pn})" if phone_autofilled else ""
     fwd_source = buf.get("forward_source") or ""
-    ctx.user_data["confirming"] = {"listing_id": listing_id,
-                                   "phone_note": phone_note,
-                                   "forward_source": fwd_source,
-                                   "awaiting_highlights": True}
+    confirming_data = {"listing_id": listing_id,
+                       "phone_note": phone_note,
+                       "forward_source": fwd_source,
+                       "awaiting_highlights": True,
+                       "reply_to_message_id": reply_to_message_id}
+    if ctx.user_data.get("confirming"):
+        # Another draft is awaiting confirmation (e.g. back-to-back
+        # forwards) — queue this one instead of overwriting.
+        ctx.user_data.setdefault("confirming_queue", []).append(
+            confirming_data)
+        send_kw = {}
+        if reply_to_message_id:
+            send_kw["reply_to_message_id"] = reply_to_message_id
+        await ctx.bot.send_message(
+            chat_id,
+            "Em đã lưu nháp tin này rồi 📝"
+            " Anh xác nhận tin trước xong, em hiện tin này tiếp nhé!",
+            **send_kw)
+        return
+    ctx.user_data["confirming"] = confirming_data
     l = db.get_listing(listing_id)
     text, kb = _confirm_summary(l, pn, phone_note, fwd_source, hl_stage=True)
-    await ctx.bot.send_message(chat_id, text, reply_markup=kb)
+    send_kw = {"reply_markup": kb}
+    if reply_to_message_id:
+        send_kw["reply_to_message_id"] = reply_to_message_id
+    await ctx.bot.send_message(chat_id, text, **send_kw)
+
+
+async def _promote_next_confirming(ctx, chat_id, uid):
+    """Show the next queued draft confirmation, if any.
+
+    Called after the current draft is fully submitted/linked.
+    Returns True if another draft was promoted.
+    """
+    q = ctx.user_data.get("confirming_queue") or []
+    while q:
+        nxt = q.pop(0)
+        l = db.get_listing(nxt["listing_id"])
+        if not l:
+            continue  # draft was deleted — try the next one
+        if not q:
+            ctx.user_data.pop("confirming_queue", None)
+        ctx.user_data["confirming"] = nxt
+        pn = get_pronoun(uid)
+        text, kb = _confirm_summary(
+            l, pn, nxt.get("phone_note", ""),
+            nxt.get("forward_source", ""),
+            hl_stage=nxt.get("awaiting_highlights", False))
+        await ctx.bot.send_message(chat_id, text, reply_markup=kb)
+        return True
+    ctx.user_data.pop("confirming_queue", None)
+    return False
 
 
 async def hl_done_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -252,7 +322,7 @@ async def hl_done_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def _try_final_submit(update_or_q, ctx, uid, listing_id, chat_id, pn,
-                            via_callback):
+                            via_callback, reply_to_message_id=None):
     """Shared final-submit path: enterprise gate -> dedup check -> submit.
 
     Returns True if submitted, False if blocked (gate shown) or deferred
@@ -274,17 +344,29 @@ async def _try_final_submit(update_or_q, ctx, uid, listing_id, chat_id, pn,
                                      edit=via_callback)
         return False
     p = l["parsed"]
-    # dedup check before final submit — never auto-merge, always ask
+    # duplicate suggestion before final submit — suggest only, never
+    # auto-merge or block. Broker chooses; timeout defaults to new listing.
     if not ctx.user_data.pop("dup_confirmed", None):
-        dups = db.find_potential_duplicates(uid, p, exclude_id=listing_id)
-        if dups:
-            await _ask_duplicate_confirm(_say, ctx, listing_id, dups[0], pn)
+        dup_old = None
+        chash = l.get("content_hash")
+        if chash:
+            dup_old = db.find_exact_duplicate_by_hash(
+                uid, chash, exclude_id=listing_id)
+        if not dup_old:
+            dups = db.find_potential_duplicates(uid, p, exclude_id=listing_id)
+            dup_old = dups[0] if dups else None
+        if dup_old:
+            await _ask_duplicate_confirm(_say, ctx, listing_id, dup_old, pn,
+                                         chat_id, uid,
+                                         reply_to_message_id)
             return False
     db.set_listing_status(listing_id, "submitted", changed_by="bot")
     from feat_write import _maybe_write_post_finish  # lazy: avoid cycle
     if await _maybe_write_post_finish(chat_id, uid, listing_id, ctx):
+        await _promote_next_confirming(ctx, chat_id, uid)
         return True
     await _say("Xong! Em đã lưu tin rồi nhé ✓", MENU_KB)
+    await _promote_next_confirming(ctx, chat_id, uid)
     return True
 
 
@@ -292,7 +374,8 @@ async def _finalize_after_confirm(update_or_q, ctx, uid, listing_id, chat_id,
                                 via_callback):
     """Broker confirmed the summary ([Đúng rồi] button or typed 'đúng rồi'):
     ask missing critical fields (max 2) or finish the save."""
-    ctx.user_data.pop("confirming", None)
+    confirming = ctx.user_data.pop("confirming", None)
+    reply_to = (confirming or {}).get("reply_to_message_id")
     l = db.get_listing(listing_id)
     pn = get_pronoun(uid)
 
@@ -323,7 +406,8 @@ async def _finalize_after_confirm(update_or_q, ctx, uid, listing_id, chat_id,
                            remaining=missing[1:])
     else:
         await _try_final_submit(update_or_q, ctx, uid, listing_id, chat_id,
-                                pn, via_callback)
+                                pn, via_callback,
+                                reply_to_message_id=reply_to)
 
 
 async def confirm_save_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -334,8 +418,14 @@ async def confirm_save_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                                   q.message.chat_id, via_callback=True)
 
 
-async def _ask_duplicate_confirm(say, ctx, draft_id, old, pn):
-    """Show potential-duplicate prompt. Never auto-merge or auto-delete."""
+async def _ask_duplicate_confirm(say, ctx, draft_id, old, pn, chat_id, uid,
+                                 reply_to_message_id=None):
+    """Suggest a potential duplicate. Never auto-merge, auto-skip, or block.
+
+    Broker chooses: view old / create new / link as duplicate.
+    No response within 60s → default to creating a new listing.
+    Replies to the original forwarded message when available.
+    """
     from utils import listing_line
     op = old.get("parsed") or {}
     br = op.get("bedrooms")
@@ -346,18 +436,50 @@ async def _ask_duplicate_confirm(say, ctx, draft_id, old, pn):
     days = int((time.time() - old["created_at"]) / 86400)
     age = f"{days} ngày trước" if days > 0 else "hôm nay"
     ctx.user_data["dup_check"] = {"draft_id": draft_id, "old_id": old["id"]}
-    await say(
-        f"⚠️ Em thấy tin này giống tin {pn} đã có:\n\n"
-        f"🏠 {br_s} {loc}, {price_s} (đăng {age})\n\n"
-        f"{pn.capitalize()} kiểm tra giúp em nhé 👇",
-        InlineKeyboardMarkup([
-            [InlineKeyboardButton("✅ Đây là tin mới, lưu tiếp",
-                                  callback_data="dup:save")],
-            [InlineKeyboardButton("🔗 Trùng rồi, lưu dạng trùng",
-                                  callback_data="dup:skip")],
-            [InlineKeyboardButton("👀 Xem tin cũ",
-                                  callback_data="dup:view")],
-        ]))
+    text = (
+        f"💡 Tin này có vẻ giống tin <b>{br_s} {loc}, {price_s}</b>"
+        f" {pn} đã gửi {age}.\n\n"
+        f"{pn.capitalize()} chọn giúp em nhé 👇")
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("👀 Xem tin cũ",
+                              callback_data="dup:view")],
+        [InlineKeyboardButton("✅ Vẫn tạo tin mới",
+                              callback_data="dup:save")],
+        [InlineKeyboardButton("🔗 Gộp vào tin cũ",
+                              callback_data="dup:skip")],
+    ])
+    if reply_to_message_id:
+        await ctx.bot.send_message(
+            chat_id, text, parse_mode="HTML", reply_markup=kb,
+            reply_to_message_id=reply_to_message_id)
+    else:
+        await say(text, kb)
+    asyncio.create_task(_dup_check_timeout(uid, draft_id, chat_id, ctx))
+
+
+async def _dup_check_timeout(uid, draft_id, chat_id, ctx, delay=60):
+    """No response to the duplicate suggestion → default to new listing."""
+    await asyncio.sleep(delay)
+    dc = ctx.user_data.get("dup_check")
+    if not dc or dc.get("draft_id") != draft_id:
+        return  # broker already decided
+    ctx.user_data.pop("dup_check", None)
+    ctx.user_data["dup_confirmed"] = True
+    l = db.get_listing(draft_id)
+    if not l:
+        return
+    pn = get_pronoun(uid)
+
+    class _Shim:
+        async def edit_message_text(self, text, reply_markup=None):
+            await ctx.bot.send_message(chat_id, text,
+                                       reply_markup=reply_markup)
+
+    await ctx.bot.send_message(
+        chat_id,
+        "⏰ Anh không chọn nên em tạo tin mới bình thường nhé ✓")
+    await _finalize_after_confirm(_Shim(), ctx, uid, draft_id, chat_id,
+                                  via_callback=True)
 
 
 async def dup_action_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -392,7 +514,8 @@ async def dup_action_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         if old:
             async def _say(t, kb=None):
                 await q.edit_message_text(t, reply_markup=kb)
-            await _ask_duplicate_confirm(_say, ctx, draft_id, old, pn)
+            await _ask_duplicate_confirm(_say, ctx, draft_id, old, pn,
+                                         q.message.chat_id, uid)
         return
 
     if not draft_id:
@@ -422,6 +545,7 @@ async def dup_action_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             "Ok ạ, em đã lưu tin này dạng trùng để tham khảo 🔗\n"
             "Tin gốc vẫn giữ nguyên, không gộp không xóa gì đâu ạ.",
             reply_markup=MENU_KB)
+        await _promote_next_confirming(ctx, q.message.chat_id, uid)
     else:
         await q.answer("Anh chọn giúp em nhé 👆")
 
@@ -607,8 +731,13 @@ async def _ask_missing(chat_id, uid, listing_id, field, ctx, remaining):
 
 
 async def _flush_media_group(key, ctx):
-    """Debounced flush of one album: merge its photos + caption into the
-    user's collection buffer (creating one if needed)."""
+    """Debounced flush of one album.
+
+    Forwarded album: complete content → parse and create draft IMMEDIATELY
+    (no 5s wait), replying to the album's first message.
+    Manual album: merge into the user's collection buffer as before
+    (5s window still applies for manual input).
+    """
     try:
         await asyncio.sleep(MEDIA_GROUP_WINDOW)
     except asyncio.CancelledError:
@@ -617,6 +746,18 @@ async def _flush_media_group(key, ctx):
     if not entry or not entry["photos"]:
         return
     uid = entry["uid"]
+    if entry.get("is_forward"):
+        buf = {
+            "texts": [entry["caption"]] if entry["caption"] else [],
+            "photos": list(entry["photos"]),
+            "deadline": time.time(),
+            "chat_id": entry["chat_id"],
+            "forward_source": entry.get("forward_source"),
+        }
+        await _process_buffer(
+            uid, buf, ctx,
+            reply_to_message_id=entry.get("reply_to_message_id"))
+        return
     buf = _buffers.get(uid)
     if buf:
         buf["photos"].extend(entry["photos"])
@@ -712,6 +853,19 @@ async def on_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     msg = update.message
     file_id = msg.photo[-1].file_id  # largest size
     caption = (msg.caption or "").strip()
+    mg_id = msg.media_group_id
+    fwd_src = get_forward_source(msg)
+
+    # F0. forwarded photo → always a NEW listing import, bypasses all
+    # state routing (confirming/awaiting/guided). Each forward = 1 listing.
+    if fwd_src:
+        if mg_id:
+            await _handle_album_photo(update, ctx, uid, msg, file_id,
+                                      caption, mg_id, fwd_src)
+        else:
+            await _handle_single_photo(update, ctx, uid, msg, file_id,
+                                       caption)
+        return
 
     # 0. adding photos to an existing listing? (explicit mode)
     addp = ctx.user_data.get("adding_photos")
@@ -749,33 +903,42 @@ async def on_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await feat_payment.ask_is_receipt(update, ctx, uid, file_id)
         return
 
-    # 2. part of an album? buffer by media_group_id, debounce, then merge
-    # Note: forwarded albums keep a (fresh) media_group_id, so this path
-    # works for forwards too. If media_group_id is ever missing on a
-    # forward, the photo falls through to step 3 and the 5s buffer groups it.
+    # 2. part of a manual album? buffer by media_group_id, debounce,
+    # then merge into the collection buffer.
     if mg_id:
-        key = f"{uid}:{mg_id}"
-        entry = _media_groups.get(key)
-        if entry and entry.get("task"):
-            entry["task"].cancel()
-        if entry is None:
-            entry = {"photos": [], "caption": "", "uid": uid,
-                     "chat_id": msg.chat.id, "task": None,
-                     "forward_source": get_forward_source(msg)}
-            _media_groups[key] = entry
-        entry["photos"].append(file_id)
-        if caption and not entry["caption"]:
-            fwd_cap = get_forward_source(msg)
-            entry["caption"] = strip_forward_noise(caption) if fwd_cap else caption
-        if not entry.get("forward_source"):
-            fwd = get_forward_source(msg)
-            if fwd:
-                entry["forward_source"] = fwd
-        entry["task"] = asyncio.create_task(_flush_media_group(key, ctx))
+        await _handle_album_photo(update, ctx, uid, msg, file_id,
+                                  caption, mg_id, None)
         return
 
     # 3. single photo — caption goes through the same pipeline as text
     await _handle_single_photo(update, ctx, uid, msg, file_id, caption)
+
+
+async def _handle_album_photo(update, ctx, uid, msg, file_id, caption,
+                              mg_id, fwd_src):
+    """Collect one photo of an album (media group), debounced.
+
+    Forwarded albums are flagged is_forward → _flush_media_group processes
+    them immediately as their own listing. Manual albums merge into the
+    collection buffer as before.
+    """
+    key = f"{uid}:{mg_id}"
+    entry = _media_groups.get(key)
+    if entry and entry.get("task"):
+        entry["task"].cancel()
+    if entry is None:
+        entry = {"photos": [], "caption": "", "uid": uid,
+                 "chat_id": msg.chat.id, "task": None,
+                 "forward_source": fwd_src,
+                 "is_forward": bool(fwd_src),
+                 "reply_to_message_id": msg.message_id}
+        _media_groups[key] = entry
+    entry["photos"].append(file_id)
+    if caption and not entry["caption"]:
+        entry["caption"] = strip_forward_noise(caption) if fwd_src else caption
+    if not entry.get("forward_source") and fwd_src:
+        entry["forward_source"] = fwd_src
+    entry["task"] = asyncio.create_task(_flush_media_group(key, ctx))
 
 
 async def _handle_single_photo(update, ctx, uid, msg, file_id, caption=""):
@@ -786,30 +949,26 @@ async def _handle_single_photo(update, ctx, uid, msg, file_id, caption=""):
     fwd_source = get_forward_source(msg)
     if fwd_source and caption:
         caption = strip_forward_noise(caption)
+    if fwd_source:
+        # Forwarded single photo: complete content → parse and create
+        # draft IMMEDIATELY (no 5s wait), replying to the photo.
+        # Each forward = its own listing; manual buffers are untouched.
+        buf = {
+            "texts": [caption] if caption else [],
+            "photos": [file_id],
+            "deadline": time.time(),
+            "chat_id": msg.chat.id,
+            "forward_source": fwd_source,
+        }
+        await _process_buffer(
+            uid, buf, ctx, reply_to_message_id=msg.message_id)
+        return
     buf = _buffers.get(uid)
     if buf:
         buf["photos"].append(file_id)
         if caption:
             buf["texts"].append(caption)
         buf["deadline"] = time.time() + COLLECT_WINDOW
-        if not buf.get("forward_source") and fwd_source:
-            buf["forward_source"] = fwd_source
-    elif fwd_source:
-        # Forwarded photo with no active buffer: this is new shared content,
-        # not a forgotten attachment — skip the "stray photo?" question and
-        # start a fresh listing buffer directly. (Without this, each photo
-        # of a forwarded album lacking media_group_id would trigger its own
-        # stray-photo prompt.)
-        _buffers[uid] = {"texts": [caption] if caption else [],
-                         "photos": [file_id],
-                         "deadline": time.time() + COLLECT_WINDOW,
-                         "chat_id": msg.chat.id,
-                         "forward_source": fwd_source}
-        await update.message.reply_text(
-            f"Em nhận 1 ảnh (forward từ {fwd_source}) rồi! "
-            "Đang đợi thêm... 📥\n"
-            "(anh gửi text/ảnh tiếp trong 5s nhé)")
-        asyncio.create_task(_flush_after(uid, ctx))
     else:
         # No active buffer — stray photo. Usually it's for the most recent
         # listing, so ask to confirm instead of starting a new one blindly.
@@ -1227,10 +1386,9 @@ async def guided_mode_free(update, ctx):
                      "deadline": time.time() + COLLECT_WINDOW,
                      "chat_id": q.message.chat_id}
     await q.edit_message_text(
-        "Anh paste bài đăng FB có sẵn vào đây nhé 📋\n"
-        "(hoặc forward tin nhắn, gửi text + ảnh)\n\n"
-        "Em sẽ tự bóc tách thông tin: giá, diện tích, địa chỉ, tiện ích...\n"
-        "Thiếu gì em hỏi thêm, đủ rồi em lưu luôn 📥")
+        "Anh forward tin nhắn hoặc paste bài đăng FB vào đây nhé 📋\n\n"
+        "Em sẽ tự bóc tách: giá, diện tích, địa chỉ, tiện ích, mô tả...\n"
+        "Thiếu gì em hỏi thêm, đủ rồi em lưu vào kho luôn 📥")
     asyncio.create_task(_flush_after(uid, ctx))
 
 
@@ -1476,11 +1634,11 @@ async def guided_back(update, ctx):
     if gd["step"] == 0:
         ctx.user_data.pop("guided", None)
         await q.edit_message_text(
-            "Anh muốn thêm tin kiểu nào ạ?",
+            "Anh muốn nhập căn mới kiểu nào ạ?",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("✍️ Viết từ đầu (em hỏi từng bước)",
+                [InlineKeyboardButton("✍️ Nhập từ đầu (em hỏi từng bước)",
                                       callback_data="guided:mode:guided")],
-                [InlineKeyboardButton("📋 Nhập từ tin có sẵn (paste bài FB)",
+                [InlineKeyboardButton("📋 Nhập từ tin có sẵn (forward/paste bài FB)",
                                       callback_data="guided:mode:free")],
             ]))
         return
