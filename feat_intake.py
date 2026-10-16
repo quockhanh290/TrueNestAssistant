@@ -377,6 +377,18 @@ async def _try_final_submit(update_or_q, ctx, uid, listing_id, chat_id, pn,
         await _promote_next_confirming(ctx, chat_id, uid)
         return True
     await _say("Xong! Em đã lưu tin rồi nhé ✓", MENU_KB)
+    # proactive tip: 1st and 5th listing milestones (exact count only).
+    # Sent as a new message via bot (not _say, which would edit).
+    try:
+        import hints as _hints  # lazy: avoid cycle
+        n = db.count_broker_listings(uid)
+        tip = _hints.tip_after_listing(n)
+        if tip and ctx.bot:
+            await ctx.bot.send_message(
+                chat_id=chat_id, text=tip,
+                reply_markup=MENU_KB, parse_mode="HTML")
+    except Exception:
+        log.warning("proactive listing tip failed", exc_info=True)
     await _promote_next_confirming(ctx, chat_id, uid)
     return True
 
