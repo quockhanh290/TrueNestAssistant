@@ -789,6 +789,54 @@ async def process_outbox_notifications(ctx):
                             payload.get("remaining", 1))
                     except Exception as e2:
                         log.warning("trial expiring push failed: %s", e2)
+            elif n["ntype"] == "velocity_warning":
+                # Suspicious refresh velocity (Khanh 2026-10-16)
+                payload = n.get("payload") or {}
+                broker_id = payload.get("broker_id")
+                if broker_id:
+                    try:
+                        import feat_notify
+                        await feat_notify.notify_velocity_warning(
+                            ctx, broker_id, payload.get("count", 0),
+                            payload.get("window_min", 10))
+                    except Exception as e2:
+                        log.warning("velocity warning push failed: %s", e2)
+            elif n["ntype"] == "false_refresh_suspect":
+                # Client reported rented + recent 'available' refresh claim
+                # (Khanh 2026-10-16): auto-penalize the broker.
+                payload = n.get("payload") or {}
+                listing_id = payload.get("listing_id")
+                if listing_id:
+                    try:
+                        import feat_notify
+                        result = await feat_notify.penalize_false_refresh(
+                            ctx, listing_id)
+                        if result:
+                            db.mark_report_reviewed(
+                                payload.get("report_id"))
+                    except Exception as e2:
+                        log.warning("false refresh penalize failed: %s", e2)
+            elif n["ntype"] == "premium_request":
+                # Webapp upgrade request -> DM Khanh with /approve instructions.
+                # (Mirrors the bot flow's direct DM in premium_paid_cb.)
+                payload = n.get("payload") or {}
+                broker_id = payload.get("broker_id")
+                tier = payload.get("tier", "pro")
+                rid = payload.get("request_id", "?")
+                bname = payload.get("broker_name") or str(broker_id)
+                if config.ADMIN_TELEGRAM_ID:
+                    try:
+                        await ctx.bot.send_message(
+                            config.ADMIN_TELEGRAM_ID,
+                            f"💰 <b>Yêu cầu premium mới (web app)</b>\n\n"
+                            f"👤 {bname}\n"
+                            f"🆔 <code>{broker_id}</code>\n"
+                            f"📦 Gói: <b>{'Pro 💎' if tier == 'pro' else 'Max 💎💎'}</b>\n"
+                            f"🔑 Request: <code>{rid}</code>\n\n"
+                            f"Duyệt: <code>/approve {broker_id} {tier}</code>",
+                            parse_mode="HTML")
+                    except Exception as e2:
+                        log.warning("premium request DM failed: %s", e2)
             # Mark sent regardless of type (unknown types are dropped)
             db.mark_notification_sent(n["id"])
         except Exception as e:
