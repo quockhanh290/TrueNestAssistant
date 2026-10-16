@@ -274,4 +274,13 @@ def handle_booking(token, data):
         preferred_date=(data.get("preferred_date") or "")[:20],
         note=(data.get("note") or "")[:300],
     )
+    # Queue real-time push to broker via bot (Khanh 2026-10-16)
+    try:
+        db.queue_notification(
+            "booking_created", None,
+            {"broker_id": page["broker_id"], "booking_id": bid,
+             "name": name, "phone": phone, "listing_id": listing_id,
+             "preferred_date": (data.get("preferred_date") or "")[:20]})
+    except Exception:
+        pass
     return {"ok": True, "booking_id": bid}, 200
