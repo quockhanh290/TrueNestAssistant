@@ -74,6 +74,43 @@ CREATE TABLE IF NOT EXISTS clients (
 );
 CREATE INDEX IF NOT EXISTS idx_clients_broker ON clients(broker_id);
 CREATE INDEX IF NOT EXISTS idx_clients_status ON clients(status);
+
+CREATE TABLE IF NOT EXISTS viewings (
+    id          TEXT PRIMARY KEY,
+    broker_id   INTEGER NOT NULL REFERENCES brokers(user_id),
+    client_id   TEXT,
+    client_name TEXT NOT NULL DEFAULT '',
+    listing_id  TEXT,
+    scheduled_at REAL NOT NULL,
+    status      TEXT NOT NULL DEFAULT 'scheduled',
+    notes       TEXT NOT NULL DEFAULT '',
+    created_at  REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_viewings_broker ON viewings(broker_id);
+CREATE INDEX IF NOT EXISTS idx_viewings_sched ON viewings(scheduled_at);
+
+CREATE TABLE IF NOT EXISTS deals (
+    id             TEXT PRIMARY KEY,
+    broker_id      INTEGER NOT NULL REFERENCES brokers(user_id),
+    client_id      TEXT,
+    client_name    TEXT NOT NULL DEFAULT '',
+    listing_id     TEXT,
+    commission_vnd REAL,
+    closed_at      REAL NOT NULL,
+    notes          TEXT NOT NULL DEFAULT '',
+    created_at     REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_deals_broker ON deals(broker_id);
+CREATE INDEX IF NOT EXISTS idx_deals_closed ON deals(closed_at);
+
+CREATE TABLE IF NOT EXISTS templates (
+    id         TEXT PRIMARY KEY,
+    broker_id  INTEGER NOT NULL REFERENCES brokers(user_id),
+    name       TEXT NOT NULL,
+    content    TEXT NOT NULL,
+    created_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_templates_broker ON templates(broker_id);
 """
 
 
@@ -769,6 +806,234 @@ def link_listing(client_id, listing_id, path=None):
 def delete_client(client_id, path=None):
     conn = connect(path)
     cur = conn.execute("DELETE FROM clients WHERE id = ?", (client_id,))
+    conn.commit()
+    conn.close()
+    return cur.rowcount > 0
+
+
+# ---------------------------------------------------------------- viewings
+
+VIEWING_STATUSES = ("scheduled", "done", "cancelled")
+
+
+def create_viewing(broker_id, client_id=None, client_name="", listing_id=None,
+                   scheduled_at=None, notes="", path=None):
+    viewing_id = "vw:" + uuid.uuid4().hex[:12]
+    now = _now()
+    conn = connect(path)
+    conn.execute(
+        "INSERT INTO viewings (id, broker_id, client_id, client_name,"
+        " listing_id, scheduled_at, status, notes, created_at)"
+        " VALUES (?, ?, ?, ?, ?, ?, 'scheduled', ?, ?)",
+        (viewing_id, broker_id, client_id, client_name, listing_id,
+         scheduled_at or now, notes, now),
+    )
+    conn.commit()
+    conn.close()
+    return viewing_id
+
+
+def get_viewing(viewing_id, path=None):
+    conn = connect(path)
+    row = conn.execute(
+        "SELECT * FROM viewings WHERE id = ?", (viewing_id,)
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def list_viewings(broker_id, upcoming_only=True, limit=20, path=None):
+    """Upcoming viewings (scheduled, future), soonest first."""
+    conn = connect(path)
+    if upcoming_only:
+        rows = conn.execute(
+            "SELECT * FROM viewings WHERE broker_id = ? AND status = 'scheduled'"
+            " AND scheduled_at >= ? ORDER BY scheduled_at ASC LIMIT ?",
+            (broker_id, _now(), limit),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM viewings WHERE broker_id = ?"
+            " ORDER BY scheduled_at DESC LIMIT ?",
+            (broker_id, limit),
+        ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def update_viewing(viewing_id, path=None, **fields):
+    allowed = {"client_id", "client_name", "listing_id", "scheduled_at",
+               "status", "notes"}
+    sets = ", ".join(f"{k} = ?" for k in fields if k in allowed)
+    if not sets:
+        return False
+    vals = [fields[k] for k in fields if k in allowed]
+    vals.append(viewing_id)
+    conn = connect(path)
+    cur = conn.execute(
+        f"UPDATE viewings SET {sets} WHERE id = ?", vals
+    )
+    conn.commit()
+    conn.close()
+    return cur.rowcount > 0
+
+
+def delete_viewing(viewing_id, path=None):
+    conn = connect(path)
+    cur = conn.execute("DELETE FROM viewings WHERE id = ?", (viewing_id,))
+    conn.commit()
+    conn.close()
+    return cur.rowcount > 0
+
+
+def due_viewings(within_seconds=3600, path=None):
+    """Scheduled viewings starting within the next N seconds — for reminders."""
+    now = _now()
+    conn = connect(path)
+    rows = conn.execute(
+        "SELECT v.*, b.username, b.display_name, b.pronoun FROM viewings v"
+        " JOIN brokers b ON b.user_id = v.broker_id"
+        " WHERE v.status = 'scheduled'"
+        " AND v.scheduled_at > ? AND v.scheduled_at <= ?"
+        " ORDER BY v.scheduled_at ASC",
+        (now, now + within_seconds),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+# ---------------------------------------------------------------- deals
+
+def create_deal(broker_id, client_id=None, client_name="", listing_id=None,
+                commission_vnd=None, closed_at=None, notes="", path=None):
+    deal_id = "deal:" + uuid.uuid4().hex[:12]
+    now = _now()
+    conn = connect(path)
+    conn.execute(
+        "INSERT INTO deals (id, broker_id, client_id, client_name, listing_id,"
+        " commission_vnd, closed_at, notes, created_at)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (deal_id, broker_id, client_id, client_name, listing_id,
+         commission_vnd, closed_at or now, notes, now),
+    )
+    conn.commit()
+    conn.close()
+    return deal_id
+
+
+def get_deal(deal_id, path=None):
+    conn = connect(path)
+    row = conn.execute(
+        "SELECT * FROM deals WHERE id = ?", (deal_id,)
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def list_deals(broker_id, start_ts=None, end_ts=None, limit=100, path=None):
+    conn = connect(path)
+    conds = ["broker_id = ?"]
+    vals = [broker_id]
+    if start_ts is not None:
+        conds.append("closed_at >= ?")
+        vals.append(start_ts)
+    if end_ts is not None:
+        conds.append("closed_at < ?")
+        vals.append(end_ts)
+    rows = conn.execute(
+        "SELECT * FROM deals WHERE " + " AND ".join(conds) +
+        " ORDER BY closed_at DESC LIMIT ?",
+        (*vals, limit),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def delete_deal(deal_id, path=None):
+    conn = connect(path)
+    cur = conn.execute("DELETE FROM deals WHERE id = ?", (deal_id,))
+    conn.commit()
+    conn.close()
+    return cur.rowcount > 0
+
+
+def deal_exists(broker_id, client_id, listing_id, path=None):
+    """Already recorded a deal for this client+listing pair?"""
+    conn = connect(path)
+    n = conn.execute(
+        "SELECT COUNT(*) c FROM deals WHERE broker_id = ? AND client_id = ?"
+        " AND listing_id = ?",
+        (broker_id, client_id, listing_id),
+    ).fetchone()["c"]
+    conn.close()
+    return n > 0
+
+
+def suggested_deal_pairs(broker_id, path=None):
+    """Candidate (client, listing) pairs for deal entry.
+
+    Client must have status rented/deposited/negotiating AND have viewed at
+    least one listing; the most recently viewed listing is paired.
+    Pairs that already have a recorded deal are skipped.
+    Sorted: rented first, then deposited, then negotiating.
+    """
+    rank = {"rented": 0, "deposited": 1, "negotiating": 2}
+    out = []
+    for c in list_clients(broker_id, path=path):
+        st = c.get("status")
+        if st not in rank:
+            continue
+        viewed = c.get("viewed_listings") or []
+        if not viewed:
+            continue
+        listing_id = viewed[-1]
+        l = get_listing(listing_id, path=path)
+        if not l:
+            continue
+        if deal_exists(broker_id, c["id"], listing_id, path=path):
+            continue
+        out.append({"client": c, "listing": l, "rank": rank[st]})
+    out.sort(key=lambda p: (p["rank"], -p["client"]["updated_at"]))
+    return out
+
+
+# ---------------------------------------------------------------- templates
+
+def create_template(broker_id, name, content, path=None):
+    tpl_id = "tpl:" + uuid.uuid4().hex[:12]
+    conn = connect(path)
+    conn.execute(
+        "INSERT INTO templates (id, broker_id, name, content, created_at)"
+        " VALUES (?, ?, ?, ?, ?)",
+        (tpl_id, broker_id, name, content, _now()),
+    )
+    conn.commit()
+    conn.close()
+    return tpl_id
+
+
+def list_templates(broker_id, path=None):
+    conn = connect(path)
+    rows = conn.execute(
+        "SELECT * FROM templates WHERE broker_id = ? ORDER BY created_at ASC",
+        (broker_id,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_template(tpl_id, path=None):
+    conn = connect(path)
+    row = conn.execute(
+        "SELECT * FROM templates WHERE id = ?", (tpl_id,)
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def delete_template(tpl_id, path=None):
+    conn = connect(path)
+    cur = conn.execute("DELETE FROM templates WHERE id = ?", (tpl_id,))
     conn.commit()
     conn.close()
     return cur.rowcount > 0
