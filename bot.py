@@ -584,10 +584,13 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             reply_markup=MENU_KB,
         )
         return
-    if db.count_recent_listings(uid, hours=1) >= config.RATE_LIMIT_PER_HOUR:
+    # Tier-based rate limit
+    tier = db.get_tier(uid)
+    hourly_limit = config.RATE_LIMITS_PER_HOUR.get(tier, 10)
+    if db.count_recent_listings(uid, hours=1) >= hourly_limit:
         await natural_delay(update)
         await update.message.reply_text(
-            f"Anh gửi nhiều quá rồi 😅 Tối đa {config.RATE_LIMIT_PER_HOUR} tin/giờ thôi ạ.",
+            f"Anh gửi nhiều quá rồi 😅 Gói {tier} tối đa {hourly_limit} tin/giờ thôi ạ.",
             reply_markup=MENU_KB,
         )
         return

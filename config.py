@@ -9,6 +9,14 @@ DB_PATH = os.environ.get("BOT_DB_PATH", "broker_bot.db")
 
 # Policies (Khanh to confirm)
 MIN_PHOTOS = 3
+# Rate limits per tier: listings per hour
+RATE_LIMITS_PER_HOUR = {
+    "free": 10,
+    "pro": 20,
+    "max": 30,
+    "enterprise": 50,
+}
+# Backward compat
 RATE_LIMIT_PER_HOUR = 5
 QUALIFY_APPROVED_COUNT = 3
 NUDGE_DAYS = 7
@@ -30,3 +38,11 @@ BROKER_GROUP_ID = os.getenv("BROKER_GROUP_ID", "")
 BROADCAST_DAILY_LIMIT = int(os.getenv("BROADCAST_DAILY_LIMIT", "3"))      # max broadcasts/broker/day
 BROADCAST_WEEKLY_LIMIT = int(os.getenv("BROADCAST_WEEKLY_LIMIT", "10"))   # max broadcasts/broker/week
 BROADCAST_COOLDOWN_HOURS = int(os.getenv("BROADCAST_COOLDOWN_HOURS", "6")) # min hours between broadcasts
+
+# Premium tiers
+ADMIN_TELEGRAM_ID = int(os.getenv("ADMIN_TELEGRAM_ID", "0"))  # Khanh's Telegram user id
+FREE_LISTING_LIMIT = int(os.getenv("FREE_LISTING_LIMIT", "20"))  # max active listings for free tier
+
+# Payment info for premium upgrades (shown in /premium)
+PAYMENT_BANK = os.getenv("PAYMENT_BANK", "VCB 1234567890 - NGUYEN VAN A")
+PAYMENT_MOMO = os.getenv("PAYMENT_MOMO", "0905123456")
