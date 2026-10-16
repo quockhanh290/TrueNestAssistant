@@ -456,6 +456,11 @@ async def match_broadcast_send(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                                     urgency=c.get("urgency") or "normal")
     db.update_match_request(mr_id, group_message_id=sent.message_id)
     db.record_broadcast(uid)  # anti-spam stats hook
+    # Proactive: DM brokers whose inventory matches (Khanh 2026-10-16)
+    try:
+        await notify_matching_brokers(ctx, mr_id)
+    except Exception as e:
+        log.warning("proactive notify after broadcast failed: %s", e)
     await q.edit_message_text(
         f"Em đã đăng nhu cầu của <b>{c.get('name')}</b> lên nhóm rồi nhé ✓\n"
         f"Có anh em nào reply là em báo {pn} ngay.",
@@ -648,6 +653,93 @@ async def _notify_new_response(ctx, r, n):
         log.warning("notify broker failed: %s", e)
 
 
+async def notify_matching_brokers(ctx, request_id):
+    """Proactively DM brokers whose inventory matches a broadcast lead.
+
+    Called after a new broadcast is created or a slot reopens. For each
+    broker (except the requester and those who already reserved/submitted):
+    - check notify_match preference
+    - skip if already notified for this request (throttle)
+    - apply filter_hard_criteria() to their active listings
+    - if >=1 passes, send DM with top matches + deep link to propose/xbroker
+
+    Khanh 2026-10-16: bot must proactively notify when a broker has
+    matching listings — don't make them discover it by chance.
+    """
+    r = db.get_match_request(request_id)
+    if not r:
+        return 0
+    c = db.get_client(r["client_id"])
+    if not c:
+        return 0
+    req_summary = r.get("requirements_summary") or _client_req_summary(c)
+    # brokers who already engaged — don't re-notify
+    engaged = set()
+    try:
+        for resp in db.list_responses(request_id):
+            engaged.add(resp.get("responder_broker_id"))
+    except Exception:
+        pass
+    requester = r.get("broker_id")
+    sent = 0
+    for broker in db.list_brokers():
+        uid = broker.get("user_id")
+        if not uid or uid == requester or uid in engaged:
+            continue
+        prefs = db.get_notify_prefs(uid)
+        if not prefs.get("notify_match", True):
+            continue
+        if db.was_notified(request_id, uid):
+            continue
+        try:
+            listings = db.list_broker_listings(
+                uid, limit=200, statuses=("submitted", "active"))
+        except Exception:
+            continue
+        if not listings:
+            continue
+        passed, _ = filter_hard_criteria(listings, c)
+        if not passed:
+            continue
+        scored = sorted(
+            ((l, score_match(l, c)) for l in passed),
+            key=lambda t: t[1], reverse=True,
+        )[:3]
+        lines = []
+        for l, s in scored:
+            p = l.get("parsed") or {}
+            title = p.get("building_name") or p.get("district") or "Tin"
+            br = p.get("bedrooms")
+            if br:
+                title = f"{int(br)}PN {title}" if float(br) == int(float(br)) else f"{br}PN {title}"
+            price = p.get("price_vnd")
+            price_s = fmt_price(price) if price else "?"
+            lines.append(f"• {title} — {price_s} (Match {int(s)}%)")
+        try:
+            await ctx.bot.send_message(
+                chat_id=uid,
+                text=(
+                    f"🎯 Có lead mới phù hợp với tin của anh!\n\n"
+                    f"Cần: {req_summary}\n\n"
+                    f"Tin phù hợp:\n" + "\n".join(lines)
+                ),
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton(
+                        "📱 Đề xuất ngay",
+                        web_app=WebAppInfo(url=webapp_url(
+                            view="xbroker", request_id=request_id)))],
+                    [InlineKeyboardButton(
+                        "🔕 Tắt thông báo loại này",
+                        callback_data="notify:off:notify_match")],
+                ]),
+            )
+            db.mark_notified(request_id, uid)
+            sent += 1
+        except Exception as e:
+            log.warning("proactive notify failed for %s: %s", uid, e)
+    return sent
+
+
 async def process_outbox_notifications(ctx):
     """Bot poller: send queued webapp notifications (e.g. slot reopened).
 
@@ -671,6 +763,32 @@ async def process_outbox_notifications(ctx):
                           f"Ai có tin phù hợp thì reply tin gốc ngay nhé! 🤝"),
                     reply_to_message_id=group_msg_id,
                 )
+                # Proactive: DM brokers with matching inventory about the reopen
+                try:
+                    await notify_matching_brokers(ctx, n["request_id"])
+                except Exception as e2:
+                    log.warning("proactive notify on reopen failed: %s", e2)
+            elif n["ntype"] == "booking_created":
+                # Real-time push: client booked via share page (Khanh 2026-10-16)
+                payload = n.get("payload") or {}
+                broker_id = payload.get("broker_id")
+                if broker_id:
+                    try:
+                        import feat_notify
+                        await feat_notify.notify_new_booking(ctx, broker_id, payload)
+                    except Exception as e2:
+                        log.warning("booking push failed: %s", e2)
+            elif n["ntype"] == "trial_expiring":
+                payload = n.get("payload") or {}
+                broker_id = payload.get("broker_id")
+                if broker_id:
+                    try:
+                        import feat_notify
+                        await feat_notify.notify_trial_expiring(
+                            ctx, broker_id, payload.get("feature"),
+                            payload.get("remaining", 1))
+                    except Exception as e2:
+                        log.warning("trial expiring push failed: %s", e2)
             # Mark sent regardless of type (unknown types are dropped)
             db.mark_notification_sent(n["id"])
         except Exception as e:
