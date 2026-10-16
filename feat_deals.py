@@ -1,5 +1,7 @@
 """Commission tracking."""
 import asyncio
+import datetime
+import json
 import logging
 import random
 import time
@@ -66,8 +68,12 @@ def _deal_line(d):
 
 
 async def cmd_commission(update, ctx):
-    await _send_commission(update.message, update.effective_user.id,
-                           _cur_yyyymm(), edit=False)
+    import feat_premium
+    uid = update.effective_user.id
+    if not feat_premium.requires_tier(uid, "commission"):
+        await feat_premium.send_gate(update, "commission", uid)
+        return
+    await _send_commission(update.message, uid, _cur_yyyymm(), edit=False)
 
 
 async def _send_commission(msg_or_q, uid, yyyymm, edit):
@@ -190,6 +196,11 @@ async def deal_pick_client(update, ctx):
         await q.edit_message_text("Khách này không còn nữa.",
                                   reply_markup=MENU_KB)
         return
+    # Pre-fill: if this client already has a chosen listing, skip the pick.
+    l = _get_client_choice_listing(c)
+    if l and l.get("broker_id") == uid:
+        await _ask_deal_amount(q, ctx, uid, c, l, edit=True)
+        return
     ctx.user_data["deal_new"] = {"client_id": client_id}
     listings = db.search_listings(uid, {"status": "active"}, limit=10)
     kb = [[InlineKeyboardButton(
@@ -261,6 +272,110 @@ async def _handle_add_deal(update, ctx, ad, text):
     await update.message.reply_text(
         f"Đã lưu deal ✓ Hoa hồng {fmt_price(val)} 🎉",
         reply_markup=MENU_KB)
+
+
+# ---------------------------------------------------------------- auto prompt
+
+# Statuses that trigger the automatic commission prompt.
+COMMISSION_TRIGGER_STATUSES = ("contracted", "rented")
+
+
+def _get_client_choice_listing(c):
+    """Return the listing from client_choice, or None.
+
+    Defensive: client_choice column/function may not exist in older DBs.
+    choice format: {"id": "tg:xxx", "chosen_at": ...} or plain id string.
+    """
+    if not c:
+        return None
+    choice = c.get("client_choice")
+    if not choice:
+        return None
+    if isinstance(choice, str):
+        try:
+            choice = json.loads(choice)
+        except (json.JSONDecodeError, ValueError):
+            pass  # plain string id
+    lid = choice.get("id") if isinstance(choice, dict) else choice
+    if not lid:
+        return None
+    try:
+        return db.get_listing(lid)
+    except Exception:
+        return None
+
+
+def _listing_short(l):
+    """Short listing label: '2PN An Thượng, 15tr'."""
+    p = l.get("parsed") or {}
+    br = p.get("bedrooms")
+    br_s = ("studio" if br == 0.0
+            else (f"{int(br)}PN" if br else "?PN"))
+    loc = p.get("building_name") or p.get("district") or "?"
+    price = p.get("price")
+    price_s = f", {fmt_price(price)}" if price else ""
+    return f"{br_s} {loc}{price_s}"
+
+
+async def prompt_commission_for_client(uid, client_id, ctx, new_status=None):
+    """Auto-prompt for commission when a client reaches contracted/rented.
+
+    Called from client_set_status hook. If the client has a chosen listing
+    (client_choice), we already know the pair — just ask for the amount.
+    Otherwise fall back to the manual pick flow.
+    """
+    pn = get_pronoun(uid)
+    c = db.get_client(client_id)
+    if not c or c.get("broker_id") != uid:
+        return
+    st_label = {"contracted": "kí HĐ", "rented": "hoàn thành"}.get(
+        new_status or c.get("status"), "chốt deal")
+
+    l = _get_client_choice_listing(c)
+    cname = c.get("name") or "Khách"
+
+    if l and l.get("broker_id") == uid:
+        # We know the pair — ask for amount directly.
+        ctx.user_data["adding_deal"] = {
+            "client_id": c["id"],
+            "listing_id": l["id"],
+            "client_name": cname,
+        }
+        kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton("⏭️ Bỏ qua",
+                                 callback_data="deal:skip_auto")]])
+        await ctx.bot.send_message(
+            uid,
+            f"🎉 Chúc mừng {pn}!\n"
+            f"Khách <b>{cname}</b> đã {st_label} căn "
+            f"<b>{_listing_short(l)}</b>!\n\n"
+            f"Hoa hồng deal này bao nhiêu ạ?\n"
+            f"(Gõ số tiền, vd: 7500000)",
+            parse_mode="HTML",
+            reply_markup=kb)
+    else:
+        # No known listing — fall back to manual pick.
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📝 Nhập deal thủ công",
+                                  callback_data="deal:new")],
+            [InlineKeyboardButton("⏭️ Bỏ qua",
+                                  callback_data="deal:skip_auto")],
+        ])
+        await ctx.bot.send_message(
+            uid,
+            f"🎉 Chúc mừng {pn}! Khách <b>{cname}</b> đã {st_label}!\n\n"
+            f"Em chưa biết căn nào, {pn} chọn giúp em nhé:",
+            parse_mode="HTML",
+            reply_markup=kb)
+
+
+async def deal_skip_auto(update, ctx):
+    """Broker skipped the auto commission prompt."""
+    q = update.callback_query
+    await q.answer()
+    ctx.user_data.pop("adding_deal", None)
+    await q.edit_message_text("Ok ạ! Khi nào muốn nhập thì vào 💰 Hoa hồng nhé.",
+                              reply_markup=MENU_KB)
 
 
 # ---------------------------------------------------------------- router
