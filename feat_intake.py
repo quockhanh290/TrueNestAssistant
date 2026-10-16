@@ -1618,7 +1618,10 @@ async def guided_mode_free(update, ctx):
     await q.edit_message_text(
         "Anh forward tin nhắn hoặc paste bài đăng FB vào đây nhé 📋\n\n"
         "Em sẽ tự bóc tách: giá, diện tích, địa chỉ, tiện ích, mô tả...\n"
-        "Thiếu gì em hỏi thêm, đủ rồi em lưu vào kho luôn 📥")
+        "Thiếu gì em hỏi thêm, đủ rồi em lưu vào kho luôn 📥\n\n"
+        "💡 <b>Càng nhiều thông tin chính xác, điểm tin càng cao</b> — "
+        "tin điểm cao được ưu tiên cho khách thấy trước!",
+        parse_mode="HTML")
     asyncio.create_task(_flush_after(uid, ctx))
 
 
@@ -1629,6 +1632,22 @@ async def guided_mode_guided(update, ctx):
     uid = q.from_user.id
     ctx.user_data["guided"] = {"step": 0, "answers": {},
                                "chat_id": q.message.chat_id}
+    # Competitive framing (Khanh 2026-10-16): make the incentive explicit.
+    # Brokers who enter more accurate detail outscore aggregators.
+    # Anti-gaming warning: false amenities are penalized.
+    await q.message.reply_text(
+        "💡 <b>Mẹo tăng điểm tin:</b>\n\n"
+        "Anh càng nhập nhiều thông tin <b>chính xác</b> "
+        "(địa chỉ chi tiết, tiện ích, điểm nổi bật...), "
+        "điểm tin càng cao.\n\n"
+        "🏆 Tin điểm cao được <b>ưu tiên hiển thị</b> cho khách "
+        "và dễ được chọn hơn khi có lead. "
+        "Đây là lợi thế mà những người chỉ copy tin không có được!\n\n"
+        "⚠️ <b>Lưu ý:</b> chỉ ghi những gì <b>có thật</b>. "
+        "Khai khống tiện ích để lấy điểm sẽ bị <b>trừ điểm uy tín</b> "
+        "nếu khách báo sai.",
+        parse_mode="HTML",
+    )
     await _guided_show(update, ctx, edit=True)
 
 
