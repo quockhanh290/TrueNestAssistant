@@ -5,6 +5,7 @@ import random
 import time
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, Update
+from telegram import WebAppInfo
 from telegram.ext import ContextTypes
 
 import config
@@ -24,6 +25,8 @@ MENU_KB = InlineKeyboardMarkup([
      InlineKeyboardButton("👥 Khách hàng", callback_data="menu:clients")],
     [InlineKeyboardButton("✍️ Viết bài đăng từ căn đã có", callback_data="menu:write"),
      InlineKeyboardButton("📅 Lịch xem", callback_data="menu:viewings")],
+    [InlineKeyboardButton("🌐 Quản lý căn (Web)",
+                          web_app=WebAppInfo(url=config.WEBAPP_URL))],
     [InlineKeyboardButton("🤝 Liên kết broker", callback_data="menu:match"),
      InlineKeyboardButton("💰 Hoa hồng", callback_data="menu:deals")],
     [InlineKeyboardButton("💬 Mẫu tin nhắn", callback_data="menu:templates"),
