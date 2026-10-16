@@ -109,8 +109,19 @@ class Handler(BaseHTTPRequestHandler):
                 return int(query.get("broker_id", "0")) or None
             except ValueError:
                 return None
-        # Accept init_data from query param (Mini App) or header (legacy)
-        init_data = query.get("init_data", "") or self.headers.get("X-Telegram-Init-Data", "")
+        # Accept init_data from query param (base64, Mini App) or header (legacy)
+        init_data = ""
+        b64 = query.get("init_data_b64", "")
+        if b64:
+            try:
+                import base64
+                # fix padding
+                b64 += "=" * (-len(b64) % 4)
+                init_data = base64.b64decode(b64).decode("utf-8", "replace")
+            except Exception:
+                pass
+        if not init_data:
+            init_data = query.get("init_data", "") or self.headers.get("X-Telegram-Init-Data", "")
         user = validate_init_data(init_data, BOT_TOKEN)
         return user["id"] if user else None
 
