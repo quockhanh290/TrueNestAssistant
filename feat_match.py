@@ -110,7 +110,18 @@ def score_match(lst, c):
     photos = lst.get("photo_file_ids") or []
     if len(photos) >= 3:
         score += 10
-    return min(score, 100)
+    score = min(score, 100)
+    # Completeness boost: reward well-filled listings, penalize sparse ones.
+    # This creates the incentive loop: complete data → ranks higher in match.
+    try:
+        comp, _ = completeness_score(lst)
+    except Exception:
+        comp = 50
+    if comp >= 80:
+        score = min(score * 1.2, 100)
+    elif comp < 50:
+        score = score * 0.9
+    return score
 
 
 def _responder_candidates(broker_id, c):

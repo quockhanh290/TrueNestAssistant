@@ -105,7 +105,12 @@ HELP_TEXT = (
 
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
+    existing = db.get_broker(u.id)
     broker = db.get_or_create_broker(u.id, u.username, u.full_name)
+    # New broker → simplified 3-step onboarding (under 30 seconds)
+    if not existing:
+        await _onboard2_start(update, ctx)
+        return
     pn = get_pronoun(u.id, broker)
     await natural_delay(update)
     await update.message.reply_text(
@@ -134,6 +139,94 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         )
     elif not broker.get("pronoun"):
         await _onboard_ask_pronoun_msg(update, ctx)
+
+
+# ---------------------------------------------------------------- simplified onboarding (new brokers, 3 steps)
+
+async def _onboard2_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Step 1: welcome + pronoun choice. Only for brand-new brokers."""
+    await natural_delay(update)
+    await update.message.reply_text(
+        "👋 Chào anh! Em là Linh, trợ lý quản lý tin cho thuê.\n\n"
+        "Em giúp anh:\n"
+        "📝 Lưu tin nhanh (gửi text/ảnh là xong)\n"
+        "👥 Quản lý khách + nhắc follow-up\n"
+        "🤝 Kết nối với môi giới khác khi cần\n\n"
+        "Anh xưng hô với em là \"anh\" hay \"chị\" ạ?",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("Anh", callback_data="onboard2:pronoun:anh"),
+            InlineKeyboardButton("Chị", callback_data="onboard2:pronoun:chi"),
+        ]]),
+    )
+
+
+async def onboard2_pronoun_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Step 1 done → Step 2: ask for phone (skippable)."""
+    q = update.callback_query
+    await q.answer()
+    uid = q.from_user.id
+    pronoun = "chị" if q.data.rsplit(":", 1)[-1] == "chi" else "anh"
+    db.update_broker(uid, pronoun=pronoun)
+    ctx.user_data["onboarding2"] = {"step": "phone"}
+    await q.edit_message_text(
+        f"Rõ ạ! Số điện thoại của {pronoun} là gì?\n"
+        "(để khách liên hệ khi cần — anh có thể bỏ qua)",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("⏭️ Bỏ qua", callback_data="onboard2:skip_phone"),
+        ]]),
+    )
+
+
+async def onboard2_skip_phone(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Step 2 skipped → Step 3: prompt first listing."""
+    q = update.callback_query
+    await q.answer()
+    await _onboard2_finish(q, update, update.callback_query.from_user.id,
+                           via_callback=True)
+
+
+async def _onboard2_finish(update_or_q, ctx, uid, via_callback=False):
+    """Step 3: done → CTA to send first listing + show menu."""
+    ctx.user_data.pop("onboarding2", None)
+    broker = db.get_broker(uid) or {}
+    pn = broker.get("pronoun") or "anh"
+    text = (
+        f"Xong! {pn.capitalize()} gửi tin đầu tiên cho em nhé —\n"
+        "cứ gửi text + ảnh như đăng group là được 📸"
+    )
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📝 Gửi tin đầu tiên",
+                              callback_data="menu:new")],
+        [InlineKeyboardButton("⬅️ Menu", callback_data="menu:back")],
+    ])
+    if via_callback:
+        await update_or_q.edit_message_text(text, reply_markup=kb)
+    else:
+        await update_or_q.message.reply_text(text, reply_markup=kb)
+
+
+async def _handle_onboarding2(update: Update, ctx: ContextTypes.DEFAULT_TYPE,
+                              ob2: dict, text: str):
+    """Step 2: collect phone number (typed)."""
+    uid = update.effective_user.id
+    broker = db.get_broker(uid) or {}
+    pn = broker.get("pronoun") or "anh"
+    t = text.strip().lower()
+    if t in ("bỏ qua", "bo qua", "skip"):
+        await _onboard2_finish(update, ctx, uid)
+        return
+    phones = normalize_phone(text)
+    if not phones:
+        await update.message.reply_text(
+            "SĐT này chưa đúng định dạng, anh kiểm tra lại giúp em nhé? 📱\n"
+            "(10 số, VD: 0905123456)")
+        return
+    db.set_broker_phone(uid, phones[0])
+    if not broker.get("zalo"):
+        db.update_broker(uid, zalo=phones[0])
+    await natural_delay(update)
+    await update.message.reply_text("Em lưu SĐT rồi nhé ✓")
+    await _onboard2_finish(update, ctx, uid)
 
 
 async def cmd_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -455,6 +548,12 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ob = ctx.user_data.get("onboarding")
     if ob:
         await _handle_onboarding(update, ctx, ob, text)
+        return
+
+    # 0a. simplified onboarding for new brokers (3 steps)
+    ob2 = ctx.user_data.get("onboarding2")
+    if ob2:
+        await _handle_onboarding2(update, ctx, ob2, text)
         return
 
     # 0b. editing a contact field via /contacts or /phone
@@ -912,6 +1011,10 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await feat_clients.show_client_detail(update, ctx)
     elif data == "onboard:skip_phone":
         await onboard_skip_phone(update, ctx)
+    elif data.startswith("onboard2:pronoun:"):
+        await onboard2_pronoun_cb(update, ctx)
+    elif data == "onboard2:skip_phone":
+        await onboard2_skip_phone(update, ctx)
     elif data.startswith("onboard:pronoun:"):
         await onboard_pronoun_cb(update, ctx)
     elif data.startswith("onboard:dname:"):
