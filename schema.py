@@ -118,3 +118,32 @@ def quality_score(parsed, photo_count=0):
         else:
             missing.append(label)
     return min(score, 100), missing
+
+
+def quality_breakdown(parsed, photo_count=0):
+    """Detailed breakdown: (score, [(label, weight), ...] missing, potential_score).
+
+    potential_score = score + sum of weights of all missing fields
+    (i.e. score achievable if broker fills everything).
+    """
+    p = normalize_parsed(parsed)
+    score = 0
+    missing = []  # [(label, weight)]
+    for field, (ftype, required, weight, label) in MASTER_SCHEMA.items():
+        if weight == 0:
+            continue
+        if field == "photos":
+            ok = photo_count >= 3
+        elif field == "description":
+            ok = len(str(p.get(field) or "")) > 50
+        elif ftype == "boolean":
+            ok = p.get(field) is not None
+        else:
+            ok = bool(p.get(field))
+        if ok:
+            score += weight
+        else:
+            missing.append((label, weight))
+    score = min(score, 100)
+    potential = min(score + sum(w for _, w in missing), 100)
+    return score, missing, potential
