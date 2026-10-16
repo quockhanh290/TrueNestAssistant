@@ -191,13 +191,22 @@ Bạn chọn các căn muốn xem nhé!
 
 ---
 
-## Chế tài (nói rõ, không úp sọt)
+## Cơ chế khuyến khích xác nhận (chốt)
 
-**Broker:**
-- Không xác nhận deal → điểm uy tín giảm
-- Khai báo gian (khách bảo chốt, broker bảo chưa) → warning ×3 → ban
-- Bypass (liên hệ khách ngoài luồng) → ban ngay
+**Nguyên tắc:** đẩy việc "ép" khách xác nhận thành việc của broker — vì broker được lợi.
 
-**Khách:**
-- Không có chế tài. Chỉ nhờ xác nhận trên tinh thần tự nguyện.
-- Khách không xác nhận → vẫn dùng được, nhưng platform khó cải thiện.
+```
+Khách xác nhận deal
+→ Broker được GIẢM tỷ lệ hoa hồng cho platform
+   (vd: từ 20% xuống thấp hơn — con số cụ thể thảo luận sau)
+→ Điểm uy tín tăng
+
+Khách KHÔNG xác nhận
+→ Broker giữ full hoa hồng deal đó
+→ NHƯNG bị trừ điểm uy tín dần
+→ Dưới ngưỡng → remove khỏi hệ thống
+```
+
+**Logic:** broker tự cân nhắc — ăn trọn 1 deal nhưng mất nguồn lead tương lai, hay chia ít cho platform để giữ uy tín và nhận lead tiếp.
+
+**Lưu ý:** vì platform đã lấy thấp (20%), động cơ gian lận vốn đã thấp. Cơ chế này chỉ là lớp bảo vệ thêm.
