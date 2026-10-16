@@ -378,10 +378,14 @@ async def _flush_media_group(key, ctx):
         }
         fwd = entry.get("forward_source")
         fwd_note = f" (forward từ {fwd})" if fwd else ""
+        has_caption = entry.get("caption") and entry["caption"].strip()
         try:
             await ctx.bot.send_message(
                 entry["chat_id"],
-                f"Nhận ảnh{fwd_note}! Anh gửi thêm text mô tả giúp em nhé 📥")
+                f"Nhận {len(entry['photos'])} ảnh{fwd_note}! " +
+                ("Anh gửi thêm ảnh nếu có nhé 📥"
+                 if has_caption else
+                 "Anh gửi thêm text mô tả giúp em nhé 📝"))
         except Exception:
             pass
         asyncio.create_task(_flush_after(uid, ctx))
@@ -562,9 +566,14 @@ async def on_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                          "photos": [file_id],
                          "deadline": time.time() + COLLECT_WINDOW,
                          "chat_id": msg.chat.id}
-        await update.message.reply_text(
-            "Em nhận 1 ảnh rồi! Đang đợi text mô tả... 📝\n"
-            "(anh gửi trong 30s nhé, em chờ)")
+        if caption and caption.strip():
+            await update.message.reply_text(
+                "Em nhận ảnh + text rồi! Anh gửi thêm ảnh nếu có nhé 📥\n"
+                "(em chờ 5s)")
+        else:
+            await update.message.reply_text(
+                "Em nhận 1 ảnh rồi! Đang đợi text mô tả... 📝\n"
+                "(anh gửi trong 5s nhé, em chờ)")
         asyncio.create_task(_flush_after(uid, ctx))
 
 
