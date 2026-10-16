@@ -271,10 +271,9 @@ async def on_write_post_prompt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     uid = q.from_user.id
-    items = db.list_broker_listings(uid, limit=5, offset=0,
-                                     statuses=["submitted", "draft",
-                                               "pending_info", "rented",
-                                               "expired"])
+    items = db.list_broker_listings(
+        uid, limit=5, offset=0,
+        statuses=("draft", "pending_info", "submitted", "uncertain"))
     kb = []
     for i, l in enumerate(items, start=1):
         kb.append([InlineKeyboardButton(
@@ -284,9 +283,7 @@ async def on_write_post_prompt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     kb.append([InlineKeyboardButton("⬅️ Menu", callback_data="menu:back")])
     await natural_delay(update)
     if items:
-        total = db.count_broker_listings(
-            uid, statuses=["submitted", "draft", "pending_info",
-                           "rented", "expired"])
+        total = db.count_broker_listings(uid)
         text = (f"Anh muốn viết tin cho căn nào? "
                 f"Em thấy anh có {total} tin gần đây nè:")
     else:

@@ -4,7 +4,6 @@ Tiers:
   free — default, 20 active listings max, basic CRUD + button filters
   pro  — 99k/month: unlimited listings + smart features
   max  — 199k/month: pro + cross-broker matching + analytics
-  enterprise — 499k/month: max + >300 listings (wholesalers)
 
 Upgrade flow: /premium -> broker picks tier -> transfers -> taps
 "[I transferred]" -> admin notified -> /approve <id> <tier> activates.
@@ -18,10 +17,8 @@ import config
 import db
 from utils import MENU_KB, get_pronoun, natural_delay
 
-TIER_LABEL = {"free": "Free", "pro": "Pro 💎", "max": "Max 💎💎",
-              "enterprise": "Enterprise 🏢"}
-TIER_PRICE = {"pro": "99k/tháng", "max": "199k/tháng",
-              "enterprise": "499k/tháng"}
+TIER_LABEL = {"free": "Free", "pro": "Pro 💎", "max": "Max 💎💎"}
+TIER_PRICE = {"pro": "99k/tháng", "max": "199k/tháng"}
 
 # Feature -> minimum tier required
 FEATURE_TIER = {
@@ -32,11 +29,10 @@ FEATURE_TIER = {
     "templates": "pro",          # mẫu tin nhắn
     "commission": "pro",         # theo dõi hoa hồng
     "refresh": "pro",            # gợi ý cập nhật tin cũ
+    "send2client": "pro",        # gửi tin cho khách
     "followup": "free",          # nhắc follow-up (free theo quyết định)
-    "send2client": "pro",        # gửi tin cho khách → theo dõi → chốt lịch
     "broadcast": "max",          # match liên broker
     "analytics": "max",          # thống kê chi tiết
-    "enterprise_volume": "enterprise",  # quản lý >300 tin
 }
 
 FEATURE_NAME_VI = {
@@ -46,11 +42,9 @@ FEATURE_NAME_VI = {
     "viewings": "Lịch xem nhà",
     "templates": "Mẫu tin nhắn",
     "commission": "Theo dõi hoa hồng",
-    "send2client": "Gửi tin cho khách & theo dõi",
     "refresh": "Gợi ý cập nhật tin cũ",
     "broadcast": "Match liên broker",
     "analytics": "Thống kê chi tiết",
-    "enterprise_volume": "Quản lý trên 300 tin (tổng kho/đầu nậu)",
 }
 
 
@@ -134,18 +128,6 @@ def _plans_text(uid, pn):
         f"• Match liên broker\n"
         f"• Thống kê chi tiết\n"
     )
-    # Enterprise
-    mark = " ✅ <i>(đang dùng)</i>" if tier == "enterprise" else ""
-    exp = ""
-    if tier == "enterprise" and b.get("tier_expires_at"):
-        import datetime
-        d = datetime.datetime.fromtimestamp(b["tier_expires_at"])
-        exp = f" (hết hạn {d.strftime('%d/%m')})"
-    lines.append(
-        f"\n🏢 <b>Enterprise — 499k/tháng</b>{mark}{exp}\n"
-        f"• Tất cả của Max\n"
-        f"• Quản lý trên 300 tin (dành cho tổng kho/đầu nậu)\n"
-    )
     lines.append(
         f"\n💳 <b>Chuyển khoản tới:</b>\n"
         f"🏦 {_html.escape(config.PAYMENT_BANK)}\n"
@@ -165,16 +147,9 @@ def _plans_kb(uid):
                                         callback_data="premium:want:pro")])
         kb.append([InlineKeyboardButton("💎💎 Đăng ký Max (199k)",
                                         callback_data="premium:want:max")])
-        kb.append([InlineKeyboardButton("🏢 Đăng ký Enterprise (499k)",
-                                        callback_data="premium:want:enterprise")])
     elif tier == "pro":
         kb.append([InlineKeyboardButton("💎💎 Nâng lên Max (199k)",
                                         callback_data="premium:want:max")])
-        kb.append([InlineKeyboardButton("🏢 Nâng lên Enterprise (499k)",
-                                        callback_data="premium:want:enterprise")])
-    elif tier == "max":
-        kb.append([InlineKeyboardButton("🏢 Nâng lên Enterprise (499k)",
-                                        callback_data="premium:want:enterprise")])
     kb.append([InlineKeyboardButton("✅ Tôi đã chuyển khoản",
                                     callback_data="premium:paid")])
     kb.append([InlineKeyboardButton("⬅️ Menu", callback_data="menu:back")])
@@ -214,7 +189,7 @@ async def premium_want_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await q.answer()
     uid = q.from_user.id
     tier = q.data.rsplit(":", 1)[-1]
-    if tier not in ("pro", "max", "enterprise"):
+    if tier not in ("pro", "max"):
         return
     ctx.user_data["wanted_tier"] = tier
     pn = get_pronoun(uid)
@@ -242,7 +217,7 @@ async def premium_paid_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     uid = q.from_user.id
     pn = get_pronoun(uid)
     tier = ctx.user_data.get("wanted_tier", "pro")
-    if tier not in ("pro", "max", "enterprise"):
+    if tier not in ("pro", "max"):
         tier = "pro"
     existing = db.get_pending_premium_request(uid)
     if existing:
@@ -278,7 +253,7 @@ async def premium_paid_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_approve(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """/approve <telegram_id> <pro|max|enterprise> — admin activates a tier (30 days)."""
+    """/approve <telegram_id> <pro|max> — admin activates a tier (30 days)."""
     uid = update.effective_user.id
     if not config.ADMIN_TELEGRAM_ID or uid != config.ADMIN_TELEGRAM_ID:
         await update.message.reply_text("Lệnh này chỉ dành cho admin ạ 😊")
@@ -288,7 +263,7 @@ async def cmd_approve(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         pending = db.list_pending_premium_requests()
         if not pending:
             await update.message.reply_text(
-                "Cú pháp: /approve &lt;telegram_id&gt; &lt;pro|max|enterprise&gt;",
+                "Cú pháp: /approve &lt;telegram_id&gt; &lt;pro|max&gt;",
                 parse_mode="HTML")
             return
         lines = ["⏳ <b>Yêu cầu đang chờ:</b>"]
@@ -306,8 +281,8 @@ async def cmd_approve(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("ID không hợp lệ.")
         return
     tier = args[1].lower()
-    if tier not in ("pro", "max", "enterprise"):
-        await update.message.reply_text("Gói phải là pro, max hoặc enterprise.")
+    if tier not in ("pro", "max"):
+        await update.message.reply_text("Gói phải là pro hoặc max.")
         return
     broker = db.get_broker(target)
     if not broker:
