@@ -69,6 +69,8 @@ CREATE TABLE IF NOT EXISTS clients (
     urgency         TEXT NOT NULL DEFAULT 'normal',
     notes           TEXT NOT NULL DEFAULT '',
     viewed_listings TEXT NOT NULL DEFAULT '[]',
+    sent_listings   TEXT NOT NULL DEFAULT '[]',
+    client_choice   TEXT NOT NULL DEFAULT '',
     created_at      REAL NOT NULL,
     updated_at      REAL NOT NULL,
     last_contact_at REAL
@@ -199,6 +201,16 @@ def _migrate_clients(conn):
         )
     if "last_contact_at" not in cols:
         conn.execute("ALTER TABLE clients ADD COLUMN last_contact_at REAL")
+    if "sent_listings" not in cols:
+        conn.execute(
+            "ALTER TABLE clients ADD COLUMN sent_listings"
+            " TEXT NOT NULL DEFAULT '[]'"
+        )
+    if "client_choice" not in cols:
+        conn.execute(
+            "ALTER TABLE clients ADD COLUMN client_choice"
+            " TEXT NOT NULL DEFAULT ''"
+        )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_clients_urgency ON clients(urgency)"
     )
@@ -873,8 +885,11 @@ def stale_listings(older_than_days=7, statuses=("submitted",), path=None):
 
 # ---------------------------------------------------------------- clients
 
-CLIENT_STATUSES = ("new", "viewing", "negotiating", "deposited", "rented",
-                   "cancelled")
+CLIENT_STATUSES = ("new", "sent", "pending_viewing", "scheduled", "viewed",
+                   "negotiating", "deposited", "contracted", "rented",
+                   "cancelled",
+                   # legacy status kept readable for old rows
+                   "viewing")
 
 
 def create_client(broker_id, name="", phone="", requirements_raw="",
@@ -925,6 +940,14 @@ def get_client(client_id, path=None):
         return None
     d = dict(row)
     d["viewed_listings"] = json.loads(d["viewed_listings"])
+    try:
+        d["sent_listings"] = json.loads(d.get("sent_listings") or "[]")
+    except (ValueError, TypeError):
+        d["sent_listings"] = []
+    try:
+        d["client_choice"] = json.loads(d.get("client_choice") or "")
+    except (ValueError, TypeError):
+        d["client_choice"] = None
     return d
 
 
@@ -1102,6 +1125,93 @@ def link_listing(client_id, listing_id, path=None):
     conn.commit()
     conn.close()
     return True
+
+
+def record_sent_listings(client_id, listing_ids, path=None):
+    """Append listings to the client's sent_listings with sent_at timestamp."""
+    conn = connect(path)
+    row = conn.execute(
+        "SELECT sent_listings FROM clients WHERE id = ?", (client_id,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        return False
+    try:
+        sent = json.loads(row["sent_listings"] or "[]")
+    except (ValueError, TypeError):
+        sent = []
+    now = _now()
+    have = {s.get("id") for s in sent}
+    for lid in listing_ids:
+        if lid not in have:
+            sent.append({"id": lid, "sent_at": now})
+            have.add(lid)
+    conn.execute(
+        "UPDATE clients SET sent_listings = ?, updated_at = ?,"
+        " last_contact_at = ? WHERE id = ?",
+        (json.dumps(sent, ensure_ascii=False), now, now, client_id),
+    )
+    conn.commit()
+    conn.close()
+    return True
+
+
+def record_client_choice(client_id, listing_id, path=None):
+    """Record which sent listing the client chose."""
+    conn = connect(path)
+    now = _now()
+    cur = conn.execute(
+        "UPDATE clients SET client_choice = ?, updated_at = ?,"
+        " last_contact_at = ? WHERE id = ?",
+        (json.dumps({"id": listing_id, "chosen_at": now},
+                    ensure_ascii=False), now, now, client_id),
+    )
+    conn.commit()
+    conn.close()
+    return cur.rowcount > 0
+
+
+def clear_client_choice(client_id, path=None):
+    """Clear the recorded choice (e.g. client changed their mind)."""
+    conn = connect(path)
+    cur = conn.execute(
+        "UPDATE clients SET client_choice = '', updated_at = ? WHERE id = ?",
+        (_now(), client_id),
+    )
+    conn.commit()
+    conn.close()
+    return cur.rowcount > 0
+
+
+def clients_awaiting_choice(broker_id, days=2, limit=20, path=None):
+    """Clients with sent listings but no recorded choice, sent >= days ago."""
+    conn = connect(path)
+    rows = conn.execute(
+        "SELECT * FROM clients WHERE broker_id = ?"
+        " AND sent_listings != '[]' AND (client_choice IS NULL"
+        " OR client_choice = '')",
+        (broker_id,),
+    ).fetchall()
+    conn.close()
+    out = []
+    cutoff = _now() - days * 86400
+    for r in rows:
+        try:
+            sent = json.loads(r["sent_listings"] or "[]")
+        except (ValueError, TypeError):
+            continue
+        if not sent:
+            continue
+        latest = max((s.get("sent_at") or 0) for s in sent)
+        if latest <= cutoff:
+            d = dict(r)
+            d["viewed_listings"] = json.loads(d["viewed_listings"])
+            d["sent_listings"] = sent
+            d["client_choice"] = None
+            out.append(d)
+        if len(out) >= limit:
+            break
+    return out
 
 
 def delete_client(client_id, path=None):

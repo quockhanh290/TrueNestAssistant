@@ -6,6 +6,7 @@ separately):
   6a. Viewings 24-72h past with no feedback yet.
   6b. Clients added 2+ days ago that were never sent any listing.
   6c. Broadcast requests with responses the broker hasn't viewed in 1+ day.
+  6d. Clients sent listings 2+ days ago with no recorded choice yet.
 
 Usage: python pending_nudges.py [--dry-run]
 """
@@ -77,6 +78,25 @@ def section_unseen_responses():
         print("6c. Không có phản hồi broadcast nào bị bỏ quên.")
 
 
+def section_awaiting_choice():
+    any_out = False
+    for b in db.list_brokers():
+        waiting = db.clients_awaiting_choice(b["user_id"], days=2)
+        if not waiting:
+            continue
+        any_out = True
+        name = _broker_name(b)
+        for c in waiting:
+            cname = c.get("name") or "(chưa có tên)"
+            n = len(c.get("sent_listings") or [])
+            print(f"--- to user_id={b['user_id']} ({name}) ---")
+            print(f"Đã gửi {n} tin cho {cname} được 2 ngày rồi mà chưa"
+                  f" biết khách ưng căn nào. Hỏi lại khách nhé!"
+                  f"  [send2client:followup:{c['id']}]")
+    if not any_out:
+        print("6d. Không có khách nào đang chờ chọn căn.")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true",
@@ -88,6 +108,8 @@ def main():
     section_idle_clients()
     print()
     section_unseen_responses()
+    print()
+    section_awaiting_choice()
 
 
 if __name__ == "__main__":
