@@ -41,6 +41,7 @@ import feat_evening
 import feat_payment
 import feat_notify
 import feat_premium
+import feat_referral
 import feat_sendclient
 import hints
 from utils import (
@@ -113,6 +114,11 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
     existing = db.get_broker(u.id)
     broker = db.get_or_create_broker(u.id, u.username, u.full_name)
+    # Referral: /start ref_<inviter_id> from an invite link
+    inviter_id = feat_referral.parse_start_referral(update, ctx)
+    if inviter_id and not existing:
+        await feat_referral.announce_inviter(
+            ctx, inviter_id, u.full_name or u.username or "Bạn mới")
     # New broker → simplified 3-step onboarding (under 30 seconds)
     if not existing:
         await _onboard2_start(update, ctx)
@@ -1188,6 +1194,8 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await feat_listings.delete_listing(update, ctx)
     elif data.startswith("notify:"):
         await feat_notify.notify_pref_toggle(update, ctx)
+    elif data.startswith("referral:"):
+        await feat_referral.handle_referral_callback(update, ctx)
 
 
 def main():
@@ -1212,6 +1220,7 @@ def main():
     app.add_handler(CommandHandler("skip", feat_listings.cmd_skip_photo_delete))
     app.add_handler(CommandHandler("huy", feat_listings.cmd_cancel_addphoto))
     app.add_handler(CommandHandler("thongbao", feat_notify.cmd_thongbao))
+    app.add_handler(CommandHandler("moi", feat_referral.cmd_moi))
     app.add_handler(CallbackQueryHandler(on_callback))
     # Group replies to broadcast messages (cross-broker matching).
     # Registered before on_text so group replies are caught first.
