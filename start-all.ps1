@@ -11,11 +11,11 @@ if ($env:TELEGRAM_BOT_TOKEN -eq "<PASTE_TOKEN_HERE>") {
 }
 
 Write-Host "Starting webapp..." -ForegroundColor Green
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PSScriptRoot'; `$env:TELEGRAM_BOT_TOKEN='$env:TELEGRAM_BOT_TOKEN'; `$env:WEBAPP_URL='$env:WEBAPP_URL'; python webapp/server.py"
+Start-Process powershell -WindowStyle Hidden -ArgumentList "-Command", "cd '$PSScriptRoot'; `$env:TELEGRAM_BOT_TOKEN='$env:TELEGRAM_BOT_TOKEN'; `$env:WEBAPP_URL='$env:WEBAPP_URL'; python webapp/server.py"
 
 Start-Sleep -Seconds 2
 
 Write-Host "Starting bot..." -ForegroundColor Green
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PSScriptRoot'; `$env:TELEGRAM_BOT_TOKEN='$env:TELEGRAM_BOT_TOKEN'; `$env:WEBAPP_URL='$env:WEBAPP_URL'; python bot.py"
+Start-Process powershell -WindowStyle Hidden -ArgumentList "-Command", "cd '$PSScriptRoot'; `$env:TELEGRAM_BOT_TOKEN='$env:TELEGRAM_BOT_TOKEN'; `$env:WEBAPP_URL='$env:WEBAPP_URL'; python bot.py"
 
-Write-Host "Done! 2 cua so moi da mo: webapp + bot." -ForegroundColor Green
+Write-Host "Done! webapp + bot dang chay ngam (Task Manager > python de dung)." -ForegroundColor Green
