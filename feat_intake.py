@@ -209,10 +209,35 @@ async def _process_buffer(uid, buf, ctx, field_overrides=None):
     fwd_source = buf.get("forward_source") or ""
     ctx.user_data["confirming"] = {"listing_id": listing_id,
                                    "phone_note": phone_note,
-                                   "forward_source": fwd_source}
+                                   "forward_source": fwd_source,
+                                   "awaiting_highlights": True}
     l = db.get_listing(listing_id)
-    text, kb = _confirm_summary(l, pn, phone_note, fwd_source)
+    text, kb = _confirm_summary(l, pn, phone_note, fwd_source, hl_stage=True)
     await ctx.bot.send_message(chat_id, text, reply_markup=kb)
+
+
+async def hl_done_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Broker tapped [Bỏ qua, tiếp tục] on the highlights prompt —
+    move to the normal [Đúng rồi]/[Sửa] confirmation."""
+    q = update.callback_query
+    await q.answer()
+    lid = q.data.split(":", 2)[2]  # "cfm:hl_done:<listing_id>"
+    confirming = ctx.user_data.get("confirming")
+    l = db.get_listing(lid)
+    if not l:
+        ctx.user_data.pop("confirming", None)
+        await q.edit_message_text("Tin này không còn nữa.",
+                                  reply_markup=MENU_KB)
+        return
+    if confirming and confirming.get("listing_id") == lid:
+        confirming["awaiting_highlights"] = False
+        phone_note = confirming.get("phone_note", "")
+        fwd_source = confirming.get("forward_source", "")
+    else:
+        phone_note, fwd_source = "", ""
+    pn = get_pronoun(q.from_user.id)
+    t, kb = _confirm_summary(l, pn, phone_note, fwd_source, hl_stage=False)
+    await q.edit_message_text(t, reply_markup=kb)
 
 
 async def _finalize_after_confirm(update_or_q, ctx, uid, listing_id, chat_id,
@@ -268,6 +293,72 @@ _CONFIRM_WORDS = {"đúng rồi", "dung roi", "đúng", "dung", "ok", "oke",
                   "okê", "chuẩn", "chuan", "ừ", "u", "ừm", "um"}
 
 
+async def _handle_hl_stage_text(update, ctx, confirming, l, pn, text):
+    """Text typed during the highlights (selling-points) stage.
+
+    - Confirm words ("ok", "đúng rồi"...) → done, show normal confirmation.
+    - Text with structured fields (giá, PN...) → correction, merge + re-show.
+    - Anything else → split into selling points, append to highlights.
+    """
+    uid = update.effective_user.id
+    listing_id = confirming["listing_id"]
+    txt = text.strip()
+
+    async def _reshow(stage_done=False):
+        fresh = db.get_listing(listing_id)
+        t, kb = _confirm_summary(
+            fresh, pn, confirming.get("phone_note", ""),
+            confirming.get("forward_source", ""),
+            hl_stage=not stage_done)
+        await natural_delay(update)
+        return t, kb
+
+    # 1. confirm word → finish highlights stage
+    if txt.lower() in _CONFIRM_WORDS:
+        confirming["awaiting_highlights"] = False
+        t, kb = await _reshow(stage_done=True)
+        await update.message.reply_text("Ok, tiếp tục nhé ✓\n\n" + t,
+                                        reply_markup=kb)
+        return
+
+    # 2. structured fields → correction (merge, stay in hl stage)
+    result = listing_parser.parse_listing(txt)
+    fields = {k: v for k, v in result["fields"].items()
+              if k not in ("photo_count", "description", "highlights")
+              and v is not None}
+    if fields:
+        for k, v in fields.items():
+            db.update_listing_field(listing_id, k, v, changed_by="broker")
+        old_raw = l.get("raw_text") or ""
+        db.update_listing(listing_id, raw_text=(old_raw + "\n" + txt).strip())
+        t, kb = await _reshow()
+        await update.message.reply_text("Em cập nhật rồi nhé ✓\n\n" + t,
+                                        reply_markup=kb)
+        return
+
+    # 3. otherwise → selling points: split on commas/newlines, append
+    parts = [p.strip(" •–—-") for p in re.split(r"[,;\n]+", txt)]
+    parts = [p for p in parts if p]
+    if not parts:
+        t, kb = await _reshow()
+        await update.message.reply_text(t, reply_markup=kb)
+        return
+    cur = (l["parsed"] or {}).get("highlights") or []
+    seen_lower = {h.lower() for h in cur}
+    added = 0
+    for p in parts:
+        if p.lower() not in seen_lower:
+            cur.append(p)
+            seen_lower.add(p.lower())
+            added += 1
+    if added:
+        db.update_listing_field(listing_id, "highlights", cur,
+                                changed_by="broker")
+    t, kb = await _reshow()
+    await update.message.reply_text(
+        f"Đã thêm {added} điểm nổi bật ✨\n\n" + t, reply_markup=kb)
+
+
 async def _handle_confirm_correction(update, ctx, confirming, text):
     """Text typed while a draft summary is pending confirmation.
 
@@ -281,6 +372,11 @@ async def _handle_confirm_correction(update, ctx, confirming, text):
         ctx.user_data.pop("confirming", None)
         return
     pn = get_pronoun(uid)
+
+    # ---- highlights stage: typed text = selling point (or "done")
+    if confirming.get("awaiting_highlights"):
+        await _handle_hl_stage_text(update, ctx, confirming, l, pn, text)
+        return
 
     if text.strip().lower() in _CONFIRM_WORDS:
         # treat as tapping [Đúng rồi, lưu tin]
@@ -298,7 +394,17 @@ async def _handle_confirm_correction(update, ctx, confirming, text):
             "(VD: giá 13tr, 2PN)")
         return
     for k, v in fields.items():
-        db.update_listing_field(listing_id, k, v, changed_by="broker")
+        if k == "highlights":
+            # merge with existing highlights instead of overwriting
+            cur = (l["parsed"] or {}).get("highlights") or []
+            seen = {h.lower() for h in cur}
+            for h in v:
+                if h.lower() not in seen:
+                    cur.append(h)
+                    seen.add(h.lower())
+            db.update_listing_field(listing_id, k, cur, changed_by="broker")
+        else:
+            db.update_listing_field(listing_id, k, v, changed_by="broker")
     old_raw = l.get("raw_text") or ""
     db.update_listing(listing_id, raw_text=(old_raw + "\n" + text).strip())
     l = db.get_listing(listing_id)
@@ -324,11 +430,25 @@ async def _handle_confirm_photo(update, ctx, confirming, file_id, caption):
         res = listing_parser.parse_listing(caption)
         for k, v in res["fields"].items():
             if k not in ("photo_count", "description") and v is not None:
-                db.update_listing_field(listing_id, k, v, changed_by="broker")
+                if k == "highlights":
+                    cur = (l["parsed"] or {}).get("highlights") or []
+                    seen = {h.lower() for h in cur}
+                    for h in v:
+                        if h.lower() not in seen:
+                            cur.append(h)
+                            seen.add(h.lower())
+                    db.update_listing_field(listing_id, k, cur,
+                                            changed_by="broker")
+                else:
+                    db.update_listing_field(listing_id, k, v,
+                                            changed_by="broker")
     db.update_listing(listing_id, photo_file_ids=photos, raw_text=raw)
     l = db.get_listing(listing_id)
     pn = get_pronoun(uid)
-    t, kb = _confirm_summary(l, pn, confirming.get("phone_note", ""), confirming.get("forward_source", ""))
+    t, kb = _confirm_summary(l, pn, confirming.get("phone_note", ""),
+                             confirming.get("forward_source", ""),
+                             hl_stage=confirming.get("awaiting_highlights",
+                                                    False))
     await natural_delay(update)
     await update.message.reply_text(
         f"Đã thêm ảnh ✓ (tổng {len(photos)} ảnh)\n\n" + t,
