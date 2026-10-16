@@ -7,8 +7,22 @@ Pipeline order:  Telegram message -> normalize_all() -> parser.parse_listing()
 
 Pure Python stdlib only (unicodedata, re). No external dependencies.
 """
+import json
 import re
 import unicodedata
+from pathlib import Path
+
+
+def _strip_accents(text):
+    """Remove Vietnamese diacritics for alias matching (đ -> d handled).
+
+    Defined before the buildings section: _load_buildings() needs it
+    at import time.
+    """
+    nfkd = unicodedata.normalize("NFD", text)
+    stripped = "".join(c for c in nfkd if not unicodedata.combining(c))
+    return stripped.replace("đ", "d").replace("Đ", "D")
+
 
 # ---------------------------------------------------------------- constants
 
@@ -24,23 +38,23 @@ UNIT_BLACKLIST_RES = [
     re.compile(r"^\d{1,2}$"),         # 01, 02 ...
 ]
 
-# Major Da Nang projects: (canonical name, [accent-stripped aliases])
-BUILDINGS = [
-    ("The Monarchy", ["monarchy"]),
+# Fallback when data/buildings.json is missing: (canonical, [aliases])
+_FALLBACK_BUILDINGS = [
+    ("The Monarchy", ["the monarchy", "monarchy"]),
     ("Mường Thanh", ["muong thanh", "muongthanh"]),
-    ("Hiyori Garden Tower", ["hiyori"]),
-    ("Wyndham Soleil", ["wyndham", "soleil"]),
-    ("Danang Golden Bay", ["golden bay"]),
+    ("Hiyori Garden Tower", ["hiyori garden tower", "hiyori"]),
+    ("Wyndham Soleil", ["wyndham soleil", "wyndham", "soleil"]),
+    ("Danang Golden Bay", ["danang golden bay", "golden bay"]),
     ("FPT Plaza", ["fpt plaza", "fpt"]),
-    ("The Ori Garden", ["ori garden"]),
-    ("The Sang Residence", ["sang residence", "the sang"]),
-    ("Altara Suites", ["altara"]),
+    ("The Ori Garden", ["the ori garden", "ori garden"]),
+    ("The Sang Residence", ["the sang residence", "sang residence", "the sang"]),
+    ("Altara Suites", ["altara suites", "altara"]),
     ("A La Carte", ["a la carte", "alacarte"]),
     ("Risemount", ["risemount", "risemount premier", "premier"]),
     ("Shantira", ["shantira", "shantira beach"]),
     ("Nalod", ["nalod"]),
     ("Golden Square", ["golden square"]),
-    ("Indochina Riverside", ["indochina"]),
+    ("Indochina Riverside", ["indochina riverside", "indochina"]),
     ("Azura", ["azura"]),
     ("Vinpearl", ["vinpearl"]),
     ("Novotel", ["novotel"]),
@@ -51,6 +65,62 @@ BUILDINGS = [
     ("Hilton", ["hilton"]),
     ("Sunrise", ["sunrise"]),
 ]
+
+# Generic suffixes stripped to build short aliases
+# ("Hiyori Aqua Tower" -> "hiyori aqua"). Short aliases must contain a
+# letter and be >= 4 chars to avoid matching bare numbers like "176".
+_BUILDING_SUFFIXES = [
+    "serviced apartment", "serviced apartments",
+    "apartment", "apartments", "hotel", "hotels",
+    "suite", "suites", "residence", "residences",
+    "tower", "towers", "building", "buildings",
+    "homestay", "homestays", "villa", "villas",
+    "condotel", "condotels", "hostel", "hostels",
+    "motel", "motels",
+]
+
+
+def _load_buildings():
+    """Load [(canonical, [accent-stripped aliases])] from data/buildings.json.
+
+    The JSON lives next to this script (data/buildings.json) so it works
+    regardless of cwd. Falls back to _FALLBACK_BUILDINGS when missing.
+    Entries are sorted longest-alias-first so specific names win
+    ("A La Carte Danang Beach" beats "A La Carte").
+    """
+    path = Path(__file__).resolve().parent / "data" / "buildings.json"
+    entries = []
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        raw = []
+    if isinstance(raw, list):
+        for item in raw:
+            name = item.get("name", "") if isinstance(item, dict) else str(item)
+            name = name.strip()
+            if not name:
+                continue
+            flat = _strip_accents(name).lower()
+            aliases = {flat}
+            short = flat
+            for suf in _BUILDING_SUFFIXES:
+                if short.endswith(" " + suf):
+                    short = short[: -len(suf) - 1].strip()
+                    break
+            if (short and short != flat and len(short) >= 4
+                    and re.search(r"[a-z]", short)):
+                aliases.add(short)
+            entries.append((name, sorted(aliases)))
+    if not entries:
+        entries = [(c, list(a)) for c, a in _FALLBACK_BUILDINGS]
+    # longest alias first -> most specific match wins
+    entries.sort(key=lambda e: max(len(a) for a in e[1]), reverse=True)
+    return entries
+
+
+# Major Da Nang projects, loaded from data/buildings.json (310 entries).
+# Each entry: (canonical name, [accent-stripped lowercase aliases]).
+BUILDINGS = _load_buildings()
 
 # Emoji ranges (to collapse excessive runs)
 _EMOJI_RANGES = [
@@ -67,13 +137,6 @@ _JUNK_COMBINING = set(range(0x0332, 0x0339)) | set(range(0x20D0, 0x2100))
 
 
 # ---------------------------------------------------------------- helpers
-
-def _strip_accents(text):
-    """Remove Vietnamese diacritics for alias matching (đ -> d handled)."""
-    nfkd = unicodedata.normalize("NFD", text)
-    stripped = "".join(c for c in nfkd if not unicodedata.combining(c))
-    return stripped.replace("đ", "d").replace("Đ", "D")
-
 
 def _is_emoji(ch):
     cp = ord(ch)
