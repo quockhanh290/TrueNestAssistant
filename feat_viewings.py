@@ -487,6 +487,11 @@ async def _handle_viewing_feedback(update, ctx, vf, text):
     v = db.get_viewing(vf["viewing_id"])
     if v and v.get("client_id"):
         db.touch_contact(v["client_id"])
+        # pipeline: viewing done -> client has viewed, awaiting decision
+        # (auto-transition is Pro; viewings entry itself is Pro-gated)
+        import feat_premium
+        if feat_premium.requires_tier(uid, "send2client"):
+            db.update_client(v["client_id"], status="viewed")
     cname = (v.get("client_name") if v else None) or "khách"
     await update.message.reply_text(
         f"Cảm ơn {pn}! Em đã lưu feedback buổi xem với {cname} ✓",

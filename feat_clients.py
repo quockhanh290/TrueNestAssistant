@@ -34,8 +34,17 @@ CLIENT_URGENCY_LABEL = {"urgent": "Gấp", "normal": "Bình thường",
                         "low": "Tham khảo"}
 
 CLIENT_STATUS_FILTERS = [
-    ("a", "Tất cả"), ("new", "🆕 Mới"), ("viewing", "👀 Đang xem"),
-    ("rented", "✅ Đã thuê"),
+    ("a", "Tất cả"),
+    ("new", "🆕 Mới"),
+    ("sent", "📤 Đã gửi"),
+    ("pending_viewing", "⏳ Chờ chốt"),
+    ("scheduled", "📅 Đã chốt"),
+    ("viewed", "👀 Đã xem"),
+    ("negotiating", "🤝 Đàm phán"),
+    ("deposited", "💰 Đã cọc"),
+    ("contracted", "📝 Đã kí"),
+    ("rented", "✅ Xong"),
+    ("cancelled", "❌ Hủy"),
 ]
 
 CLIENT_URGENCY_FILTERS = [
@@ -120,14 +129,22 @@ async def _send_client_list(msg_or_q, uid, page, s, u_, edit):
     pn = get_pronoun(uid)
 
     kb = []
-    # row 1: status filter
-    srow = []
-    for code, label in CLIENT_STATUS_FILTERS:
+    # status filter — Free: 4 basic, Pro: all 10 (2 rows)
+    import feat_premium
+    from utils import FREE_CLIENT_STATUSES
+    is_pro = feat_premium.requires_tier(uid, "send2client")
+    filters = [f for f in CLIENT_STATUS_FILTERS
+               if f[0] == "a" or is_pro or f[0] in FREE_CLIENT_STATUSES]
+    srow, srow2 = [], []
+    for i, (code, label) in enumerate(filters):
         mark = "● " if s == code else ""
-        srow.append(InlineKeyboardButton(
+        btn = InlineKeyboardButton(
             f"{mark}{label}",
-            callback_data=f"clients:list:0:{code}:{u_}"))
+            callback_data=f"clients:list:0:{code}:{u_}")
+        (srow if i < 6 else srow2).append(btn)
     kb.append(srow)
+    if srow2:
+        kb.append(srow2)
     # row 2: urgency filter
     urow = []
     for code, label in CLIENT_URGENCY_FILTERS:
@@ -332,10 +349,15 @@ async def client_add_urgency_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 # ---- client detail ----
 
 def _client_detail_text(c, pn):
+    from utils import client_pipeline_bar, FREE_CLIENT_STATUSES
+    import feat_premium
+    is_pro = feat_premium.requires_tier(c["broker_id"], "send2client")
     urg_e = CLIENT_URGENCY_EMOJI.get(c.get("urgency") or "normal", "🟡")
     urg_l = CLIENT_URGENCY_LABEL.get(c.get("urgency") or "normal", "Bình thường")
-    st_e = CLIENT_STATUS_EMOJI.get(c.get("status") or "new", "🆕")
-    st_l = CLIENT_STATUS_LABEL.get(c.get("status") or "new", "mới")
+    st = c.get("status") or "new"
+    st_e = CLIENT_STATUS_EMOJI.get(st, "•")
+    st_l = CLIENT_STATUS_LABEL.get(st, st)
+    pro_only = (not is_pro) and (st not in FREE_CLIENT_STATUSES)
     lines = [
         f"👤 <b>{c.get('name') or '(chưa có tên)'}</b> {urg_e}",
         f"📱 SĐT: {c.get('phone') or 'chưa có'}",
@@ -344,27 +366,48 @@ def _client_detail_text(c, pn):
     if c.get("requirements_raw"):
         lines.append(f"   <i>“{c['requirements_raw']}”</i>")
     lines.append(f"⏰ Mức gấp: {urg_e} {urg_l}")
-    lines.append(f"📌 Trạng thái: {st_e} {st_l}")
+    lines.append(f"📌 Trạng thái: {st_e} {st_l}{' 💎' if pro_only else ''}")
+    bar = client_pipeline_bar(st, full=is_pro)
+    if bar:
+        lines.append(f"\n🔄 <i>{bar}</i>")
     if c.get("notes"):
         lines.append(f"📝 Ghi chú:\n{c['notes']}")
     n_viewed = len(c.get("viewed_listings") or [])
     if n_viewed:
         lines.append(f"🏠 Đã gửi/xem: {n_viewed} tin")
+    sent = c.get("sent_listings") or []
+    if sent:
+        import datetime as _dt
+        parts = []
+        for s in sent[-4:]:
+            d = _dt.datetime.fromtimestamp(s.get("sent_at") or 0)
+            parts.append(d.strftime("%d/%m"))
+        lines.append(f"📤 Đã gửi tin: {len(sent)} ({', '.join(parts)})")
+    choice = c.get("client_choice")
+    if choice and choice.get("id"):
+        lines.append("✅ Khách đã chọn 1 căn (xem lịch xem)")
     return "\n".join(lines)
 
 
 def _client_detail_kb(c, page, s, u_):
+    import feat_premium
+    is_pro = feat_premium.requires_tier(c["broker_id"], "send2client")
     cid = c["id"]
+    pro_mark = "" if is_pro else " 💎"
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🏠 Gợi ý tin",
                               callback_data=f"client:match:{cid}"),
          InlineKeyboardButton("📝 Thêm ghi chú",
                               callback_data=f"client:note:{cid}")],
-        [InlineKeyboardButton("📅 Đặt lịch xem",
-                              callback_data=f"vw:c:{cid}"),
-         InlineKeyboardButton("💬 Mẫu tin nhắn",
-                              callback_data=f"tpl:list:{cid}")],
-        [InlineKeyboardButton("📢 Yêu cầu đã đăng",
+        [InlineKeyboardButton(f"📤 Gửi tin cho khách{pro_mark}",
+                              callback_data=f"send2client:start:{cid}")],
+        [InlineKeyboardButton(f"📝 Khách chọn căn nào?{pro_mark}",
+                              callback_data=f"send2client:followup:{cid}"),
+         InlineKeyboardButton("📅 Đặt lịch xem",
+                              callback_data=f"vw:c:{cid}")],
+        [InlineKeyboardButton("💬 Mẫu tin nhắn",
+                              callback_data=f"tpl:list:{cid}"),
+         InlineKeyboardButton("📢 Yêu cầu đã đăng",
                               callback_data=f"client:reqs:{cid}")],
         [InlineKeyboardButton("🔄 Đổi trạng thái",
                               callback_data=f"client:status:{cid}"),
@@ -443,16 +486,26 @@ async def _handle_add_note(update, ctx, addn, text):
 async def client_status_picker(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
+    uid = q.from_user.id
+    import feat_premium
+    from utils import FREE_CLIENT_STATUSES
+    is_pro = feat_premium.requires_tier(uid, "send2client")
     client_id, _ = parse_client_cb(q.data, "client:status")
     c = db.get_client(client_id)
     if not c:
         return
     kb = []
     for st in db.CLIENT_STATUSES:
+        if not is_pro and st not in FREE_CLIENT_STATUSES:
+            continue
         mark = "● " if c.get("status") == st else ""
         kb.append([InlineKeyboardButton(
             f"{mark}{CLIENT_STATUS_EMOJI[st]} {CLIENT_STATUS_LABEL[st]}",
             callback_data=f"client:setstatus:{client_id}:{st}")])
+    if not is_pro:
+        kb.append([InlineKeyboardButton(
+            "💎 Mở khóa đủ 10 trạng thái — xem gói Pro",
+            callback_data="premium:plans")])
     kb.append([InlineKeyboardButton(
         "⬅️ Quay lại", callback_data=f"client:{client_id}:0:a:a")])
     await q.edit_message_text("Đổi trạng thái khách:",
@@ -469,7 +522,17 @@ async def client_set_status(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     c = db.get_client(client_id)
     if not c or c["broker_id"] != uid:
         return
+    # Free tier can't set Pro-only statuses (also blocks forged callbacks)
+    import feat_premium
+    from utils import FREE_CLIENT_STATUSES
+    if (not feat_premium.requires_tier(uid, "send2client")
+            and new_status not in FREE_CLIENT_STATUSES):
+        await q.answer("Trạng thái này cần gói Pro 💎", show_alert=True)
+        return
+    if new_status not in db.CLIENT_STATUSES:
+        return
     db.update_client(client_id, status=new_status)
+    db.touch_contact(client_id)
     c = db.get_client(client_id)
     st_e = CLIENT_STATUS_EMOJI.get(new_status, "•")
     st_l = CLIENT_STATUS_LABEL.get(new_status, new_status)
@@ -607,6 +670,32 @@ def _client_to_search_filters(c):
     return f
 
 
+async def _manual_listing_picker(q, ctx, uid, client_id, c, pn):
+    """Free tier: broker manually picks listings to send (no auto-match)."""
+    import feat_premium
+    listings = db.search_listings(uid, {"status": "active"}, limit=10)
+    # fall back to any non-deleted listings if no 'active'
+    if not listings:
+        listings = [l for l in db.list_broker_listings(uid, limit=10)
+                    if l.get("status") not in ("deleted", "draft")]
+    lines = [
+        f"Chọn tin để gửi cho <b>{c.get('name')}</b> "
+        f"({_client_req_summary(c)}):",
+        "",
+        "<i>💎 Gói Pro tự động gợi ý tin phù hợp —"
+        " /premium để nâng cấp</i>",
+    ]
+    kb = []
+    for l in listings[:10]:
+        kb.append([InlineKeyboardButton(
+            f"🏠 {listing_line(l)}",
+            callback_data=f"client:send:{client_id}:{l['id']}")])
+    kb.append([InlineKeyboardButton(
+        "⬅️ Quay lại", callback_data=f"client:{client_id}:0:a:a")])
+    await q.edit_message_text("\n".join(lines), parse_mode="HTML",
+                              reply_markup=InlineKeyboardMarkup(kb))
+
+
 async def client_match(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
@@ -617,6 +706,11 @@ async def client_match(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not c or c["broker_id"] != uid:
         return
     await maybe_send_hint(q.message)
+    # Free tier: manual listing picker (no auto-match)
+    import feat_premium
+    if not feat_premium.requires_tier(uid, "auto_match"):
+        await _manual_listing_picker(q, ctx, uid, client_id, c, pn)
+        return
     matches = db.search_listings(uid, _client_to_search_filters(c), limit=5)
     if not matches:
         kb = []
