@@ -9,9 +9,14 @@
     tg.ready();
     tg.expand();
     // Fullscreen (Bot API 8.0+): hide Telegram header for immersive view
-    try {
-      if (tg.requestFullscreen) tg.requestFullscreen();
-    } catch (e) {}
+    function tryFullscreen() {
+      try {
+        if (tg.requestFullscreen && !tg.isFullscreen) tg.requestFullscreen();
+      } catch (e) {}
+    }
+    tryFullscreen();
+    // Retry on first user gesture (some clients block programmatic fullscreen)
+    document.addEventListener('pointerdown', tryFullscreen, { once: true });
     // Fallback: ensure viewport fills
     tg.setHeaderColor && tg.setHeaderColor('#071420');
     tg.setBackgroundColor && tg.setBackgroundColor('#071420');
