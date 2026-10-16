@@ -1,0 +1,520 @@
+{
+  "schema_version": 1,
+  "buildings": [
+    {
+      "name": "Danang Golden Bay",
+      "aliases": [
+        "danang golden bay",
+        "da nang golden bay",
+        "golden bay"
+      ],
+      "street": "Lê Văn Duyệt",
+      "ward": "Nại Hiên Đông",
+      "district": "Sơn Trà"
+    },
+    {
+      "name": "Hoa Binh Green",
+      "aliases": [
+        "hoa binh green",
+        "hoa binh green da nang"
+      ],
+      "street": "Lê Văn Duyệt",
+      "ward": "Nại Hiên Đông",
+      "district": "Sơn Trà"
+    },
+    {
+      "name": "Wyndham Soleil Anh Duong",
+      "aliases": [
+        "wyndham soleil",
+        "wyndham",
+        "soleil anh duong",
+        "anh duong",
+        "soleil da nang",
+        "soleil danang"
+      ],
+      "street": "Phạm Văn Đồng",
+      "ward": "Phước Mỹ",
+      "district": "Sơn Trà"
+    },
+    {
+      "name": "Altara Suites",
+      "aliases": [
+        "altara suites",
+        "altara"
+      ]
+    },
+    {
+      "name": "Son Tra Ocean View",
+      "aliases": [
+        "son tra ocean view",
+        "ocean view"
+      ],
+      "street": "Ngô Quyền",
+      "ward": "Thọ Quang",
+      "district": "Sơn Trà"
+    },
+    {
+      "name": "Four Points by Sheraton Danang",
+      "aliases": [
+        "four points da nang",
+        "four points by sheraton danang",
+        "four points"
+      ]
+    },
+    {
+      "name": "Hiyori Garden Tower",
+      "aliases": [
+        "hiyori garden tower",
+        "hiyori danang",
+        "hiyori"
+      ],
+      "street": "Võ Văn Kiệt",
+      "ward": "An Hải Bắc",
+      "district": "Sơn Trà"
+    },
+    {
+      "name": "The Monarchy",
+      "aliases": [
+        "the monarchy",
+        "monarchy block a",
+        "monarchy block b",
+        "monarchy"
+      ],
+      "street": "Trần Hưng Đạo",
+      "ward": "An Hải Tây",
+      "district": "Sơn Trà"
+    },
+    {
+      "name": "Sun Ponte Residence",
+      "aliases": [
+        "sun ponte residence",
+        "sun ponte",
+        "the ponte"
+      ],
+      "street": "Trần Hưng Đạo",
+      "ward": "An Hải Tây",
+      "district": "Sơn Trà"
+    },
+    {
+      "name": "Azura",
+      "aliases": [
+        "azura da nang",
+        "azura danang",
+        "azura"
+      ],
+      "street": "Trần Hưng Đạo",
+      "ward": "An Hải Bắc",
+      "district": "Sơn Trà"
+    },
+    {
+      "name": "Harmony Tower",
+      "aliases": [
+        "harmony tower",
+        "harmony",
+        "hamorny"
+      ],
+      "street": "Morrison",
+      "ward": "An Hải Bắc",
+      "district": "Sơn Trà"
+    },
+    {
+      "name": "The Sang Residence",
+      "aliases": [
+        "the sang residence",
+        "the sang"
+      ],
+      "street": "Phạm Kiệt",
+      "ward": "Khuê Mỹ",
+      "district": "Ngũ Hành Sơn"
+    },
+    {
+      "name": "Sun Cosmo Residence",
+      "aliases": [
+        "sun cosmo residence",
+        "sun cosmo",
+        "cosmo",
+        "panoma"
+      ],
+      "street": "Trần Thị Lý",
+      "ward": "Mỹ An",
+      "district": "Ngũ Hành Sơn"
+    },
+    {
+      "name": "Muong Thanh Son Tra",
+      "aliases": [
+        "muong thanh son tra",
+        "muong thanh apartment",
+        "muong thanh vien trieu",
+        "muong thanh"
+      ],
+      "street": "Võ Nguyên Giáp",
+      "ward": "Mỹ An",
+      "district": "Ngũ Hành Sơn"
+    },
+    {
+      "name": "FPT Plaza 1",
+      "aliases": [
+        "fpt plaza 1",
+        "fpt plaza one"
+      ],
+      "street": "Võ Chí Công",
+      "ward": "Hòa Hải",
+      "district": "Ngũ Hành Sơn"
+    },
+    {
+      "name": "FPT Plaza 2",
+      "aliases": [
+        "fpt plaza 2",
+        "fpt plaza two"
+      ],
+      "street": "Võ Chí Công",
+      "ward": "Hòa Hải",
+      "district": "Ngũ Hành Sơn"
+    },
+    {
+      "name": "FPT Plaza 3",
+      "aliases": [
+        "fpt plaza 3",
+        "fpt plaza three"
+      ],
+      "street": "Võ Chí Công",
+      "ward": "Hòa Hải",
+      "district": "Ngũ Hành Sơn"
+    },
+    {
+      "name": "FPT Plaza",
+      "aliases": [
+        "fpt plaza",
+        "chung cu fpt"
+      ],
+      "street": "Khu đô thị FPT",
+      "ward": "Hòa Hải",
+      "district": "Ngũ Hành Sơn"
+    },
+    {
+      "name": "The Ori Garden",
+      "aliases": [
+        "the ori garden",
+        "ori garden",
+        "ori gaden",
+        "bau tram"
+      ],
+      "street": "Mê Linh",
+      "ward": "Hòa Hiệp Nam",
+      "district": "Liên Chiểu"
+    },
+    {
+      "name": "MIA Plaza",
+      "aliases": [
+        "mia plaza",
+        "chung cu mia"
+      ],
+      "street": "Khu đô thị Tây Bắc",
+      "ward": "Hòa Khánh Bắc",
+      "district": "Liên Chiểu"
+    },
+    {
+      "name": "Fhome",
+      "aliases": [
+        "fhome",
+        "f-home",
+        "f home"
+      ],
+      "street": "Lý Thường Kiệt",
+      "ward": "Thạch Thang",
+      "district": "Hải Châu"
+    },
+    {
+      "name": "Blooming Tower",
+      "aliases": [
+        "blooming tower"
+      ],
+      "street": "Xuân Diệu",
+      "ward": "Thuận Phước",
+      "district": "Hải Châu"
+    },
+    {
+      "name": "The Filmore",
+      "aliases": [
+        "the filmore",
+        "filmore da nang",
+        "filmore"
+      ],
+      "street": "Bạch Đằng",
+      "ward": "Bình Thuận",
+      "district": "Hải Châu"
+    },
+    {
+      "name": "Hoang Anh Gia Lai Lakeview",
+      "aliases": [
+        "hoang anh gia lai lakeview",
+        "hagl lakeview",
+        "hoang anh gia lai",
+        "hagl"
+      ],
+      "street": "Hàm Nghi",
+      "ward": "Thạc Gián",
+      "district": "Thanh Khê"
+    },
+    {
+      "name": "Con Dau 18",
+      "aliases": [
+        "con dau 18",
+        "can ho con dau 18"
+      ],
+      "street": "Cồn Dầu 18",
+      "ward": "Hòa Xuân",
+      "district": "Cẩm Lệ"
+    },
+    {
+      "name": "Indochina Riverside Towers",
+      "aliases": [
+        "indochina riverside towers",
+        "indochina riverside"
+      ]
+    },
+    {
+      "name": "Lapaz Tower",
+      "aliases": [
+        "lapaz tower",
+        "la paz tower"
+      ]
+    },
+    {
+      "name": "Vicoland Apartment",
+      "aliases": [
+        "vicoland apartment",
+        "vicoland"
+      ]
+    },
+    {
+      "name": "Olalani Resort",
+      "aliases": [
+        "olalani resort",
+        "olalani"
+      ]
+    },
+    {
+      "name": "Hyatt Regency Danang",
+      "aliases": [
+        "hyatt regency danang",
+        "hyatt da nang"
+      ]
+    },
+    {
+      "name": "The Ocean Villas",
+      "aliases": [
+        "the ocean villas",
+        "ocean villas"
+      ]
+    },
+    {
+      "name": "The Ocean Suites",
+      "aliases": [
+        "the ocean suites",
+        "ocean suites"
+      ]
+    },
+    {
+      "name": "Naman Retreat",
+      "aliases": [
+        "naman retreat"
+      ]
+    },
+    {
+      "name": "Fusion Resort and Villas Danang",
+      "aliases": [
+        "fusion resort and villas danang",
+        "fusion maia da nang"
+      ]
+    },
+    {
+      "name": "Sheraton Grand Danang",
+      "aliases": [
+        "sheraton grand danang",
+        "sheraton da nang"
+      ]
+    },
+    {
+      "name": "Ariyana Beach Resort",
+      "aliases": [
+        "ariyana beach resort",
+        "ariyana da nang"
+      ]
+    },
+    {
+      "name": "Cocobay Danang",
+      "aliases": [
+        "cocobay danang",
+        "cocobay"
+      ]
+    },
+    {
+      "name": "Risemount Apartment",
+      "aliases": [
+        "risemount apartment",
+        "risemount"
+      ]
+    },
+    {
+      "name": "Alphanam Luxury Apartment",
+      "aliases": [
+        "alphanam luxury apartment",
+        "alphanam"
+      ]
+    },
+    {
+      "name": "Premier Sky Residences",
+      "aliases": [
+        "premier sky residences",
+        "premier sky"
+      ]
+    },
+    {
+      "name": "The Summit",
+      "aliases": [
+        "the summit da nang",
+        "the summit"
+      ]
+    },
+    {
+      "name": "Luxury Apartment Da Nang",
+      "aliases": [
+        "luxury apartment da nang"
+      ]
+    },
+    {
+      "name": "Nest Home",
+      "aliases": [
+        "nest home",
+        "nesthome"
+      ],
+      "street": "Chu Huy Mân",
+      "ward": "Mân Thái",
+      "district": "Sơn Trà"
+    },
+    {
+      "name": "Green Bay Premium",
+      "aliases": [
+        "green bay premium",
+        "green bay da nang"
+      ]
+    },
+    {
+      "name": "Phu Gia Compound",
+      "aliases": [
+        "phu gia compound",
+        "phu gia"
+      ]
+    },
+    {
+      "name": "Euro Village",
+      "aliases": [
+        "euro village",
+        "lang chau au"
+      ]
+    },
+    {
+      "name": "Marina Complex",
+      "aliases": [
+        "marina complex",
+        "da nang marina complex"
+      ]
+    },
+    {
+      "name": "Newtown Diamond",
+      "aliases": [
+        "newtown diamond",
+        "new town diamond"
+      ]
+    },
+    {
+      "name": "TMS Hotel & Apartment",
+      "aliases": [
+        "tms hotel",
+        "tms luxury",
+        "tms da nang",
+        "tms danang"
+      ]
+    },
+    {
+      "name": "Blue House An Trung",
+      "aliases": [
+        "blue house an trung",
+        "blue house"
+      ],
+      "street": "Trần Thị Lý",
+      "ward": "An Hải Tây",
+      "district": "Sơn Trà"
+    },
+    {
+      "name": "An Trung 2",
+      "aliases": [
+        "chung cu an trung 2",
+        "an trung 2",
+        "an trung"
+      ],
+      "street": "Ngô Quyền",
+      "ward": "An Hải Tây",
+      "district": "Sơn Trà"
+    },
+    {
+      "name": "D.Life Apartment",
+      "aliases": [
+        "d.life apartment",
+        "d.life",
+        "74/1 vo van kiet"
+      ],
+      "street": "Võ Văn Kiệt",
+      "ward": "An Hải Bắc",
+      "district": "Sơn Trà"
+    },
+    {
+      "name": "Amilan Apartment & Residence",
+      "aliases": [
+        "amilan apartment",
+        "amilan residence",
+        "amilan"
+      ],
+      "street": "Hồ Xuân Hương",
+      "ward": "An Hải Bắc",
+      "district": "Sơn Trà"
+    },
+    {
+      "name": "Dong Nam A Hotel & Apartment",
+      "aliases": [
+        "dong nam a hotel",
+        "dong nam a apartment",
+        "356 vo nguyen giap",
+        "k356 vo nguyen giap"
+      ],
+      "street": "Võ Nguyên Giáp",
+      "ward": "Mỹ An",
+      "district": "Ngũ Hành Sơn"
+    },
+    {
+      "name": "Le Gia Apartment",
+      "aliases": [
+        "le gia apartment"
+      ],
+      "street": "Chế Lan Viên",
+      "ward": "Mỹ An",
+      "district": "Ngũ Hành Sơn"
+    },
+    {
+      "name": "Harik Art House",
+      "aliases": [
+        "harik art house"
+      ],
+      "street": "Khuê Mỹ Đông 3",
+      "ward": "Khuê Mỹ",
+      "district": "Ngũ Hành Sơn"
+    },
+    {
+      "name": "Sun Home",
+      "aliases": [
+        "sun home"
+      ]
+    }
+  ]
+}
