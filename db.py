@@ -17,7 +17,10 @@ CREATE TABLE IF NOT EXISTS brokers (
     user_id        INTEGER PRIMARY KEY,
     username       TEXT,
     display_name   TEXT,
+    name           TEXT,
     phone          TEXT,
+    zalo           TEXT,
+    facebook       TEXT,
     status         TEXT NOT NULL DEFAULT 'new',
     listings_count INTEGER NOT NULL DEFAULT 0,
     approved_count INTEGER NOT NULL DEFAULT 0,
@@ -61,8 +64,17 @@ def connect(path=None):
 def init_db(path=None):
     conn = connect(path)
     conn.executescript(SCHEMA)
+    _migrate_brokers(conn)
     conn.commit()
     conn.close()
+
+
+def _migrate_brokers(conn):
+    """Add contact columns to brokers on pre-existing DBs (no data loss)."""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(brokers)")}
+    for col in ("name", "zalo", "facebook"):
+        if col not in cols:
+            conn.execute(f"ALTER TABLE brokers ADD COLUMN {col} TEXT")
 
 
 def _now():
@@ -93,8 +105,8 @@ def get_or_create_broker(user_id, username=None, display_name=None, path=None):
 
 
 def update_broker(user_id, path=None, **fields):
-    allowed = {"username", "display_name", "phone", "status",
-               "listings_count", "approved_count"}
+    allowed = {"username", "display_name", "name", "phone", "zalo",
+               "facebook", "status", "listings_count", "approved_count"}
     sets = ", ".join(f"{k} = ?" for k in fields if k in allowed)
     if not sets:
         return
@@ -113,6 +125,17 @@ def get_broker(user_id, path=None):
     ).fetchone()
     conn.close()
     return dict(row) if row else None
+
+
+def get_broker_phone(broker_id, path=None):
+    """Broker's saved phone, or None."""
+    b = get_broker(broker_id, path=path)
+    return b.get("phone") if b else None
+
+
+def set_broker_phone(broker_id, phone, path=None):
+    """Save broker's phone (used for listing auto-fill)."""
+    update_broker(broker_id, path=path, phone=phone)
 
 
 # ---------------------------------------------------------------- listings
@@ -225,6 +248,97 @@ def set_listing_status(listing_id, new_status, changed_by="broker", path=None):
     conn.commit()
     conn.close()
     return True
+
+
+def update_listing_field(listing_id, field, value, changed_by="broker", path=None):
+    """Update one listing field and log the edit to tg_events for audit.
+
+    field: a key inside the `parsed` JSON (e.g. 'price_vnd'), or the
+    special cases:
+      - 'description' -> updates raw_text
+      - 'location'    -> value is a dict with any of
+                         district / street / building_name, merged into parsed
+
+    After the update, the field is dropped from missing_fields if now
+    filled. If the listing was pending_info and nothing is missing any
+    more, it is promoted to 'submitted'. Returns False if not found.
+    """
+    conn = connect(path)
+    row = conn.execute(
+        "SELECT parsed, raw_text, missing_fields, status FROM tg_listings"
+        " WHERE id = ?", (listing_id,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        return False
+    parsed = json.loads(row["parsed"])
+    missing = json.loads(row["missing_fields"])
+    status = row["status"]
+    now = _now()
+
+    def _filled(v):
+        return v is not None and v != "" and v != {}
+
+    if field == "description":
+        _log_field_edit(conn, listing_id, "description",
+                        row["raw_text"], value, changed_by, now)
+        conn.execute(
+            "UPDATE tg_listings SET raw_text = ?, updated_at = ? WHERE id = ?",
+            (value, now, listing_id),
+        )
+        if _filled(value) and "description" in missing:
+            missing.remove("description")
+    elif field == "location" and isinstance(value, dict):
+        for k in ("district", "street", "building_name"):
+            if k in value:
+                _log_field_edit(conn, listing_id, k, parsed.get(k),
+                                value[k], changed_by, now)
+                parsed[k] = value[k]
+        conn.execute(
+            "UPDATE tg_listings SET parsed = ?, updated_at = ? WHERE id = ?",
+            (json.dumps(parsed, ensure_ascii=False), now, listing_id),
+        )
+    else:
+        _log_field_edit(conn, listing_id, field, parsed.get(field),
+                        value, changed_by, now)
+        parsed[field] = value
+        conn.execute(
+            "UPDATE tg_listings SET parsed = ?, updated_at = ? WHERE id = ?",
+            (json.dumps(parsed, ensure_ascii=False), now, listing_id),
+        )
+        if _filled(value) and field in missing:
+            missing.remove(field)
+
+    conn.execute(
+        "UPDATE tg_listings SET missing_fields = ? WHERE id = ?",
+        (json.dumps(missing, ensure_ascii=False), listing_id),
+    )
+
+    # promote to submitted when the last missing field got filled
+    if status == "pending_info" and not missing:
+        conn.execute(
+            "UPDATE tg_listings SET status = ?, updated_at = ? WHERE id = ?",
+            ("submitted", now, listing_id),
+        )
+        conn.execute(
+            "INSERT INTO tg_events (listing_id, old_status, new_status,"
+            " changed_by, created_at) VALUES (?, ?, ?, ?, ?)",
+            (listing_id, "pending_info", "submitted", changed_by, now),
+        )
+
+    conn.commit()
+    conn.close()
+    return True
+
+
+def _log_field_edit(conn, listing_id, field, old, new, changed_by, now):
+    """Audit-trail entry for a field edit, reusing tg_events."""
+    conn.execute(
+        "INSERT INTO tg_events (listing_id, old_status, new_status,"
+        " changed_by, created_at) VALUES (?, ?, ?, ?, ?)",
+        (listing_id, f"edit:{field}:{old}", f"edit:{field}:{new}",
+         changed_by, now),
+    )
 
 
 def touch_listing(listing_id, path=None):
