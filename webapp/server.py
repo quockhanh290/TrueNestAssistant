@@ -233,6 +233,9 @@ class Handler(BaseHTTPRequestHandler):
         if parts[0] == "propose" and len(parts) == 2:
             data, code = api.get_propose(broker_id, parts[1])
             return self._json(code, data)
+        if parts[0] == "xbroker" and len(parts) == 1:
+            data, code = api.get_xbroker_requests(broker_id)
+            return self._json(code, data)
         return self._json(404, {"error": "not_found"})
 
     def _api_put(self, broker_id, rest, query, body):
