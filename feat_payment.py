@@ -1,13 +1,60 @@
-"""Payment confirmation flow: broker uploads receipt, Khanh confirms on phone.
+"""Payment flows: premium upgrades + deal platform-fee collection.
 
-Flow:
-1. Broker records a deal -> bot sends bank details + platform fee (20%).
-2. Broker transfers -> uploads receipt photo.
-3. Bot asks "is this a receipt?" (only if broker has unpaid deals).
-4. On yes -> forwards photo to ADMIN_TELEGRAM_ID with [Da nhan]/[Chua thay].
-5. Khanh taps -> deal marked paid (or broker asked to re-check).
+=====================================================================
+FLOW A — PREMIUM UPGRADE (bot)
+=====================================================================
+1. /premium -> feat_premium.cmd_premium (bot.py:1216 CommandHandler)
+   shows plans + bank info + [Đăng ký Pro/Max] buttons
+2. Click [Đăng ký Pro] -> callback "premium:want:pro"
+   -> feat_premium.premium_want_cb (bot.py:876)
+   stores wanted_tier in ctx.user_data, shows transfer instructions
+3. Broker transfers -> clicks [Tôi đã chuyển khoản] -> "premium:paid"
+   -> feat_premium.premium_paid_cb (bot.py:878)
+   - db.create_premium_request(uid, tier)  [db/brokers.py]
+   - DM to ADMIN_TELEGRAM_ID with "/approve <uid> <tier>" instructions
+4. Khanh types /approve <id> <pro|max> -> feat_premium.cmd_approve
+   (bot.py:1217 CommandHandler, admin-only check inside)
+   - db.set_tier(target, tier, days=30)    [db/brokers.py]
+   - db.decide_premium_request(req_id, True)
+   - DM to broker: "Gói Pro đã được kích hoạt!"
 
-Everything is tappable; Khanh never needs a computer.
+=====================================================================
+FLOW B — PREMIUM UPGRADE (web app)
+=====================================================================
+1. Upgrade view -> [Nâng cấp] -> POST /api/premium/request {tier}
+   -> webapp/server.py:332 routes to api_clients_deals.request_premium_api
+2. request_premium_api:
+   - db.create_premium_request(broker_id, tier)
+   - db.queue_notification("premium_request", ...)  [db/notify.py]
+     (FIX 2026-10-16: previously silent — Khanh never knew)
+3. Bot poller -> feat_match.process_outbox_notifications (bot.py:1235)
+   handles ntype="premium_request": DM to ADMIN_TELEGRAM_ID with
+   "/approve <id> <tier>" instructions
+4. Same /approve path as Flow A step 4.
+
+=====================================================================
+FLOW C — DEAL PLATFORM FEE (20% commission)
+=====================================================================
+1. Deal recorded -> feat_payment.payment_instructions_text()
+   bot sends bank details + fee amount + deal short_id
+2. Broker uploads receipt photo (has unpaid deals)
+   -> feat_intake.py:1133 calls feat_payment.ask_is_receipt()
+   bot asks: "Ảnh này có phải bill chuyển khoản không?"
+3a. [Đúng là bill] -> "pay:receipt_yes" -> receipt_yes_cb (bot.py:1013)
+    -> forward_receipt_to_admin(): photo + [Đã nhận tiền]/[Chưa thấy]
+       buttons to ADMIN_TELEGRAM_ID
+3b. [Không, ảnh tin đăng] -> "pay:receipt_no" -> receipt_no_cb (bot.py:1015)
+    -> re-runs normal single-photo listing flow
+4a. Khanh taps [Đã nhận tiền] -> "pay:confirm:<deal_id>"
+    -> pay_confirm_cb (bot.py:1017, admin-only)
+    -> db.mark_deal_paid(deal_id) [db/deals.py]
+    -> DM to broker: "Đã xác nhận thanh toán"
+4b. Khanh taps [Chưa thấy] -> "pay:reject:<deal_id>"
+    -> pay_reject_cb (bot.py:1019, admin-only)
+    -> DM to broker: "kiểm tra lại giúp em"
+
+All callbacks registered in bot.py on_callback_query router.
+All DB functions verified in db/ package (brokers.py, deals.py, notify.py).
 """
 import logging
 import time
