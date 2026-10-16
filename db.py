@@ -249,6 +249,7 @@ def init_db(path=None):
     _migrate_deals_paid(conn)
     _migrate_listings_content_hash(conn)
     _migrate_listings_saved_post(conn)
+    _migrate_listings_photo_urls(conn)
     conn.commit()
     conn.close()
 
@@ -449,6 +450,21 @@ def _migrate_listings_saved_post(conn):
         conn.execute(
             "ALTER TABLE tg_listings ADD COLUMN saved_post"
             " TEXT NOT NULL DEFAULT ''"
+        )
+
+
+def _migrate_listings_photo_urls(conn):
+    """Add photo_urls to tg_listings.
+
+    JSON array of public R2 URLs for the listing's photos, uploaded in
+    the background after submit. The web app renders these directly;
+    the bot keeps using photo_file_ids (Telegram file_id) for sending.
+    """
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(tg_listings)")}
+    if "photo_urls" not in cols:
+        conn.execute(
+            "ALTER TABLE tg_listings ADD COLUMN photo_urls"
+            " TEXT NOT NULL DEFAULT '[]'"
         )
 
 
@@ -889,16 +905,17 @@ def get_listing(listing_id, path=None):
         return None
     d = dict(row)
     d["photo_file_ids"] = json.loads(d["photo_file_ids"])
+    d["photo_urls"] = json.loads(d.get("photo_urls") or "[]")
     d["parsed"] = json.loads(d["parsed"])
     d["missing_fields"] = json.loads(d["missing_fields"])
     return d
 
 
 def update_listing(listing_id, path=None, **fields):
-    allowed = {"raw_text", "photo_file_ids", "parsed", "missing_fields",
+    allowed = {"raw_text", "photo_file_ids", "photo_urls", "parsed", "missing_fields",
                "status", "view_count", "inquiry_count", "duplicate_of",
                "content_hash", "saved_post"}
-    json_fields = {"photo_file_ids", "parsed", "missing_fields"}
+    json_fields = {"photo_file_ids", "photo_urls", "parsed", "missing_fields"}
     sets, vals = [], []
     for k, v in fields.items():
         if k not in allowed:
@@ -1078,6 +1095,7 @@ def list_broker_listings(broker_id, limit=5, offset=0, statuses=None, path=None)
     for r in rows:
         d = dict(r)
         d["photo_file_ids"] = json.loads(d["photo_file_ids"])
+        d["photo_urls"] = json.loads(d.get("photo_urls") or "[]")
         d["parsed"] = json.loads(d["parsed"])
         d["missing_fields"] = json.loads(d["missing_fields"])
         out.append(d)
@@ -1139,6 +1157,24 @@ def has_saved_post(listing_id, path=None):
     return bool(get_saved_post_langs(listing_id, path=path))
 
 
+def add_photo_url(listing_id, url, path=None):
+    """Append a public R2 photo URL to the listing's photo_urls.
+
+    Idempotent — won't add duplicates. Returns True if added.
+    """
+    if not url:
+        return False
+    l = get_listing(listing_id, path=path)
+    if not l:
+        return False
+    urls = l.get("photo_urls") or []
+    if url in urls:
+        return False
+    urls.append(url)
+    update_listing(listing_id, path=path, photo_urls=urls)
+    return True
+
+
 def list_broker_listings_with_posts(broker_id, limit=5, offset=0,
                                     statuses=None, path=None):
     """Listings that have at least one saved FB post.
@@ -1162,6 +1198,7 @@ def list_broker_listings_with_posts(broker_id, limit=5, offset=0,
     for r in rows:
         d = dict(r)
         d["photo_file_ids"] = json.loads(d["photo_file_ids"])
+        d["photo_urls"] = json.loads(d.get("photo_urls") or "[]")
         d["parsed"] = json.loads(d["parsed"])
         d["missing_fields"] = json.loads(d["missing_fields"])
         out.append(d)
@@ -1267,6 +1304,7 @@ def search_listings(broker_id, filters, limit=50, offset=0, path=None):
     for r in rows:
         d = dict(r)
         d["photo_file_ids"] = json.loads(d["photo_file_ids"])
+        d["photo_urls"] = json.loads(d.get("photo_urls") or "[]")
         d["parsed"] = json.loads(d["parsed"])
         d["missing_fields"] = json.loads(d["missing_fields"])
         out.append(d)
@@ -1346,6 +1384,7 @@ def stale_listings(older_than_days=7, statuses=("submitted",), path=None):
     for r in rows:
         d = dict(r)
         d["photo_file_ids"] = json.loads(d["photo_file_ids"])
+        d["photo_urls"] = json.loads(d.get("photo_urls") or "[]")
         d["parsed"] = json.loads(d["parsed"])
         out.append(d)
     return out
@@ -1411,6 +1450,7 @@ def find_potential_duplicates(broker_id, parsed, exclude_id=None, path=None):
 
         d = dict(r)
         d["photo_file_ids"] = json.loads(d["photo_file_ids"])
+        d["photo_urls"] = json.loads(d.get("photo_urls") or "[]")
         d["parsed"] = op
         d["missing_fields"] = json.loads(d["missing_fields"])
         out.append(d)
@@ -1443,6 +1483,7 @@ def find_exact_duplicate_by_hash(broker_id, content_hash, exclude_id=None,
             continue
         d = dict(r)
         d["photo_file_ids"] = json.loads(d["photo_file_ids"])
+        d["photo_urls"] = json.loads(d.get("photo_urls") or "[]")
         d["parsed"] = json.loads(d["parsed"])
         d["missing_fields"] = json.loads(d["missing_fields"])
         return d
