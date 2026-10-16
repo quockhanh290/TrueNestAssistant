@@ -1329,16 +1329,57 @@ async def mark_rented(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def delete_listing(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Step 1: ask for confirmation before deleting."""
     q = update.callback_query
     await q.answer()
     listing_id, page, filt = parse_listing_cb(q.data, "delete")
+    l = db.get_listing(listing_id) if listing_id else None
+    if not l:
+        await q.edit_message_text("Tin này không còn nữa.",
+                                  reply_markup=MENU_KB)
+        return
+    text = (
+        "Anh chắc chắn muốn xoá tin này không? "
+        "Hành động này không thể hoàn tác.\n\n"
+        f"🏠 {listing_line(l)}"
+    )
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton(
+            "✅ Xoá luôn",
+            callback_data=f"delconfirm:{l['id']}:{page}:{filt}"),
+        InlineKeyboardButton(
+            "❌ Giữ lại",
+            callback_data=f"delcancel:{l['id']}:{page}:{filt}"),
+    ]])
+    await q.edit_message_text(text, reply_markup=kb)
+
+
+async def delete_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Step 2a: broker confirmed — actually delete."""
+    q = update.callback_query
+    await q.answer()
+    listing_id, page, filt = parse_listing_cb(q.data, "delconfirm")
     if listing_id:
         db.set_listing_status(listing_id, "deleted", changed_by="broker")
-    await q.edit_message_text("Đã xoá tin 🗑",
+    await q.edit_message_text("Em đã xoá tin rồi ạ 🗑",
                               reply_markup=InlineKeyboardMarkup([[
                                   InlineKeyboardButton(
                                       "⬅️ Danh sách",
                                       callback_data=f"menu:list:{page}:{filt}")]]))
+
+
+async def delete_cancel_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Step 2b: broker cancelled — back to listing detail."""
+    q = update.callback_query
+    await q.answer()
+    listing_id, page, filt = parse_listing_cb(q.data, "delcancel")
+    l = db.get_listing(listing_id) if listing_id else None
+    if not l:
+        await q.edit_message_text("Tin này không còn nữa.",
+                                  reply_markup=MENU_KB)
+        return
+    text, kb = _detail_content(l, page, filt)
+    await q.edit_message_text(text, parse_mode="HTML", reply_markup=kb)
 
 
 # ---------------------------------------------------------------- edit listing
@@ -2116,6 +2157,10 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await refresh_listing_cb(update, ctx)
     elif data.startswith("qrented:"):
         await mark_query_rented(update, ctx)
+    elif data.startswith("delconfirm:"):
+        await delete_confirm_cb(update, ctx)
+    elif data.startswith("delcancel:"):
+        await delete_cancel_cb(update, ctx)
     elif data.startswith("delete:"):
         await delete_listing(update, ctx)
 
