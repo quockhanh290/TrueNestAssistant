@@ -80,13 +80,37 @@ Bạn đang phân vân giữa 3 tin:
 1. Chào + hỏi nhu cầu (ngân sách, khu vực, số PN...)
 2. Hiện giá TB khu vực → "ngân sách của bạn hợp lý không?"
 3. Broadcast cho broker (như spec match)
-4. Nhận đề xuất → hiện kèm so sánh giá + cảnh báo
-5. Khách chọn broker HOẶC pick tin lẻ (concierge)
-   HOẶC bấm "xem thêm căn khác" → hiện tin ngoài đề xuất
+4. Nhận đề xuất → hiện 5 căn/lần, mỗi căn có nút concierge
+5. Khách chọn broker HOẶC thêm từng căn vào giỏ concierge
+   HOẶC bấm "xem thêm" → hiện 5 căn tiếp
    → vẫn không ưng → gợi ý nới tiêu chí → match lại
 6. Kết nối → follow-up → xác nhận → đánh giá
 7. Trước hết HĐ 45 ngày → hỏi gia hạn/tìm mới
 ```
+
+### Hiển thị đề xuất (5 căn/lần)
+Mỗi lần hiện 5 căn, mỗi căn có nút thêm vào concierge:
+
+```
+🏠 2PN An Thượng, 12tr ⭐
+   75m² | ban công | cho pet
+   💰 Rẻ hơn TB 11% ✅
+   Môi giới: ★★★★☆ (85)
+   [➕ Thêm vào concierge]
+
+🏠 2PN Sơn Trà, 14tr
+   80m² | view biển
+   💰 Cao hơn TB 4%
+   Môi giới: ★★★★☆ (78)
+   [➕ Thêm vào concierge]
+
+[... 3 căn nữa ...]
+
+[➡️ Xem 5 căn tiếp] [🎩 Xem giỏ concierge (2)]
+```
+
+- Khách tick từng căn vào "giỏ concierge" mà không cần chọn broker
+- Đủ số lượng muốn xem → bấm "Xem giỏ" → xác nhận → trả phí → broadcast concierge
 
 ## Nguồn dữ liệu
 - Giá TB: tính từ inventory của broker (real-time)
