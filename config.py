@@ -3,6 +3,9 @@ import os
 
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 BOT_NAME = "Linh"
+# Bot username (without @) for t.me deep links, e.g. referral invites.
+# Khanh: set BOT_USERNAME env once the BotFather bot is created.
+BOT_USERNAME = os.getenv("BOT_USERNAME", "")
 BOT_FULL_NAME = "Linh - Trợ lý TrueNest"
 
 DB_PATH = os.environ.get("BOT_DB_PATH", "broker_bot.db")
