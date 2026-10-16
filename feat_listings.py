@@ -119,6 +119,11 @@ async def show_query_detail(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         lines.append(f"Diện tích: {p['area_m2']:g}m²")
     if p.get("furnishing"):
         lines.append(f"Nội thất: {p['furnishing']}")
+    hl = p.get("highlights") or []
+    if hl:
+        lines.append("✨ Điểm nổi bật:")
+        for h in hl:
+            lines.append(f"   • {h}")
     kb = []
     if l["status"] not in ("rented", "negotiating", "deposited", "deleted"):
         kb.append([InlineKeyboardButton("🔑 Đánh dấu đã cho thuê",
@@ -309,6 +314,11 @@ def _detail_content(l, page, filt):
         lines.append(f"Diện tích: {p['area_m2']:g}m²")
     if p.get("furnishing"):
         lines.append(f"Nội thất: {p['furnishing']}")
+    _hl = p.get("highlights") or []
+    if _hl:
+        lines.append("✨ Điểm nổi bật:")
+        for _h in _hl:
+            lines.append(f"   • {_h}")
 
     # completeness score + suggestions (listing's own data only)
     score, missing = completeness_score(l)
