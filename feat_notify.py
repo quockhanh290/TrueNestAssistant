@@ -163,3 +163,127 @@ async def notify_new_booking(ctx, broker_id, booking):
         )
     except Exception as e:
         log.warning("booking notify failed: %s", e)
+
+
+async def notify_stale_listings(ctx, broker_id, stale):
+    """DM broker about listings older than 14 days.
+
+    stale: list of (listing_id, title, age_days). Respects the
+    notify_quality preference (freshness is a quality signal).
+    """
+    prefs = db.get_notify_prefs(broker_id)
+    if not prefs.get("notify_quality", True):
+        return
+    if not stale:
+        return
+    n = len(stale)
+    lines = "\n".join(
+        f"• {t} ({int(a)} ngày)" for _, t, a in stale[:5]
+    )
+    if n > 5:
+        lines += f"\n• ... và {n - 5} tin khác"
+    try:
+        await ctx.bot.send_message(
+            chat_id=broker_id,
+            text=(
+                f"📅 <b>{n} tin của anh đã cũ (&gt;14 ngày)</b>\n\n"
+                f"{lines}\n\n"
+                f"Tin cũ khó được khách chọn. Cập nhật trạng thái nhé!"),
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton(
+                    "🔄 Cập nhật trong web app",
+                    web_app=WebAppInfo(url=webapp_url()))]]),
+        )
+    except Exception as e:
+        log.warning("stale notify failed: %s", e)
+
+
+async def sweep_stale_listings(ctx):
+    """Weekly sweeper: DM every broker that has listings >14 days stale.
+
+    Intended trigger: bot job_queue weekly run (parent wires the schedule).
+    Uses updated_at (last status refresh), falling back to created_at.
+    """
+    import time
+    now = time.time()
+    cutoff = now - 14 * 86400
+    try:
+        brokers = db.list_brokers()
+    except Exception as e:
+        log.warning("stale sweep: list_brokers failed: %s", e)
+        return
+    for b in brokers:
+        uid = b.get("user_id")
+        if not uid:
+            continue
+        try:
+            rows = db.list_broker_listings(
+                uid, limit=200, offset=0,
+                statuses=("submitted", "active", "uncertain"))
+        except Exception:
+            continue
+        stale = []
+        for r in rows:
+            ts = r.get("updated_at") or r.get("created_at") or 0
+            age_d = (now - ts) / 86400
+            if age_d > 14:
+                p = r.get("parsed") or {}
+                title = (p.get("building_name") or p.get("district")
+                         or "Tin")
+                stale.append((r["id"], title, age_d))
+        if stale:
+            await notify_stale_listings(ctx, uid, stale)
+
+
+async def notify_false_refresh(ctx, broker_id, listing_title, old_score,
+                               new_score, false_count):
+    """DM broker a reputation warning after a false refresh claim.
+
+    Called when a listing the broker marked "available" via refresh is
+    later found to be rented. -10 profile points per strike; 3 strikes ->
+    7-day propose cooldown.
+    """
+    from utils import broker_profile_score  # noqa: E402
+    _ = broker_profile_score  # referenced for clarity; scores passed in
+    if false_count >= db.FALSE_REFRESH_BAN_COUNT:
+        tail = ("🚫 Anh đã bị hạn chế quyền đề xuất trong 7 ngày.")
+    else:
+        left = db.FALSE_REFRESH_BAN_COUNT - false_count
+        tail = (f"Báo sai {left} lần nữa sẽ bị hạn chế quyền propose.")
+    try:
+        await ctx.bot.send_message(
+            chat_id=broker_id,
+            text=(
+                f"⚠️ <b>Cảnh báo uy tín</b>\n\n"
+                f"Tin \"{listing_title}\" anh báo \"còn trống\"\n"
+                f"nhưng thực tế đã cho thuê.\n\n"
+                f"Điểm uy tín: {old_score} → {new_score} (-10đ)\n"
+                f"{tail}"),
+            parse_mode="HTML",
+        )
+    except Exception as e:
+        log.warning("false refresh notify failed: %s", e)
+
+
+async def penalize_false_refresh(ctx, listing_id):
+    """Apply the full false-refresh penalty pipeline for a listing.
+
+    Returns the penalty dict from db.flag_false_refresh, or None.
+    Intended callers: dedup flow, client feedback handler, admin check.
+    """
+    from utils import broker_profile_score  # noqa: E402
+    lst = db.get_listing(listing_id)
+    if not lst:
+        return None
+    broker_id = lst.get("broker_id")
+    before = broker_profile_score(broker_id).get("score")
+    result = db.flag_false_refresh(listing_id)
+    if not result:
+        return None
+    after = broker_profile_score(broker_id).get("score")
+    p = lst.get("parsed") or {}
+    title = p.get("building_name") or p.get("district") or "Tin"
+    await notify_false_refresh(ctx, broker_id, title, before, after,
+                               result["false_count"])
+    return result
