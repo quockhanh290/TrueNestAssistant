@@ -53,6 +53,27 @@ CREATE TABLE IF NOT EXISTS tg_events (
     created_at  REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_events_listing ON tg_events(listing_id);
+
+CREATE TABLE IF NOT EXISTS clients (
+    id              TEXT PRIMARY KEY,
+    broker_id       INTEGER NOT NULL REFERENCES brokers(user_id),
+    name            TEXT,
+    phone           TEXT,
+    budget_min      REAL,
+    budget_max      REAL,
+    bedrooms        REAL,
+    district        TEXT,
+    property_type   TEXT,
+    requirements_raw TEXT NOT NULL DEFAULT '',
+    status          TEXT NOT NULL DEFAULT 'new',
+    urgency         TEXT NOT NULL DEFAULT 'normal',
+    notes           TEXT NOT NULL DEFAULT '',
+    viewed_listings TEXT NOT NULL DEFAULT '[]',
+    created_at      REAL NOT NULL,
+    updated_at      REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_clients_broker ON clients(broker_id);
+CREATE INDEX IF NOT EXISTS idx_clients_status ON clients(status);
 """
 
 
@@ -66,8 +87,21 @@ def init_db(path=None):
     conn = connect(path)
     conn.executescript(SCHEMA)
     _migrate_brokers(conn)
+    _migrate_clients(conn)
     conn.commit()
     conn.close()
+
+
+def _migrate_clients(conn):
+    """Add urgency column to clients on pre-existing DBs (no data loss)."""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(clients)")}
+    if "urgency" not in cols:
+        conn.execute(
+            "ALTER TABLE clients ADD COLUMN urgency TEXT NOT NULL DEFAULT 'normal'"
+        )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_clients_urgency ON clients(urgency)"
+    )
 
 
 def _migrate_brokers(conn):
@@ -562,6 +596,182 @@ def stale_listings(older_than_days=7, statuses=("submitted",), path=None):
         d["parsed"] = json.loads(d["parsed"])
         out.append(d)
     return out
+
+
+# ---------------------------------------------------------------- clients
+
+CLIENT_STATUSES = ("new", "viewing", "negotiating", "deposited", "rented",
+                   "cancelled")
+
+
+def create_client(broker_id, name="", phone="", requirements_raw="",
+                  requirements=None, urgency="normal", path=None):
+    """Create a client. requirements is a parse_query-style filter dict.
+    urgency: 'urgent' | 'normal' | 'low'."""
+    if urgency not in ("urgent", "normal", "low"):
+        urgency = "normal"
+    client_id = "cli:" + uuid.uuid4().hex[:12]
+    now = _now()
+    r = requirements or {}
+    conn = connect(path)
+    conn.execute(
+        "INSERT INTO clients (id, broker_id, name, phone, budget_min,"
+        " budget_max, bedrooms, district, property_type, requirements_raw,"
+        " status, urgency, notes, viewed_listings, created_at, updated_at)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, '', '[]', ?, ?)",
+        (client_id, broker_id, name, phone,
+         r.get("min_price"), r.get("max_price"), r.get("bedrooms"),
+         r.get("district"), r.get("property_type"), requirements_raw,
+         urgency, now, now),
+    )
+    conn.commit()
+    conn.close()
+    return client_id
+
+
+def get_client(client_id, path=None):
+    conn = connect(path)
+    row = conn.execute(
+        "SELECT * FROM clients WHERE id = ?", (client_id,)
+    ).fetchone()
+    conn.close()
+    if not row:
+        return None
+    d = dict(row)
+    d["viewed_listings"] = json.loads(d["viewed_listings"])
+    return d
+
+
+def list_clients(broker_id, status=None, urgency=None, limit=50, offset=0,
+                 path=None):
+    """List clients, urgency-first (urgent → normal → low), then newest."""
+    conds = ["broker_id = ?"]
+    vals = [broker_id]
+    if status:
+        conds.append("status = ?")
+        vals.append(status)
+    if urgency:
+        conds.append("urgency = ?")
+        vals.append(urgency)
+    sql = (
+        "SELECT * FROM clients WHERE " + " AND ".join(conds) +
+        " ORDER BY CASE urgency WHEN 'urgent' THEN 0 WHEN 'normal' THEN 1"
+        " ELSE 2 END, updated_at DESC LIMIT ? OFFSET ?"
+    )
+    vals.extend([limit, offset])
+    conn = connect(path)
+    rows = conn.execute(sql, vals).fetchall()
+    conn.close()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["viewed_listings"] = json.loads(d["viewed_listings"])
+        out.append(d)
+    return out
+
+
+def count_clients(broker_id, status=None, urgency=None, path=None):
+    conn = connect(path)
+    conds = ["broker_id = ?"]
+    vals = [broker_id]
+    if status:
+        conds.append("status = ?")
+        vals.append(status)
+    if urgency:
+        conds.append("urgency = ?")
+        vals.append(urgency)
+    n = conn.execute(
+        "SELECT COUNT(*) c FROM clients WHERE " + " AND ".join(conds),
+        vals,
+    ).fetchone()["c"]
+    conn.close()
+    return n
+
+
+def update_client(client_id, path=None, **fields):
+    """Update client fields. requirements=parse_query dict refreshes the
+    requirement columns + requirements_raw."""
+    allowed = {"name", "phone", "budget_min", "budget_max", "bedrooms",
+               "district", "property_type", "requirements_raw", "status",
+               "urgency"}
+    sets, vals = [], []
+    if "requirements" in fields:
+        r = fields.pop("requirements") or {}
+        fields["budget_min"] = r.get("min_price")
+        fields["budget_max"] = r.get("max_price")
+        fields["bedrooms"] = r.get("bedrooms")
+        fields["district"] = r.get("district")
+        fields["property_type"] = r.get("property_type")
+    if "urgency" in fields and fields["urgency"] not in ("urgent", "normal",
+                                                         "low"):
+        fields["urgency"] = "normal"
+    for k, v in fields.items():
+        if k not in allowed:
+            continue
+        sets.append(f"{k} = ?")
+        vals.append(v)
+    if not sets:
+        return False
+    sets.append("updated_at = ?")
+    vals.append(_now())
+    vals.append(client_id)
+    conn = connect(path)
+    cur = conn.execute(
+        f"UPDATE clients SET {', '.join(sets)} WHERE id = ?", vals
+    )
+    conn.commit()
+    conn.close()
+    return cur.rowcount > 0
+
+
+def add_note(client_id, note, path=None):
+    """Append a timestamped note (append-only)."""
+    conn = connect(path)
+    row = conn.execute(
+        "SELECT notes FROM clients WHERE id = ?", (client_id,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        return False
+    ts = time.strftime("%d/%m %H:%M", time.localtime(_now()))
+    entry = f"[{ts}] {note.strip()}"
+    notes = (row["notes"] + "\n" + entry).strip() if row["notes"] else entry
+    conn.execute(
+        "UPDATE clients SET notes = ?, updated_at = ? WHERE id = ?",
+        (notes, _now(), client_id),
+    )
+    conn.commit()
+    conn.close()
+    return True
+
+
+def link_listing(client_id, listing_id, path=None):
+    """Record that a client viewed / was sent a listing."""
+    conn = connect(path)
+    row = conn.execute(
+        "SELECT viewed_listings FROM clients WHERE id = ?", (client_id,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        return False
+    seen = json.loads(row["viewed_listings"])
+    if listing_id not in seen:
+        seen.append(listing_id)
+        conn.execute(
+            "UPDATE clients SET viewed_listings = ?, updated_at = ? WHERE id = ?",
+            (json.dumps(seen, ensure_ascii=False), _now(), client_id),
+        )
+        conn.commit()
+    conn.close()
+    return True
+
+
+def delete_client(client_id, path=None):
+    conn = connect(path)
+    cur = conn.execute("DELETE FROM clients WHERE id = ?", (client_id,))
+    conn.commit()
+    conn.close()
+    return cur.rowcount > 0
 
 
 if __name__ == "__main__":
