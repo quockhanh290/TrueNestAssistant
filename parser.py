@@ -608,28 +608,36 @@ def is_rental_relevant(text):
 
     Returns (is_relevant: bool, reason: str).
     Used to auto-reject spam/irrelevant forwards.
+    Accepts broker shorthand like "2PN 12tr" — strong signals win
+    over length.
     """
-    if not text or len(text.strip()) < 10:
-        return False, "quá ngắn"
+    if not text or not text.strip():
+        return False, "trống"
     t = _norm(text)
 
-    # Explicit spam → reject
+    # Explicit spam → always reject
     for kw in SPAM_KEYWORDS:
         if kw in t:
             return False, f"chứa từ spam: {kw}"
 
-    # Count rental signals
-    signals = sum(1 for kw in RENTAL_KEYWORDS if kw in t)
-
-    # Need at least 2 rental signals, OR 1 strong signal (price + property)
+    # Strong combo: price + bedrooms/property → accept regardless of length
+    # (covers broker shorthand like "2PN 12tr")
     has_price = bool(re.search(r"\d+\s*(?:tr|triệu|k|vnd)", t))
+    has_bedrooms = bool(re.search(r"\d+\s*(?:pn|phòng ngủ|phong ngu|br)\b", t))
     has_property = any(kw in t for kw in
                        ["căn hộ", "can ho", "chung cư", "nhà", "phòng",
                         "villa", "studio", "penthouse"])
+    if has_price and (has_bedrooms or has_property):
+        return True, "ok"
+
+    # Too short without strong signals → reject
+    if len(text.strip()) < 10:
+        return False, "quá ngắn"
+
+    # Count rental signals
+    signals = sum(1 for kw in RENTAL_KEYWORDS if kw in t)
 
     if signals >= 2:
-        return True, "ok"
-    if has_price and has_property:
         return True, "ok"
     return False, "không giống tin cho thuê"
 
