@@ -86,7 +86,8 @@ class MockMessage:
     def chat_id(self):
         return self.chat.id
 
-    async def reply_text(self, text, reply_markup=None, parse_mode=None):
+    async def reply_text(self, text, reply_markup=None, parse_mode=None,
+                         **kwargs):
         self._outbox.append({"kind": "reply", "text": text,
                              "markup": reply_markup})
         return self
@@ -109,7 +110,7 @@ class MockCallbackQuery:
         return None
 
     async def edit_message_text(self, text, reply_markup=None,
-                                parse_mode=None):
+                                parse_mode=None, **kwargs):
         self._outbox.append({"kind": "edit", "text": text,
                              "markup": reply_markup, "data": self.data})
         return None
@@ -293,6 +294,11 @@ class LinhFlowTest(unittest.IsolatedAsyncioTestCase):
             db.update_broker(uid, phone=phone)
         if tier:
             db.set_tier(uid, tier, days=30)
+        # mark all hints seen so existing tests hit handlers directly
+        # (hint flow is tested separately in TestHints)
+        import hints as _hints
+        for _k in _hints.HINTS:
+            db.mark_hint_seen(uid, _k)
         return uid
 
     def listing(self, uid, status="submitted", **parsed):
@@ -680,6 +686,9 @@ class TestDeletedListings(LinhFlowTest):
         uid = self.broker()
         l1 = self.listing(uid)
         l2 = self.listing(uid)
+        # write picker only shows listings with saved posts
+        db.save_post(l1["id"], "Bài đăng test 1", "vi")
+        db.save_post(l2["id"], "Bài đăng test 2", "vi")
         db.set_listing_status(l2["id"], "deleted", changed_by="broker")
         await self.cb(uid, "menu:write")
         btns = self.buttons(kind="edit")
@@ -698,6 +707,66 @@ class TestDeletedListings(LinhFlowTest):
         ids = [l["id"] for l in items]
         self.assertIn(l1["id"], ids)
         self.assertNotIn(l2["id"], ids)
+
+
+class TestHints(LinhFlowTest):
+    def _fresh_broker(self):
+        """Broker WITHOUT hints marked seen (for hint flow testing)."""
+        uid = self._next_uid()
+        db.get_or_create_broker(uid, f"user{uid}", f"User {uid}")
+        return uid
+
+    async def test_first_tap_shows_hint(self):
+        import hints as _hints
+        uid = self._fresh_broker()
+        self.assertTrue(_hints.should_show_hint(uid, "clients"))
+        await self.cb(uid, "menu:clients")
+        # hint text shown, not the clients list
+        txt = self.last_text("edit")
+        self.assertIn("Khách hàng", txt)
+        btns = self.buttons(kind="edit")
+        datas = [d for _, d in btns if d]
+        self.assertTrue(any("hint:go:menu:clients" in d for d in datas))
+
+    async def test_hint_go_proceeds_and_marks_seen(self):
+        import hints as _hints
+        uid = self._fresh_broker()
+        await self.cb(uid, "menu:clients")
+        await self.cb(uid, "hint:go:menu:clients")
+        # hint marked seen
+        self.assertFalse(_hints.should_show_hint(uid, "clients"))
+        # now shows the actual clients UI (not hint again)
+        txt = self.last_text("edit")
+        self.assertNotIn("Đây là nơi quản lý khách thuê", txt)
+
+    async def test_hint_skip_marks_seen_and_goes_to_menu(self):
+        import hints as _hints
+        uid = self._fresh_broker()
+        await self.cb(uid, "menu:clients")
+        await self.cb(uid, "hint:skip")
+        self.assertFalse(_hints.should_show_hint(uid, "clients"))
+
+    async def test_second_tap_skips_hint(self):
+        import hints as _hints
+        uid = self._fresh_broker()
+        db.mark_hint_seen(uid, "clients")
+        await self.cb(uid, "menu:clients")
+        txt = self.last_text("edit")
+        # goes straight to clients, no hint
+        self.assertNotIn("Đây là nơi quản lý khách thuê", txt)
+
+    async def test_proactive_tips(self):
+        import hints as _hints
+        # 1st listing tip
+        self.assertIsNotNone(_hints.tip_after_listing(1))
+        # 5th listing tip
+        self.assertIsNotNone(_hints.tip_after_listing(5))
+        # no tip on 2nd, 3rd, 4th, 6th
+        self.assertIsNone(_hints.tip_after_listing(2))
+        self.assertIsNone(_hints.tip_after_listing(6))
+        # 1st client tip
+        self.assertIsNotNone(_hints.tip_after_client(1))
+        self.assertIsNone(_hints.tip_after_client(2))
 
 
 class TestSendClientLanguages(LinhFlowTest):
@@ -757,6 +826,124 @@ class TestSendClientLanguages(LinhFlowTest):
         await self.cb(uid, "send2client:done")
         await self.cb(uid, "send2client:lang:en")
         self.assertIn("Hi Kim!", self.last_text("edit"))
+
+
+class TestReferral(LinhFlowTest):
+    """Broker invite system: 3 qualified invitees -> 1 month Pro."""
+
+    def _qualifying_listing(self, uid, age_days=8):
+        """A listing that counts toward referral qualification."""
+        p = {"price_vnd": 12000000.0, "bedrooms": 2.0,
+             "district": "Sơn Trà", "primary_phone": "0905123456",
+             "description": "x" * 60}
+        lid = db.create_listing(
+            uid, raw_text="Cho thuê 2PN 12tr LH 0905123456",
+            photo_file_ids=["ph1", "ph2", "ph3"],
+            parsed=p, missing_fields=[], status="submitted")
+        # backdate past the 7-day minimum
+        conn = db.connect()
+        conn.execute("UPDATE tg_listings SET created_at = ? WHERE id = ?",
+                     (time.time() - age_days * 86400, lid))
+        conn.commit()
+        conn.close()
+        return lid
+
+    def test_create_referral_idempotent(self):
+        a = self.broker()
+        b = self.broker()
+        r1 = db.create_referral(a, b)
+        r2 = db.create_referral(a, b)
+        self.assertIsNotNone(r1)
+        self.assertEqual(r1["id"], r2["id"])
+        # self-referral + unknown inviter blocked
+        self.assertIsNone(db.create_referral(a, a))
+        self.assertIsNone(db.create_referral(999999, b))
+
+    def test_progress_and_qualification(self):
+        inviter = self.broker()
+        invitees = [self.broker() for _ in range(3)]
+        for ie in invitees:
+            db.create_referral(inviter, ie)
+        prog = db.get_referral_progress(inviter)
+        self.assertEqual(prog, {"invited": 3, "qualified": 0, "needed": 3})
+        # one invitee makes 5 quality listings -> qualifies
+        for _ in range(5):
+            self._qualifying_listing(invitees[0])
+        ok, n = db.check_invitee_qualified(invitees[0])
+        self.assertTrue(ok)
+        self.assertEqual(n, 5)
+        db.mark_qualified(invitees[0])
+        prog = db.get_referral_progress(inviter)
+        self.assertEqual(prog["qualified"], 1)
+        # not enough listings -> not qualified
+        self._qualifying_listing(invitees[1])
+        ok, _ = db.check_invitee_qualified(invitees[1])
+        self.assertFalse(ok)
+
+    def test_reward_grant_and_cap(self):
+        import feat_referral  # noqa
+        inviter = self.broker()
+        for _ in range(3):
+            ie = self.broker()
+            db.create_referral(inviter, ie)
+            for _ in range(5):
+                self._qualifying_listing(ie)
+            db.mark_qualified(ie)
+        exp = db.maybe_grant_inviter_reward(inviter)
+        self.assertIsNotNone(exp)
+        self.assertGreater(exp, time.time())
+        self.assertEqual(db.get_tier(inviter), "pro")
+        # no double-grant for the same milestone
+        self.assertIsNone(db.maybe_grant_inviter_reward(inviter))
+        # below threshold -> nothing
+        inviter2 = self.broker()
+        ie = self.broker()
+        db.create_referral(inviter2, ie)
+        self.assertIsNone(db.maybe_grant_inviter_reward(inviter2))
+
+    def test_phone_duplicate_fraud(self):
+        inviter = self.broker(phone="0901111222")
+        invitee = self.broker()
+        db.create_referral(inviter, invitee)
+        db.create_listing(invitee, raw_text="Cho thuê 0901111222",
+                          photo_file_ids=["x"], parsed={}, status="draft")
+        self.assertTrue(db.check_phone_duplicate(invitee, inviter))
+        ref = db.get_referral_by_invitee(invitee)
+        self.assertEqual(ref["fraud_flag"], 1)
+        self.assertEqual(ref["fraud_reason"], "duplicate_phone")
+        # fraud referrals don't count toward progress
+        prog = db.get_referral_progress(inviter)
+        self.assertEqual(prog["qualified"], 0)
+
+    def test_behavior_warning(self):
+        ie = self.broker()
+        for _ in range(5):
+            self.listing(ie)  # all created now -> within 24h of signup
+        w = db.check_behavior_pattern(ie)
+        self.assertIsNotNone(w)
+        self.assertIn("suspicious", w)
+
+    async def test_moi_command(self):
+        import feat_referral  # noqa
+        uid = self.broker()
+        upd = MockUpdate(message=self._msg(uid, text="/moi"))
+        await feat_referral.cmd_moi(upd, self.ctx(uid))
+        self.assertIn("Mời bạn", self.last_text())
+        self.assertIn("0/3", self.last_text())
+
+    async def test_start_referral_hook(self):
+        import feat_referral  # noqa
+        inviter = self.broker()
+        new_uid = 777001
+        db.get_or_create_broker(new_uid, "newbie", "Newbie")
+        upd = MockUpdate(message=self._msg(new_uid, text="/start"))
+        ctx = self.ctx(new_uid)
+        ctx.args = [f"ref_{inviter}"]
+        got = feat_referral.parse_start_referral(upd, ctx)
+        self.assertEqual(got, inviter)
+        ref = db.get_referral_by_invitee(new_uid)
+        self.assertIsNotNone(ref)
+        self.assertEqual(ref["inviter_id"], inviter)
 
 
 if __name__ == "__main__":
