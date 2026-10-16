@@ -3,6 +3,18 @@
 Web app mở trong Telegram cho broker quản lý căn hộ: xem danh sách,
 tìm kiếm/lọc, sửa thông tin, xem/sửa bài đăng đa ngôn ngữ.
 
+## Kiến trúc & roadmap
+
+```
+Phase 1 (hiện tại): Telegram bot → kiếm user đầu tiên
+Phase 2: Web app / PWA → sản phẩm chính, không phụ thuộc Telegram
+Phase 3: Native app (iOS/Android) → trải nghiệm tốt nhất
+```
+
+**Quy tắc (Khanh 2026-10-16):** Code mới KHÔNG đọc `db.py` trực tiếp
+từ UI/bot handler — đi qua `api.py`. Khi chuyển nền tảng chỉ cần
+duplicate + đổi cách gọi, không refactor logic.
+
 ## Chạy thử
 
 ```bash
