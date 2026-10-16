@@ -10,7 +10,7 @@ import logging
 import random
 import time
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, Update
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -108,6 +108,12 @@ def freshness_badge(created_at):
     if age_d <= 30:
         return "🟠", f"{int(age_d)} ngày"
     return "🔴", f"{int(age_d)} ngày"
+
+
+def get_pronoun(uid, broker=None):
+    """'anh' or 'chị' for this broker. Defaults to 'anh'."""
+    b = broker if broker is not None else db.get_broker(uid)
+    return (b or {}).get("pronoun") or "anh"
 
 # filter option codes (compact for callback_data)
 DISTRICT_CODES = {
@@ -229,6 +235,13 @@ COLLECT_WINDOW = 30  # seconds to wait for text+photos arriving together
 _media_groups = {}
 MEDIA_GROUP_WINDOW = 2  # seconds of quiet before flushing an album
 
+# "add photos to existing listing" buffer:
+# {user_id: {"listing_id": ..., "photos": [], "captions": [], "task": ...}}
+# Photos are buffered in memory and committed to the DB once after a quiet
+# window, so rapid multi-photo sends never race on read-modify-write.
+_addphoto_pending = {}
+ADD_PHOTO_WINDOW = 3  # seconds of quiet before committing added photos
+
 
 async def natural_delay(update: Update):
     """Typing indicator + human-like delay before replying."""
@@ -330,6 +343,7 @@ HELP_TEXT = (
     "- Xem tất cả tin của anh\n"
     "- Lọc theo phòng ngủ, giá tiền, khu vực, trạng thái\n"
     "- Đánh dấu “đã cho thuê” / “còn trống” để em cập nhật\n"
+    "- Xem / thêm / xóa ảnh ngay trong chi tiết từng tin\n"
     "- Hoặc gõ trực tiếp kiểu “cho xem tin 2PN dưới 15tr” để em tìm giúp\n\n"
     "✍️ <b>Viết tin FB:</b>\n"
     "- Em viết bài đăng FB từ tin của anh\n"
@@ -346,39 +360,40 @@ HELP_TEXT = (
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
     broker = db.get_or_create_broker(u.id, u.username, u.full_name)
+    pn = get_pronoun(u.id, broker)
     await natural_delay(update)
     await update.message.reply_text(
-        f"Chào anh! Em là {config.BOT_NAME} 🏠\n\n"
+        f"Chào {pn}! Em là {config.BOT_NAME} 🏠\n\n"
         "Em là trợ lý quản lý tin cho thuê MIỄN PHÍ dành cho môi giới Đà Nẵng.\n\n"
-        "Em giúp anh:\n"
+        f"Em giúp {pn}:\n"
         "📝 Lưu tin cho thuê — chỉ cần gửi text + ảnh như đăng group FB, em tự bóc thông tin\n"
         "📋 Quản lý tin — xem, lọc theo phòng/giá/khu vực, đánh dấu đã cho thuê hay còn trống\n"
         "✍️ Viết tin FB — tự động viết bài đăng đẹp, 5 ngôn ngữ (Việt/Anh/Hàn/Trung/Nga)\n"
         "🔔 Nhắc thông minh — em nhắc khi tin thiếu thông tin hoặc lâu chưa cập nhật\n\n"
-        "👉 Để bắt đầu, anh cứ gửi tin đầu tiên cho em nhé! (text kèm ảnh)\n\n"
+        f"👉 Để bắt đầu, {pn} cứ gửi tin đầu tiên cho em nhé! (text kèm ảnh)\n\n"
         "Gõ /menu để mở menu bất cứ lúc nào, /help để xem hướng dẫn chi tiết.",
         reply_markup=MENU_KB,
     )
-    # onboarding: collect phone (then name) once, reuse for all listings
+    # onboarding: collect phone, then pronoun + display name (once each)
     if not broker.get("phone"):
         ctx.user_data["onboarding"] = {"step": "phone"}
         await asyncio.sleep(0.8)
         await update.message.reply_text(
-            "Cho em xin SĐT của anh để có khách em liên hệ cho dễ nhé? 📱",
+            f"Cho em xin SĐT của {pn} để có khách em liên hệ cho dễ nhé? 📱",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("Bỏ qua", callback_data="onboard:skip_phone")]]),
         )
-    elif not broker.get("name"):
-        ctx.user_data["onboarding"] = {"step": "name"}
-        await asyncio.sleep(0.8)
-        await update.message.reply_text("Anh tên gì để em tiện xưng hô ạ? 😊")
+    elif not broker.get("pronoun"):
+        await _onboard_ask_pronoun_msg(update, ctx)
 
 
 async def cmd_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
     db.get_or_create_broker(u.id, u.username, u.full_name)
     await natural_delay(update)
-    await update.message.reply_text("Anh cần gì ạ?", reply_markup=MENU_KB)
+    pn = get_pronoun(u.id)
+    await update.message.reply_text(f"{pn.capitalize()} cần gì ạ?",
+                                    reply_markup=MENU_KB)
 
 
 async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -394,7 +409,8 @@ async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def show_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
-    await q.edit_message_text("Anh cần gì ạ?", reply_markup=MENU_KB)
+    pn = get_pronoun(q.from_user.id)
+    await q.edit_message_text(f"{pn.capitalize()} cần gì ạ?", reply_markup=MENU_KB)
 
 
 async def show_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -411,15 +427,48 @@ async def show_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 # ---------------------------------------------------------------- onboarding & contacts
 
+def _pronoun_kb():
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("Anh", callback_data="onboard:pronoun:anh"),
+        InlineKeyboardButton("Chị", callback_data="onboard:pronoun:chi"),
+    ]])
+
+
+def _dname_kb():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("Dùng tên Telegram",
+                              callback_data="onboard:dname:tg")],
+        [InlineKeyboardButton("Tên khác",
+                              callback_data="onboard:dname:custom")],
+    ])
+
+
+def _dname_question(pn, broker):
+    username = (broker or {}).get("username")
+    uname = f"@{username}" if username else "tên Telegram"
+    return (f"Em gọi {pn} bằng tên Telegram ({uname}) nhé, "
+            f"hay {pn} muốn tên khác?")
+
+
+async def _onboard_ask_pronoun_msg(update: Update,
+                                   ctx: ContextTypes.DEFAULT_TYPE):
+    """Pronoun question via a normal message (from /start or typed flow)."""
+    ctx.user_data["onboarding"] = {"step": "pronoun"}
+    await asyncio.sleep(0.8)
+    await update.message.reply_text(
+        "Anh muốn em gọi là anh hay chị ạ?",
+        reply_markup=_pronoun_kb())
+
+
 async def _handle_onboarding(update: Update, ctx: ContextTypes.DEFAULT_TYPE,
                              ob: dict, text: str):
-    """Collect broker phone (then name) once at onboarding."""
+    """Collect broker phone, then pronoun + display name (once each)."""
     uid = update.effective_user.id
     step = ob.get("step")
 
     if step == "phone":
         if text.strip().lower() in ("bỏ qua", "bo qua", "skip"):
-            await _onboard_ask_name(update, ctx)
+            await _onboard_ask_pronoun_msg(update, ctx)
             return
         phones = normalize_phone(text)
         if not phones:
@@ -434,33 +483,84 @@ async def _handle_onboarding(update: Update, ctx: ContextTypes.DEFAULT_TYPE,
         await natural_delay(update)
         await update.message.reply_text(
             "Em lưu SĐT rồi nhé ✓ Từ giờ tin nào em cũng tự điền SĐT này cho anh.")
-        await _onboard_ask_name(update, ctx)
+        await _onboard_ask_pronoun_msg(update, ctx)
 
-    elif step == "name":
-        name = text.strip()[:50]
-        if name:
-            db.update_broker(uid, name=name)
-        ctx.user_data.pop("onboarding", None)
-        await natural_delay(update)
-        greet = f"Ok anh {name} nhé! 😊" if name else "Dạ ok anh! 😊"
+    elif step == "pronoun":
+        t = text.strip().lower()
+        if t in ("anh", "a"):
+            pronoun = "anh"
+        elif t in ("chị", "chi", "c"):
+            pronoun = "chị"
+        else:
+            await update.message.reply_text(
+                "Anh chọn giúp em một trong hai nút bên dưới nhé 👆",
+                reply_markup=_pronoun_kb())
+            return
+        db.update_broker(uid, pronoun=pronoun)
+        ctx.user_data["onboarding"] = {"step": "dname"}
+        broker = db.get_broker(uid)
         await update.message.reply_text(
-            f"{greet} Anh cần gì cứ bảo em.",
-            reply_markup=MENU_KB,
-        )
+            _dname_question(pronoun, broker), reply_markup=_dname_kb())
+
+    elif step == "dname":
+        # typed directly (without tapping the buttons) = custom name
+        name = text.strip()[:50]
+        await _onboard_finish_name(update, ctx, uid, name, via_callback=False)
 
 
-async def _onboard_ask_name(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    ctx.user_data["onboarding"] = {"step": "name"}
-    await asyncio.sleep(0.8)
-    await update.message.reply_text("Anh tên gì để em tiện xưng hô ạ? 😊")
+async def _onboard_finish_name(update_or_q, ctx, uid, name, via_callback):
+    broker = db.get_broker(uid) or {}
+    pn = broker.get("pronoun") or "anh"
+    if name:
+        db.update_broker(uid, display_name=name)
+        greet = f"Dạ, từ giờ em gọi {pn} là {name} nhé 😊"
+    else:
+        greet = f"Dạ ok {pn} 😊"
+    ctx.user_data.pop("onboarding", None)
+    text = f"{greet} {pn.capitalize()} cần gì cứ bảo em."
+    if via_callback:
+        await update_or_q.edit_message_text(text, reply_markup=MENU_KB)
+    else:
+        await natural_delay(update_or_q)
+        await update_or_q.message.reply_text(text, reply_markup=MENU_KB)
 
 
 async def onboard_skip_phone(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
-    ctx.user_data["onboarding"] = {"step": "name"}
+    ctx.user_data["onboarding"] = {"step": "pronoun"}
     await q.edit_message_text(
-        "Dạ ok anh, để sau cũng được ạ 😊\n\nAnh tên gì để em tiện xưng hô ạ?")
+        "Dạ ok anh, để sau cũng được ạ 😊\n\n"
+        "Anh muốn em gọi là anh hay chị ạ?",
+        reply_markup=_pronoun_kb())
+
+
+async def onboard_pronoun_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    uid = q.from_user.id
+    pronoun = "chị" if q.data.rsplit(":", 1)[-1] == "chi" else "anh"
+    db.update_broker(uid, pronoun=pronoun)
+    ctx.user_data["onboarding"] = {"step": "dname"}
+    broker = db.get_broker(uid)
+    await q.edit_message_text(
+        _dname_question(pronoun, broker), reply_markup=_dname_kb())
+
+
+async def onboard_dname_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    uid = q.from_user.id
+    choice = q.data.rsplit(":", 1)[-1]  # tg | custom
+    broker = db.get_broker(uid) or {}
+    pn = broker.get("pronoun") or "anh"
+    if choice == "tg":
+        username = broker.get("username")
+        dname = f"@{username}" if username else (broker.get("display_name") or "")
+        await _onboard_finish_name(q, ctx, uid, dname, via_callback=True)
+    else:
+        ctx.user_data["onboarding"] = {"step": "dname"}
+        await q.edit_message_text(f"Vậy {pn} muốn em gọi là gì ạ?")
 
 
 def _contacts_text(broker: dict) -> str:
@@ -478,8 +578,9 @@ def _contacts_text(broker: dict) -> str:
         zalo = "—"
         zalo_note = ""
     fb = _html.escape(broker.get("facebook") or "—")
+    pn = (broker.get("pronoun") or "anh").upper()
     return (
-        "📇 <b>THÔNG TIN CỦA ANH</b>\n\n"
+        f"📇 <b>THÔNG TIN CỦA {pn}</b>\n\n"
         f"👤 Tên: {name}\n"
         f"📱 SĐT: {phone}\n"
         f"💬 Zalo: {zalo}{zalo_note}\n"
@@ -622,6 +723,109 @@ async def _flush_after(uid, ctx):
     await _process_buffer(uid, buf, ctx)
 
 
+# ---------------------------------------------------------------- full pre-save confirmation
+
+_PTYPE_SHORT = {"apartment": "Căn hộ", "house": "Nhà", "villa": "Villa",
+                "room": "Phòng", "studio": "Studio"}
+_FURN_SHORT = {"full": "Full", "basic": "Cơ bản", "empty": "Trống"}
+
+
+def _confirm_summary(l, pn="anh", phone_note=""):
+    """Full pre-save summary of every parsed field.
+
+    Returns (text, keyboard_or_None). Unknown/empty fields are skipped.
+    keyboard is None when nothing was parsed (fallback prompt instead).
+    """
+    p = l.get("parsed") or {}
+    photos = l.get("photo_file_ids") or []
+    lines = ["Em tóm tắt lại tin này nhé:", ""]
+    has = False
+
+    br = p.get("bedrooms")
+    ptype = p.get("property_type")
+    if br == 0.0 or ptype == "studio":
+        lines.append("🏠 Loại: Studio")
+        has = True
+    elif br:
+        lines.append(f"🏠 Loại: {_PTYPE_SHORT.get(ptype, 'Căn')} {int(br)}PN")
+        has = True
+    elif ptype:
+        lines.append(f"🏠 Loại: {_PTYPE_SHORT.get(ptype, ptype)}")
+        has = True
+
+    addr_bits = [x for x in (p.get("building_name"), p.get("street"),
+                             p.get("district")) if x]
+    try:
+        if p.get("floor_number"):
+            addr_bits.append(f"tầng {int(p['floor_number'])}")
+    except (TypeError, ValueError):
+        pass
+    if p.get("unit_number"):
+        addr_bits.append(f"căn {p['unit_number']}")
+    if addr_bits:
+        lines.append(f"📍 Địa chỉ: {', '.join(addr_bits)}")
+        has = True
+
+    if p.get("price_vnd"):
+        lines.append(f"💰 Giá: {fmt_price(p['price_vnd'])}/tháng")
+        has = True
+
+    if p.get("area_m2"):
+        lines.append(f"📐 Diện tích: {p['area_m2']:g}m²")
+        has = True
+
+    bb = []
+    if br is not None and br != 0.0:
+        bb.append(f"🛏️ Phòng ngủ: {int(br)}")
+    if p.get("bathrooms"):
+        bb.append(f"🛁 Phòng tắm: {int(p['bathrooms'])}")
+    if bb:
+        lines.append(" | ".join(bb))
+        has = True
+
+    if p.get("furnishing"):
+        lines.append(f"🛋️ Nội thất: "
+                     f"{_FURN_SHORT.get(p['furnishing'], p['furnishing'])}")
+        has = True
+
+    if p.get("pet_friendly") is True:
+        lines.append("🐾 Pet: Cho phép")
+        has = True
+    elif p.get("pet_friendly") is False:
+        lines.append("🐾 Pet: Không cho phép")
+        has = True
+
+    if p.get("primary_phone"):
+        lines.append(f"📱 SĐT: {p['primary_phone']}{phone_note}")
+        has = True
+
+    if p.get("telegram_username"):
+        lines.append(f"✈️ Telegram: @{p['telegram_username']}")
+        has = True
+
+    av = p.get("availability_note")
+    if av:
+        lines.append(f"📅 Tình trạng: {'Còn trống' if av == 'available' else av}")
+        has = True
+
+    if photos:
+        lines.append(f"📸 Ảnh: {len(photos)} ảnh")
+        has = True
+
+    if not has:
+        return ("Em chưa bóc được thông tin gì từ tin này 😅 "
+                f"{pn} gửi thêm giúp em nhé? (giá, số phòng ngủ, địa chỉ...)",
+                None)
+    lines += ["", f"Đúng hết chưa {pn}?"]
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Đúng rồi, lưu tin",
+                              callback_data=f"cfm:save:{l['id']}")],
+        [InlineKeyboardButton("✏️ Sửa",
+                              callback_data=f"cfm:edit:{l['id']}")],
+    ])
+    return "\n".join(lines), kb
+
+
 async def _process_buffer(uid, buf, ctx):
     chat_id = buf["chat_id"]
     raw = "\n".join(buf["texts"])
@@ -642,36 +846,146 @@ async def _process_buffer(uid, buf, ctx):
     await ctx.bot.send_chat_action(chat_id, "typing")
     await asyncio.sleep(random.uniform(1.0, 1.5))
 
+    # create as DRAFT — the broker must confirm the full summary first
     listing_id = db.create_listing(
         uid, raw_text=raw, photo_file_ids=photos,
         parsed=result["fields"], missing_fields=result["missing"],
-        status="submitted" if not result["missing"] else "pending_info",
+        status="draft",
     )
+    pn = get_pronoun(uid)
+    phone_note = f" (SĐT của {pn})" if phone_autofilled else ""
+    ctx.user_data["confirming"] = {"listing_id": listing_id,
+                                   "phone_note": phone_note}
+    l = db.get_listing(listing_id)
+    text, kb = _confirm_summary(l, pn, phone_note)
+    await ctx.bot.send_message(chat_id, text, reply_markup=kb)
 
-    # reflective summary
-    summary = listing_parser.reflective_summary(result)
-    photo_note = f"\n📸 {len(photos)} ảnh" if photos else ""
-    phone_note = f"\n📱 SĐT: {broker_phone} (SĐT của anh)" if phone_autofilled else ""
-    await ctx.bot.send_message(chat_id, summary + photo_note + phone_note)
 
-    # ask max 2 missing critical fields
-    missing = [m for m in result["missing"] if m in config.CRITICAL_FIELDS]
-    missing = missing[:config.MAX_MISSING_QUESTIONS]
+async def _finalize_after_confirm(update_or_q, ctx, uid, listing_id, chat_id,
+                                via_callback):
+    """Broker confirmed the summary ([Đúng rồi] button or typed 'đúng rồi'):
+    ask missing critical fields (max 2) or finish the save."""
+    ctx.user_data.pop("confirming", None)
+    l = db.get_listing(listing_id)
+    pn = get_pronoun(uid)
+
+    async def _say(text, kb=None):
+        if via_callback:
+            await update_or_q.edit_message_text(text, reply_markup=kb)
+        else:
+            await update_or_q.message.reply_text(text, reply_markup=kb)
+
+    if not l:
+        await _say("Tin này không còn nữa.", MENU_KB)
+        return
+    p = l["parsed"]
+    missing = []
+    if not p.get("price_vnd"):
+        missing.append("price_vnd")
+    if not p.get("primary_phone"):
+        missing.append("primary_phone")
+    if len(l["photo_file_ids"]) < 1:
+        missing.append("photos")
+    missing = [m for m in missing
+               if m in config.CRITICAL_FIELDS][:config.MAX_MISSING_QUESTIONS]
     if missing:
+        db.set_listing_status(listing_id, "pending_info", changed_by="bot")
         db.update_listing(listing_id, missing_fields=missing)
+        await _say(f"Ok {pn}, em lưu nháp rồi nhé. Còn thiếu chút thông tin:")
         await _ask_missing(chat_id, uid, listing_id, missing[0], ctx,
                            remaining=missing[1:])
     else:
-        db.update_listing(listing_id, status="submitted")
         db.set_listing_status(listing_id, "submitted", changed_by="bot")
         if await _maybe_write_post_finish(chat_id, uid, listing_id, ctx):
             return
-        await asyncio.sleep(1)
-        await ctx.bot.send_message(
-            chat_id,
-            "Xong! Em đã lưu tin rồi nhé ✓",
-            reply_markup=MENU_KB,
-        )
+        await _say("Xong! Em đã lưu tin rồi nhé ✓", MENU_KB)
+
+
+async def confirm_save_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    lid = q.data.split(":", 2)[2]  # "cfm:save:<listing_id>" (ids contain ':')
+    await _finalize_after_confirm(q, ctx, q.from_user.id, lid,
+                                  q.message.chat_id, via_callback=True)
+
+
+async def confirm_edit_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    lid = q.data.split(":", 2)[2]  # "cfm:edit:<listing_id>"
+    # keep ctx.user_data["confirming"] so the edit flow returns here
+    await _show_edit_picker(q, lid, "0", "s:a")
+
+
+_CONFIRM_WORDS = {"đúng rồi", "dung roi", "đúng", "dung", "ok", "oke",
+                  "okê", "chuẩn", "chuan", "ừ", "u", "ừm", "um"}
+
+
+async def _handle_confirm_correction(update, ctx, confirming, text):
+    """Text typed while a draft summary is pending confirmation.
+
+    'đúng rồi'-style replies confirm; anything else is re-parsed and
+    merged into the draft, then the summary is re-shown.
+    """
+    uid = update.effective_user.id
+    listing_id = confirming["listing_id"]
+    l = db.get_listing(listing_id)
+    if not l:
+        ctx.user_data.pop("confirming", None)
+        return
+    pn = get_pronoun(uid)
+
+    if text.strip().lower() in _CONFIRM_WORDS:
+        # treat as tapping [Đúng rồi, lưu tin]
+        await _finalize_after_confirm(
+            update, ctx, uid, listing_id, update.effective_chat.id,
+            via_callback=False)
+        return
+
+    result = listing_parser.parse_listing(text)
+    fields = {k: v for k, v in result["fields"].items()
+              if k not in ("photo_count", "description") and v is not None}
+    if not fields:
+        await update.message.reply_text(
+            f"Em chưa hiểu chỗ này lắm, {pn} ghi rõ hơn giúp em nhé? "
+            "(VD: giá 13tr, 2PN)")
+        return
+    for k, v in fields.items():
+        db.update_listing_field(listing_id, k, v, changed_by="broker")
+    old_raw = l.get("raw_text") or ""
+    db.update_listing(listing_id, raw_text=(old_raw + "\n" + text).strip())
+    l = db.get_listing(listing_id)
+    t, kb = _confirm_summary(l, pn, confirming.get("phone_note", ""))
+    await natural_delay(update)
+    await update.message.reply_text("Em cập nhật rồi nhé ✓\n\n" + t,
+                                    reply_markup=kb)
+
+
+async def _handle_confirm_photo(update, ctx, confirming, file_id, caption):
+    """Photo sent while a draft summary is pending: attach to the draft
+    and re-show the summary."""
+    uid = update.effective_user.id
+    listing_id = confirming["listing_id"]
+    l = db.get_listing(listing_id)
+    if not l:
+        ctx.user_data.pop("confirming", None)
+        return
+    photos = l["photo_file_ids"] + [file_id]
+    raw = l["raw_text"] or ""
+    if caption:
+        raw = (raw + "\n" + caption).strip()
+        res = listing_parser.parse_listing(caption)
+        for k, v in res["fields"].items():
+            if k not in ("photo_count", "description") and v is not None:
+                db.update_listing_field(listing_id, k, v, changed_by="broker")
+    db.update_listing(listing_id, photo_file_ids=photos, raw_text=raw)
+    l = db.get_listing(listing_id)
+    pn = get_pronoun(uid)
+    t, kb = _confirm_summary(l, pn, confirming.get("phone_note", ""))
+    await natural_delay(update)
+    await update.message.reply_text(
+        f"Đã thêm ảnh ✓ (tổng {len(photos)} ảnh)\n\n" + t,
+        reply_markup=kb)
 
 
 QUESTION_TEXT = {
@@ -705,6 +1019,12 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await _handle_contact_edit(update, ctx, ec, text)
         return
 
+    # 0c. confirming a draft summary? typed text = correction (or "đúng rồi")
+    confirming = ctx.user_data.get("confirming")
+    if confirming:
+        await _handle_confirm_correction(update, ctx, confirming, text)
+        return
+
     # 1. answering a missing-field question?
     awaiting = ctx.user_data.get("awaiting")
     if awaiting:
@@ -715,6 +1035,18 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     editing = ctx.user_data.get("editing")
     if editing:
         await _handle_edit_answer(update, ctx, editing, text)
+        return
+
+    # 1c. adding photos to a listing? text is not expected here
+    if ctx.user_data.get("adding_photos"):
+        await update.message.reply_text(
+            "Anh gửi ảnh giúp em nhé 📥 (hoặc gõ /huy để hủy)")
+        return
+
+    # 1d. choosing photos to delete by number?
+    pd = ctx.user_data.get("photo_delete")
+    if pd:
+        await _handle_photo_delete_answer(update, ctx, pd, text)
         return
 
     # 2. part of an active collection buffer?
@@ -834,6 +1166,18 @@ async def on_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     msg = update.message
     file_id = msg.photo[-1].file_id  # largest size
     caption = (msg.caption or "").strip()
+
+    # 0. adding photos to an existing listing? (explicit mode)
+    addp = ctx.user_data.get("adding_photos")
+    if addp:
+        await _handle_add_photo(update, ctx, addp, file_id, caption)
+        return
+
+    # 0b. confirming a draft summary? attach the photo to the draft
+    confirming = ctx.user_data.get("confirming")
+    if confirming:
+        await _handle_confirm_photo(update, ctx, confirming, file_id, caption)
+        return
 
     # 1. answering a missing-field question that wants photos?
     awaiting = ctx.user_data.get("awaiting")
@@ -1257,6 +1601,14 @@ def _detail_content(l, page, filt):
     kb.append([InlineKeyboardButton(
         "✏️ Sửa tin",
         callback_data=f"edit:{l['id']}:{page}:{filt}")])
+    kb.append([
+        InlineKeyboardButton(
+            "📸 Xem ảnh",
+            callback_data=f"photos:{l['id']}:{page}:{filt}"),
+        InlineKeyboardButton(
+            "➕ Thêm ảnh",
+            callback_data=f"addphoto:{l['id']}:{page}:{filt}"),
+    ])
     kb.append([InlineKeyboardButton(
         "🗑 Xoá tin",
         callback_data=f"delete:{l['id']}:{page}:{filt}")])
@@ -1380,6 +1732,191 @@ async def delete_cancel_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
     text, kb = _detail_content(l, page, filt)
     await q.edit_message_text(text, parse_mode="HTML", reply_markup=kb)
+
+
+# ---------------------------------------------------------------- listing photos
+
+def _photo_caption(l):
+    """Short plain-text caption for the photo album."""
+    p = l["parsed"]
+    br = p.get("bedrooms")
+    br_s = "studio" if br == 0.0 else (f"{int(br)}PN" if br else "")
+    loc = p.get("building_name") or p.get("district") or ""
+    price = fmt_price(p.get("price_vnd"))
+    bits = " ".join(x for x in (br_s, loc) if x)
+    return (f"📸 {len(l['photo_file_ids'])} ảnh — "
+            f"🏠 {bits}, {price}/tháng")
+
+
+async def view_photos_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """[📸 Xem ảnh] — send all listing photos back as Telegram album(s),
+    then offer to delete individual photos by number."""
+    q = update.callback_query
+    await q.answer()
+    listing_id, page, filt = parse_listing_cb(q.data, "photos")
+    l = db.get_listing(listing_id) if listing_id else None
+    if not l:
+        await q.edit_message_text("Tin này không còn nữa.",
+                                  reply_markup=MENU_KB)
+        return
+    photos = l["photo_file_ids"] or []
+    if not photos:
+        await q.message.reply_text(
+            "Tin này chưa có ảnh. Anh gửi ảnh cho em nhé? 😊")
+        return
+    chat_id = update.effective_chat.id
+    caption = _photo_caption(l)
+    # Telegram allows max 10 media per group — chunk if more.
+    for gi, start in enumerate(range(0, len(photos), 10)):
+        chunk = photos[start:start + 10]
+        media = [InputMediaPhoto(
+            media=fid,
+            caption=caption if gi == 0 and i == 0 else None)
+            for i, fid in enumerate(chunk)]
+        try:
+            await ctx.bot.send_media_group(chat_id, media)
+        except Exception:
+            log.warning("send_media_group failed for %s", listing_id)
+            await q.message.reply_text(
+                "Em gửi ảnh bị lỗi, anh thử lại giúp em nhé 😅")
+            return
+    ctx.user_data["photo_delete"] = {
+        "listing_id": listing_id, "page": page, "filt": filt,
+    }
+    await ctx.bot.send_message(
+        chat_id,
+        "Anh muốn xóa ảnh nào không? Gửi số thứ tự ảnh muốn xóa "
+        f"(vd: 1, 3 — tổng {len(photos)} ảnh), hoặc gõ “bỏ qua” nhé.")
+
+
+async def _handle_photo_delete_answer(update, ctx, pd, text):
+    """Broker typed photo numbers to delete (or 'bỏ qua' to skip)."""
+    uid = update.effective_user.id
+    if text.strip().lower() in ("bỏ qua", "bo qua", "skip"):
+        ctx.user_data.pop("photo_delete", None)
+        await update.message.reply_text("Ok, giữ nguyên ảnh nhé ✓",
+                                        reply_markup=MENU_KB)
+        return
+    listing = db.get_listing(pd["listing_id"])
+    if not listing:
+        ctx.user_data.pop("photo_delete", None)
+        await update.message.reply_text("Tin này không còn nữa.",
+                                        reply_markup=MENU_KB)
+        return
+    n = len(listing["photo_file_ids"])
+    nums = set()
+    for part in text.replace("，", ",").split(","):
+        part = part.strip()
+        if part.isdigit():
+            i = int(part)
+            if 1 <= i <= n:
+                nums.add(i)
+    if not nums:
+        await update.message.reply_text(
+            f"Anh gửi số từ 1 đến {n} giúp em nhé (vd: 1, 3), "
+            "hoặc gõ “bỏ qua”.")
+        return
+    keep = [fid for idx, fid in enumerate(listing["photo_file_ids"], 1)
+            if idx not in nums]
+    db.update_listing(pd["listing_id"], photo_file_ids=keep)
+    ctx.user_data.pop("photo_delete", None)
+    await update.message.reply_text(
+        f"Em đã xóa {len(nums)} ảnh rồi nhé ✓ (còn {len(keep)} ảnh)",
+        reply_markup=MENU_KB)
+
+
+async def cmd_skip_photo_delete(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """/skip — cancel the photo-delete prompt."""
+    if ctx.user_data.pop("photo_delete", None) is not None:
+        await update.message.reply_text("Ok, giữ nguyên ảnh nhé ✓",
+                                        reply_markup=MENU_KB)
+
+
+async def add_photos_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """[➕ Thêm ảnh] — enter 'adding photos' mode for this listing."""
+    q = update.callback_query
+    await q.answer()
+    listing_id, page, filt = parse_listing_cb(q.data, "addphoto")
+    uid = update.effective_user.id
+    # flush any pending buffer for another listing first
+    if uid in _addphoto_pending:
+        await _commit_addphotos(uid, update.effective_chat.id, ctx)
+    l = db.get_listing(listing_id) if listing_id else None
+    if not l:
+        await q.edit_message_text("Tin này không còn nữa.",
+                                  reply_markup=MENU_KB)
+        return
+    ctx.user_data["adding_photos"] = {
+        "listing_id": listing_id, "page": page, "filt": filt,
+    }
+    await q.message.reply_text(
+        "Anh gửi ảnh muốn thêm vào tin này nhé "
+        "(gửi nhiều ảnh cùng lúc được ạ) 📥\n"
+        "Gõ /huy để hủy bỏ.")
+
+
+async def _handle_add_photo(update, ctx, addp, file_id, caption):
+    """Buffer one photo for 'adding photos' mode; commit after quiet."""
+    uid = update.effective_user.id
+    pend = _addphoto_pending.get(uid)
+    if pend and pend.get("task"):
+        pend["task"].cancel()
+    if pend is None or pend.get("listing_id") != addp["listing_id"]:
+        pend = {"listing_id": addp["listing_id"], "photos": [],
+                "captions": [], "task": None}
+        _addphoto_pending[uid] = pend
+    pend["photos"].append(file_id)
+    if caption:
+        pend["captions"].append(caption)
+    pend["task"] = asyncio.create_task(
+        _flush_addphoto(uid, update.effective_chat.id, ctx))
+
+
+async def _flush_addphoto(uid, chat_id, ctx):
+    """Debounced commit for 'adding photos' mode."""
+    try:
+        await asyncio.sleep(ADD_PHOTO_WINDOW)
+    except asyncio.CancelledError:
+        return  # superseded by a newer photo
+    await _commit_addphotos(uid, chat_id, ctx)
+
+
+async def _commit_addphotos(uid, chat_id, ctx):
+    """Write buffered photos to the listing and confirm to the broker."""
+    pend = _addphoto_pending.pop(uid, None)
+    if not pend or not pend["photos"]:
+        return
+    if pend.get("task"):
+        pend["task"].cancel()
+    listing = db.get_listing(pend["listing_id"])
+    if not listing:
+        return
+    photos = listing["photo_file_ids"] + pend["photos"]
+    raw = listing["raw_text"]
+    if pend["captions"]:
+        raw = (raw + "\n" + "\n".join(pend["captions"])).strip()
+    db.update_listing(pend["listing_id"], photo_file_ids=photos,
+                      raw_text=raw)
+    ctx.user_data.pop("adding_photos", None)
+    try:
+        await ctx.bot.send_message(
+            chat_id,
+            f"Em đã thêm {len(pend['photos'])} ảnh vào tin rồi nhé ✓ "
+            f"(tổng {len(photos)} ảnh)",
+            reply_markup=MENU_KB)
+    except Exception:
+        pass
+
+
+async def cmd_cancel_addphoto(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """/huy — cancel 'adding photos' mode, discarding buffered photos."""
+    uid = update.effective_user.id
+    pend = _addphoto_pending.pop(uid, None)
+    if pend and pend.get("task"):
+        pend["task"].cancel()
+    if ctx.user_data.pop("adding_photos", None) is not None or pend:
+        await update.message.reply_text(
+            "Đã hủy, không thêm ảnh nào nhé.", reply_markup=MENU_KB)
 
 
 # ---------------------------------------------------------------- edit listing
@@ -1631,11 +2168,33 @@ def _edit_confirm_text(field, value):
 
 async def _finish_edit(update_or_q, ctx, listing_id, field, value, page, filt,
                        via_callback):
-    """Persist edit, clear state, re-render detail with confirmation."""
+    """Persist edit, clear state, re-render detail with confirmation.
+
+    When the listing is being pre-save confirmed (ctx.user_data["confirming"]),
+    re-render the full confirmation summary instead of the detail view.
+    """
     db.update_listing_field(listing_id, field, value, changed_by="broker")
     ctx.user_data.pop("editing", None)
     l = db.get_listing(listing_id)
     if not l:
+        return
+    uid = update_or_q.from_user.id if via_callback else update_or_q.effective_user.id
+    confirming = (ctx.user_data.get("confirming") or {}).get("listing_id") == listing_id
+    if confirming:
+        pn = get_pronoun(uid)
+        phone_note = (ctx.user_data.get("confirming") or {}).get("phone_note", "")
+        text, kb = _confirm_summary(l, pn, phone_note)
+        confirm = _edit_confirm_text(field, value)
+        if via_callback:
+            q = update_or_q
+            await natural_delay(q)
+            await q.edit_message_text(confirm + "\n\n" + text,
+                                      reply_markup=kb)
+        else:
+            update = update_or_q
+            await natural_delay(update)
+            await update.message.reply_text(confirm + "\n\n" + text,
+                                            reply_markup=kb)
         return
     text, kb = _detail_content(l, page, filt)
     confirm = _edit_confirm_text(field, value)
@@ -1704,6 +2263,13 @@ async def edit_cancel_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not l:
         await q.edit_message_text("Tin này không còn nữa.",
                                   reply_markup=MENU_KB)
+        return
+    # in pre-save confirm mode, go back to the full summary
+    if (ctx.user_data.get("confirming") or {}).get("listing_id") == c["lid"]:
+        pn = get_pronoun(q.from_user.id)
+        phone_note = (ctx.user_data.get("confirming") or {}).get("phone_note", "")
+        text, kb = _confirm_summary(l, pn, phone_note)
+        await q.edit_message_text(text, reply_markup=kb)
         return
     text, kb = _detail_content(l, c["page"], c["filt"])
     await q.edit_message_text(text, parse_mode="HTML", reply_markup=kb)
@@ -2133,6 +2699,14 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await show_menu(update, ctx)
     elif data == "onboard:skip_phone":
         await onboard_skip_phone(update, ctx)
+    elif data.startswith("onboard:pronoun:"):
+        await onboard_pronoun_cb(update, ctx)
+    elif data.startswith("onboard:dname:"):
+        await onboard_dname_cb(update, ctx)
+    elif data.startswith("cfm:save:"):
+        await confirm_save_cb(update, ctx)
+    elif data.startswith("cfm:edit:"):
+        await confirm_edit_cb(update, ctx)
     elif data.startswith("contact:edit:"):
         await contact_edit_prompt(update, ctx)
     elif data.startswith("editpick:"):
@@ -2147,6 +2721,10 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await edit_from_detail(update, ctx)
     elif data.startswith("detail:"):
         await show_detail(update, ctx)
+    elif data.startswith("photos:"):
+        await view_photos_cb(update, ctx)
+    elif data.startswith("addphoto:"):
+        await add_photos_cb(update, ctx)
     elif data.startswith("qdetail:"):
         await show_query_detail(update, ctx)
     elif data.startswith("rented:"):
@@ -2176,6 +2754,8 @@ def main():
     app.add_handler(CommandHandler("contacts", cmd_contacts))
     app.add_handler(CommandHandler("phone", cmd_phone))
     app.add_handler(CommandHandler("edit", cmd_edit))
+    app.add_handler(CommandHandler("skip", cmd_skip_photo_delete))
+    app.add_handler(CommandHandler("huy", cmd_cancel_addphoto))
     app.add_handler(CallbackQueryHandler(on_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
     app.add_handler(MessageHandler(filters.PHOTO, on_photo))
