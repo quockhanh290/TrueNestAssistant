@@ -90,10 +90,19 @@ async def _handle_query(update, ctx, uid, text):
         return
     lines = [f"<b>🔍 Kết quả ({desc}):</b>"]
     kb = []
+    from telegram import WebAppInfo
+    from utils import webapp_url
     for i, l in enumerate(items, start=1):
         lines.append(f"{i}. {listing_line(l)}")
-        kb.append([InlineKeyboardButton(
-            f"{i}. Chi tiết", callback_data=f"qdetail:{l['id']}:0")])
+        kb.append([
+            InlineKeyboardButton(
+                f"📱 Mở",
+                web_app=WebAppInfo(url=webapp_url(
+                    view="listing", id=l["id"]))),
+            InlineKeyboardButton(
+                f"{i}. Chi tiết",
+                callback_data=f"qdetail:{l['id']}:0"),
+        ])
     kb.append([InlineKeyboardButton("⬅️ Menu", callback_data="menu:back")])
     await update.message.reply_text("\n".join(lines), parse_mode="HTML",
                                     reply_markup=InlineKeyboardMarkup(kb))
