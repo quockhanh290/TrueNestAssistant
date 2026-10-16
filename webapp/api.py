@@ -413,6 +413,24 @@ def get_propose(broker_id, request_id):
         scored.append(item)
     scored.sort(key=lambda x: x["match_score"], reverse=True)
 
+    # Slot reopening (Khanh 2026-10-16): if this broker reserved a slot but
+    # hard-filtering leaves 0 eligible listings AND they haven't submitted,
+    # release the slot so waitlisted brokers get a second chance.
+    slot_released = False
+    if has_slot and not already_submitted and not scored and not expired:
+        if db.release_empty_slot(request_id, broker_id):
+            slot_released = True
+            has_slot = False
+            # Queue channel notification for the bot to send
+            db.queue_notification(
+                "slot_reopened",
+                request_id=request_id,
+                payload={
+                    "summary": req.get("requirements_summary") or "",
+                    "released_broker_id": broker_id,
+                },
+            )
+
     return {
         "request": {
             "id": request_id,
@@ -425,10 +443,38 @@ def get_propose(broker_id, request_id):
             "status": req.get("status"),
         },
         "has_slot": has_slot,
+        "slot_released": slot_released,
         "already_submitted": already_submitted,
         "listings": scored,
         "failed_summary": failed_summary,
         "max_listings": db.PROPOSE_MAX_LISTINGS,
+    }, 200
+
+
+def get_xbroker_requests(broker_id):
+    """GET /api/xbroker — open broadcast requests needing cross-broker help.
+
+    Trial-gated: uses the existing xbroker_match trial (3 free → Max).
+    """
+    trial_ok, remaining = db.check_trial(broker_id, "xbroker_match")
+    reqs = db.list_open_xbroker_requests(exclude_broker_id=broker_id)
+    items = []
+    for r in reqs:
+        items.append({
+            "id": r["id"],
+            "summary": r.get("requirements_summary") or "",
+            "urgency": r.get("urgency") or "normal",
+            "response_count": r.get("response_count", 0),
+            "max_responders": db.MAX_RESPONDERS,
+            "created_at": r.get("created_at"),
+            "budget_max": r.get("budget_max"),
+            "bedrooms": r.get("bedrooms"),
+            "district": r.get("district"),
+        })
+    return {
+        "requests": items,
+        "trial": {"allowed": trial_ok, "remaining": remaining,
+                  "required_tier": "max"},
     }, 200
 
 
