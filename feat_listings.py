@@ -672,6 +672,12 @@ async def cmd_cancel_addphoto(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if ctx.user_data.pop("adding_photos", None) is not None or pend:
         await update.message.reply_text(
             "Đã hủy, không thêm ảnh nào nhé.", reply_markup=MENU_KB)
+        return
+    # guided intake in progress?
+    if ctx.user_data.pop("guided", None) is not None:
+        _buffers.pop(uid, None)
+        await update.message.reply_text(
+            "Đã hủy, không lưu tin nào nhé.", reply_markup=MENU_KB)
 
 
 # ---------------------------------------------------------------- edit listing
