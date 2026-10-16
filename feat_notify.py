@@ -134,6 +134,31 @@ async def notify_trial_expiring(ctx, broker_id, feature, remaining):
         log.warning("trial expiring notify failed: %s", e)
 
 
+async def notify_velocity_warning(ctx, broker_id, count, window_min):
+    """DM broker when refresh velocity looks suspicious (Khanh 2026-10-16)."""
+    prefs = db.get_notify_prefs(broker_id)
+    if not prefs.get("notify_quality", True):
+        return
+    try:
+        await ctx.bot.send_message(
+            chat_id=broker_id,
+            text=(
+                f"⚠️ Anh vừa cập nhật <b>{count} tin</b>"
+                f" trong {window_min} phút\n\n"
+                "Tốc độ này khó có thể kiểm tra kỹ từng tin.\n"
+                "Hệ thống sẽ ưu tiên kiểm tra ngẫu nhiên các tin này.\n\n"
+                "Nếu phát hiện báo sai, điểm uy tín sẽ bị trừ."),
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton(
+                    "🔕 Tắt thông báo này",
+                    callback_data="notify:off:notify_quality")],
+            ]),
+        )
+    except Exception as e:
+        log.warning("velocity warning notify failed: %s", e)
+
+
 async def notify_new_booking(ctx, broker_id, booking):
     """DM broker in real-time when a client books via share page.
 
