@@ -1862,6 +1862,46 @@ def delete_deal(deal_id, path=None):
     return cur.rowcount > 0
 
 
+def unpaid_deals(broker_id, path=None):
+    """Unpaid deals (công nợ) for a broker, oldest first.
+
+    Only deals with a positive commission count — zero/None commissions
+    are not debts.
+    """
+    conn = connect(path)
+    rows = conn.execute(
+        "SELECT * FROM deals WHERE broker_id = ? AND paid = 0"
+        " AND commission_vnd > 0 ORDER BY closed_at ASC",
+        (broker_id,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def has_unpaid_debt(broker_id, path=None):
+    """True if the broker has any unpaid deal (công nợ)."""
+    conn = connect(path)
+    n = conn.execute(
+        "SELECT COUNT(*) c FROM deals WHERE broker_id = ? AND paid = 0"
+        " AND commission_vnd > 0",
+        (broker_id,),
+    ).fetchone()["c"]
+    conn.close()
+    return n > 0
+
+
+def mark_deal_paid(deal_id, path=None):
+    """Mark a deal as paid. Returns True if a row was updated."""
+    conn = connect(path)
+    cur = conn.execute(
+        "UPDATE deals SET paid = 1, updated_at = ? WHERE id = ?",
+        (_now(), deal_id),
+    )
+    conn.commit()
+    conn.close()
+    return cur.rowcount > 0
+
+
 def deal_exists(broker_id, client_id, listing_id, path=None):
     """Already recorded a deal for this client+listing pair?"""
     conn = connect(path)
