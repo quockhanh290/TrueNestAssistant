@@ -255,10 +255,15 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     db.get_or_create_broker(u.id, u.username, u.full_name)
     await natural_delay(update)
     await update.message.reply_text(
-        f"Chào anh! Em là {config.BOT_NAME}, trợ lý quản lý tin cho thuê.\n\n"
-        "Anh gửi tin thoải mái như đăng group — text + ảnh kiểu gì cũng được, "
-        "em tự sắp xếp lại cho gọn gàng.\n\n"
-        "Gõ /menu bất cứ lúc nào để mở menu, /help để xem hướng dẫn chi tiết.",
+        f"Chào anh! Em là {config.BOT_NAME} 🏠\n\n"
+        "Em là trợ lý quản lý tin cho thuê MIỄN PHÍ dành cho môi giới Đà Nẵng.\n\n"
+        "Em giúp anh:\n"
+        "📝 Lưu tin cho thuê — chỉ cần gửi text + ảnh như đăng group FB, em tự bóc thông tin\n"
+        "📋 Quản lý tin — xem, lọc theo phòng/giá/khu vực, đánh dấu đã cho thuê hay còn trống\n"
+        "✍️ Viết tin FB — tự động viết bài đăng đẹp, 5 ngôn ngữ (Việt/Anh/Hàn/Trung/Nga)\n"
+        "🔔 Nhắc thông minh — em nhắc khi tin thiếu thông tin hoặc lâu chưa cập nhật\n\n"
+        "👉 Để bắt đầu, anh cứ gửi tin đầu tiên cho em nhé! (text kèm ảnh)\n\n"
+        "Gõ /menu để mở menu bất cứ lúc nào, /help để xem hướng dẫn chi tiết.",
         reply_markup=MENU_KB,
     )
 
