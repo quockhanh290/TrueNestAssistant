@@ -640,6 +640,17 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await feat_intake.guided_badd(update, ctx)
     elif data == "guided:bback":
         await feat_intake.guided_bback(update, ctx)
+    elif data.startswith("guided:sset:"):
+        if data == "guided:sset:custom":
+            await feat_intake.guided_sset_custom(update, ctx)
+        else:
+            await feat_intake.guided_sset(update, ctx)
+    elif data == "guided:sback":
+        await feat_intake.guided_sback(update, ctx)
+    elif data.startswith("guided:wset:"):
+        await feat_intake.guided_wset(update, ctx)
+    elif data == "guided:wback":
+        await feat_intake.guided_wback(update, ctx)
     elif data.startswith("guided:set:"):
         await feat_intake.guided_set(update, ctx)
     elif data == "guided:back":
@@ -724,6 +735,14 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await feat_clients.client_add_start(update, ctx)
     elif data == "clients:cancel":
         await feat_clients.client_add_cancel(update, ctx)
+    elif data.startswith("clients:addmode:"):
+        await feat_clients.client_add_mode_cb(update, ctx)
+    elif data in ("clients:pasteok", "clients:pastefix", "clients:fixback"):
+        await feat_clients.client_paste_confirm_cb(update, ctx)
+    elif data.startswith("clients:fixval:"):
+        await feat_clients.client_paste_fixval_cb(update, ctx)
+    elif data.startswith("clients:fix:"):
+        await feat_clients.client_paste_fix_cb(update, ctx)
     elif data == "clientadd:skipphone" or data.startswith("clientadd:urg:"):
         await feat_clients.client_add_urgency_cb(update, ctx)
     elif data.startswith("client:delconfirm:"):
@@ -747,6 +766,8 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await feat_sendclient.s2c_toggle(update, ctx)
         elif act == "done":
             await feat_sendclient.s2c_done(update, ctx)
+        elif act == "lang":
+            await feat_sendclient.s2c_lang(update, ctx)
         elif act == "copy":
             await feat_sendclient.s2c_copy(update, ctx)
         elif act == "sent":
