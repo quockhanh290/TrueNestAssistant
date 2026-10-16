@@ -73,7 +73,7 @@ async def _handle_query(update, ctx, uid, text):
     if not filters:
         await update.message.reply_text(
             "Em chưa hiểu anh muốn lọc kiểu gì 😅 Anh thử kiểu "
-            "'cho xem tin 2PN dưới 15tr' hoặc bấm 📋 Tin của tôi nhé.",
+            "'cho xem căn 2PN dưới 15tr' hoặc bấm 🏠 Quản lý căn nhé.",
             reply_markup=MENU_KB,
         )
         return
@@ -674,6 +674,8 @@ async def cmd_cancel_addphoto(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         cancelled.append("adding_photos")
     if ctx.user_data.pop("guided", None) is not None:
         cancelled.append("guided")
+    if ctx.user_data.pop("editing_post", None) is not None:
+        cancelled.append("editing_post")
     # Also clear intake buffer if present
     try:
         from utils import _buffers
