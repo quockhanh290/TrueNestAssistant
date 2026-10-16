@@ -61,17 +61,57 @@ _Quyết định: 2026-10-16, Khanh thiết kế_
   Anh chọn làm việc với ai ạ?
   ```
 
-### 6. Khách chọn
-- Khách bấm chọn → bot kết nối 2 bên (reveal contact cả 2 chiều)
-- 2 broker không được chọn nhận:
+### 6. Khách chọn broker
+- Khách xem up to 15 căn (3 broker × 5 căn), nhóm theo broker
+- Khách chọn 1 BROKER (không phải 1 căn) để làm việc cùng
+- **Tự động release:** khách bấm chọn → bot gửi ngay cho broker:
   ```
-  Khách đã chọn môi giới khác. Cảm ơn anh đã tham gia!
+  🎉 Khách đã chọn anh!
+
+  👤 Tên: [tên khách]
+  📱 SĐT: [sđt]
+  📝 Yêu cầu: [tóm tắt]
+
+  🏠 5 tin anh đã đề xuất:
+  1. ...
+  2. ...
+
+  2 bên tự liên lạc nhé. Em sẽ follow-up ạ!
   ```
+
+### 7. Tự động cập nhật bên broker
+- Bot tự tạo client mới trong danh sách của broker:
+  - Tên, SĐT từ thông tin khách release
+  - Trạng thái: `sent` (đã gửi tin)
+  - Nguồn: `broadcast_channel`
+  - Ghi chú: yêu cầu gốc + 5 tin đã đề xuất
+- Broker không cần nhập tay
+
+### 8. Follow-up kép cho đến khi deal done
+- **Bot khách:** hỏi định kỳ "Anh đã xem nhà chưa? Tình hình sao rồi ạ?"
+- **Bot broker:** nhắc follow-up theo pipeline bình thường
+- Cả 2 bên cập nhật đến khi trạng thái = `rented` hoặc `cancelled`
+
+### 9. Chống gian lận hoa hồng
+**Vấn đề:** khách confirm đã chốt với broker X, nhưng broker X báo "không chốt được" để né hoa hồng.
+
+**Xử lý:**
+```
+Khách báo "đã chốt" + Broker báo "chưa chốt"
+→ Bot đối chiếu → gắn cờ mâu thuẫn
+→ Warning 1: "Hệ thống ghi nhận mâu thuẫn về deal [X].
+   Anh kiểm tra lại giúp em nhé."
+→ Warning 2: tương tự, nghiêm khắc hơn
+→ Warning 3: 🚫 BAN khỏi hệ thống match
+```
+
+**Lưu ý:** đây là hệ thống riêng với anti-spam (spam_strikes).
+Bảng mới: `commission_disputes` hoặc dùng chung cơ chế.
 
 ## Chống bypass
 - Contact khách KHÔNG BAO GIỜ xuất hiện trong broadcast, DM cho broker, hay bất kỳ đâu trước khi khách chọn
 - Broker chỉ thấy contact khách SAU KHI được khách chọn
-- Vi phạm (tìm cách liên hệ khách ngoài luồng) → chưa định nghĩa chế tài, cần quyết định sau
+- Broker tìm cách liên hệ khách ngoài luồng → chưa định nghĩa chế tài
 
 ## Chưa quyết định
 - [ ] Phí/mô hình kinh doanh cho match khách thật (free? thu phí broker? thu phí khách?)
