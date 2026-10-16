@@ -56,4 +56,4 @@ PLATFORM_FEE_RATE = float(os.getenv("PLATFORM_FEE_RATE", "0.20"))
 # auto-translated. Set TRANSLATION_EMAIL for MyMemory 50k chars/day
 # (anonymous = 5k chars/day).
 TRANSLATION_ENABLED = os.getenv("TRANSLATION_ENABLED", "1") == "1"
-TRANSLATION_EMAIL = os.getenv("TRANSLATION_EMAIL", "")
+TRANSLATION_EMAIL = os.getenv("TRANSLATION_EMAIL", "sapnhami@gmail.com")
