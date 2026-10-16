@@ -103,6 +103,7 @@ def _listing_card(lst, idx):
             <label><input type="radio" name="rr-{idx}" value="price_wrong"> Giá không đúng</label>
             <label><input type="radio" name="rr-{idx}" value="photo_wrong"> Ảnh không đúng thực tế</label>
             <label><input type="radio" name="rr-{idx}" value="address_wrong"> Địa chỉ sai</label>
+            <label><input type="radio" name="rr-{idx}" value="amenity_wrong"> Tiện ích không đúng thực tế</label>
             <div class="report-actions">
               <button onclick="submitReport(event, {idx}, '{_esc(lst['id'])}')">Gửi báo cáo</button>
               <button onclick="closeReport({idx})" class="cancel">Hủy</button>
@@ -368,4 +369,15 @@ def handle_report(token, data):
                      "broker_id": page["broker_id"]})
             except Exception:
                 pass
+    # Amenity fraud: client reports false amenities/highlights
+    # -> same penalty track as false refresh (Khanh 2026-10-16)
+    elif reason == "amenity_wrong":
+        try:
+            db.queue_notification(
+                "false_amenity_suspect", None,
+                {"listing_id": listing_id,
+                 "report_id": rid,
+                 "broker_id": page["broker_id"]})
+        except Exception:
+            pass
     return {"ok": True, "report_id": rid}, 200
