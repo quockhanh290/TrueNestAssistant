@@ -42,7 +42,28 @@ if (window.Telegram?.WebApp) {
   </div>
 </div>
 
-</main><nav class="fixed bottom-0 w-full max-w-[420px] z-50 pb-safe bg-surface-container/90 backdrop-blur-xl shadow-[0_-1px_12px_rgba(0,0,0,0.3)]" data-active-classes="text-primary font-semibold"><div class="h-16 px-space-xs flex items-center justify-around"><a class="flex-1 h-12 flex flex-col items-center justify-center text-primary font-semibold transition-colors" data-path="can-ho" href="#" onclick="switchTab('listings', this); return false;"><span class="material-symbols-outlined text-[22px]">apartment</span><span class="font-label-sm text-[11px] leading-tight mt-0.5">Căn hộ</span></a><a class="flex-1 h-12 flex flex-col items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors" data-path="khach-hang" href="#" onclick="switchTab('clients', this); return false;"><span class="material-symbols-outlined text-[22px]">group</span><span class="font-label-sm text-[11px] leading-tight mt-0.5">Khách</span></a><a class="flex-1 h-12 flex flex-col items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors" data-path="lich-xem" href="#"><span class="material-symbols-outlined text-[22px]">calendar_month</span><span class="font-label-sm text-[11px] leading-tight mt-0.5">Lịch xem</span></a><a class="flex-1 h-12 flex flex-col items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors" data-path="hoa-hong" href="#"><span class="material-symbols-outlined text-[22px]">payments</span><span class="font-label-sm text-[11px] leading-tight mt-0.5">Hoa hồng</span></a></div></nav></div>
+<!-- Viewings View -->
+<div id="view-viewings" class="hidden flex-col w-full pb-6 relative">
+  <div class="flex items-center justify-between mb-4">
+    <h2 class="text-lg font-semibold">Lịch xem</h2>
+  </div>
+  <div id="viewings-list" class="flex flex-col gap-3">
+    <p class="text-center text-outline py-8">Đang tải...</p>
+  </div>
+</div>
+
+<!-- Deals View -->
+<div id="view-deals" class="hidden flex-col w-full pb-6 relative">
+  <div class="flex items-center justify-between mb-4">
+    <h2 class="text-lg font-semibold">Hoa hồng</h2>
+  </div>
+  <div id="deals-summary" class="mb-4"></div>
+  <div id="deals-list" class="flex flex-col gap-3">
+    <p class="text-center text-outline py-8">Đang tải...</p>
+  </div>
+</div>
+
+</main><nav class="fixed bottom-0 w-full max-w-[420px] z-50 pb-safe bg-surface-container/90 backdrop-blur-xl shadow-[0_-1px_12px_rgba(0,0,0,0.3)]" data-active-classes="text-primary font-semibold"><div class="h-16 px-space-xs flex items-center justify-around"><a class="flex-1 h-12 flex flex-col items-center justify-center text-primary font-semibold transition-colors" data-path="can-ho" href="#" onclick="switchTab('listings', this); return false;"><span class="material-symbols-outlined text-[22px]">apartment</span><span class="font-label-sm text-[11px] leading-tight mt-0.5">Căn hộ</span></a><a class="flex-1 h-12 flex flex-col items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors" data-path="khach-hang" href="#" onclick="switchTab('clients', this); return false;"><span class="material-symbols-outlined text-[22px]">group</span><span class="font-label-sm text-[11px] leading-tight mt-0.5">Khách</span></a><a class="flex-1 h-12 flex flex-col items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors" data-path="lich-xem" href="#" onclick="switchTab('viewings', this); return false;"><span class="material-symbols-outlined text-[22px]">calendar_month</span><span class="font-label-sm text-[11px] leading-tight mt-0.5">Lịch xem</span></a><a class="flex-1 h-12 flex flex-col items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors" data-path="hoa-hong" href="#" onclick="switchTab('deals', this); return false;"><span class="material-symbols-outlined text-[22px]">payments</span><span class="font-label-sm text-[11px] leading-tight mt-0.5">Hoa hồng</span></a></div></nav></div>
 
 <script>
 // V2 backend wiring (Tana 2026-10-16) — replaces demo cards with real API data.
@@ -175,8 +196,11 @@ if (window.Telegram?.WebApp) {
 <script>
 // Tab switching
 function switchTab(tab, el) {
-  const listingsView = document.querySelector('main > div.flex.flex-col.w-full.pb-6.relative:not(#view-clients)');
+  const listingsView = document.querySelector('main > div.flex.flex-col.w-full.pb-6.relative:not(#view-clients):not(#view-viewings):not(#view-deals)');
   const clientsView = document.getElementById('view-clients');
+  const viewingsView = document.getElementById('view-viewings');
+  const dealsView = document.getElementById('view-deals');
+  const views = {listings: listingsView, clients: clientsView, viewings: viewingsView, deals: dealsView};
   
   // Update nav active states
   document.querySelectorAll('nav a').forEach(a => {
@@ -186,18 +210,15 @@ function switchTab(tab, el) {
   el.classList.remove('text-on-surface-variant');
   el.classList.add('text-primary', 'font-semibold');
   
-  if (tab === 'clients') {
-    if (listingsView) listingsView.classList.add('hidden');
-    clientsView.classList.remove('hidden');
-    clientsView.classList.add('flex');
-    loadClients();
-    if (window.Telegram?.WebApp) window.Telegram.WebApp.HapticFeedback?.impactOccurred('light');
-  } else {
-    clientsView.classList.add('hidden');
-    clientsView.classList.remove('flex');
-    if (listingsView) listingsView.classList.remove('hidden');
-    if (window.Telegram?.WebApp) window.Telegram.WebApp.HapticFeedback?.impactOccurred('light');
-  }
+  Object.entries(views).forEach(([k, v]) => {
+    if (!v) return;
+    if (k === tab) { v.classList.remove('hidden'); v.classList.add('flex'); }
+    else { v.classList.add('hidden'); v.classList.remove('flex'); }
+  });
+  if (tab === 'clients') loadClients();
+  if (tab === 'viewings') loadViewings();
+  if (tab === 'deals') loadDeals();
+  if (window.Telegram?.WebApp) window.Telegram.WebApp.HapticFeedback?.impactOccurred('light');
 }
 
 // Load clients from API
@@ -231,6 +252,71 @@ async function loadClients() {
     `).join('');
   } catch (e) {
     container.innerHTML = '<p class="text-center text-error py-8">Không tải được danh sách.</p>';
+  }
+}
+
+let viewingsLoaded = false;
+async function loadViewings() {
+  if (viewingsLoaded) return;
+  const container = document.getElementById('viewings-list');
+  try {
+    const res = await fetch(buildApiUrl('/api/viewings'));
+    if (!res.ok) throw new Error('API ' + res.status);
+    const data = await res.json();
+    const items = data.viewings || [];
+    viewingsLoaded = true;
+    if (!items.length) {
+      container.innerHTML = '<p class="text-center text-outline py-8">Chưa có lịch xem nào.</p>';
+      return;
+    }
+    container.innerHTML = items.map(v => `
+      <div class="w-full bg-surface-container rounded-xl p-4 border border-surface-variant/40">
+        <div class="flex items-start justify-between mb-1">
+          <h3 class="font-semibold text-[15px]">${escHtml(v.client_name || 'Khách')}</h3>
+          <span class="text-[11px] text-outline">${escHtml(v.scheduled_at || '')}</span>
+        </div>
+        <p class="text-[13px] text-on-surface-variant">${(v.listing_ids || []).length} căn · ${escHtml(v.status || '')}</p>
+        ${v.notes ? `<p class="text-[12px] text-outline mt-1">${escHtml(v.notes)}</p>` : ''}
+      </div>
+    `).join('');
+  } catch (e) {
+    container.innerHTML = '<p class="text-center text-error py-8">Không tải được.</p>';
+  }
+}
+
+let dealsLoaded = false;
+async function loadDeals() {
+  if (dealsLoaded) return;
+  const container = document.getElementById('deals-list');
+  const summaryEl = document.getElementById('deals-summary');
+  try {
+    const res = await fetch(buildApiUrl('/api/deals'));
+    if (!res.ok) throw new Error('API ' + res.status);
+    const data = await res.json();
+    dealsLoaded = true;
+    const summary = data.summary || {};
+    const total = summary.total_commission || 0;
+    summaryEl.innerHTML = `
+      <div class="w-full bg-primary-container/15 border border-primary-container/30 rounded-xl p-4">
+        <p class="text-[12px] text-on-surface-variant">Tổng hoa hồng tháng này</p>
+        <p class="text-2xl font-bold text-primary-container">${(total/1000000).toFixed(1)}tr</p>
+      </div>`;
+    const deals = data.deals || data.closed || [];
+    if (!deals.length) {
+      container.innerHTML = '<p class="text-center text-outline py-8">Chưa có deal nào.</p>';
+      return;
+    }
+    container.innerHTML = deals.map(d => `
+      <div class="w-full bg-surface-container rounded-xl p-4 border border-surface-variant/40">
+        <div class="flex items-start justify-between">
+          <h3 class="font-semibold text-[15px]">${escHtml(d.listing_id || d.id || '')}</h3>
+          <span class="text-[13px] font-semibold text-secondary">${((d.commission_vnd||0)/1000000).toFixed(1)}tr</span>
+        </div>
+        <p class="text-[12px] text-outline mt-1">${d.paid ? '✅ Đã thanh toán' : '⏳ Chưa thanh toán'} · ${escHtml(d.status || '')}</p>
+      </div>
+    `).join('');
+  } catch (e) {
+    container.innerHTML = '<p class="text-center text-error py-8">Không tải được.</p>';
   }
 }
 
