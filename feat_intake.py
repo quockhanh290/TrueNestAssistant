@@ -25,6 +25,7 @@ from utils import (
     natural_delay, PROCESSING_HINTS, react_heart,
     maybe_send_hint, maybe_send_hint_to_chat,
     fmt_price, listing_line, _confirm_summary,
+    get_forward_source, strip_forward_noise,
 )
 
 log = logging.getLogger("linh")
@@ -202,10 +203,12 @@ async def _process_buffer(uid, buf, ctx, field_overrides=None):
     )
     pn = get_pronoun(uid)
     phone_note = f" (SĐT của {pn})" if phone_autofilled else ""
+    fwd_source = buf.get("forward_source") or ""
     ctx.user_data["confirming"] = {"listing_id": listing_id,
-                                   "phone_note": phone_note}
+                                   "phone_note": phone_note,
+                                   "forward_source": fwd_source}
     l = db.get_listing(listing_id)
-    text, kb = _confirm_summary(l, pn, phone_note)
+    text, kb = _confirm_summary(l, pn, phone_note, fwd_source)
     await ctx.bot.send_message(chat_id, text, reply_markup=kb)
 
 
@@ -296,7 +299,7 @@ async def _handle_confirm_correction(update, ctx, confirming, text):
     old_raw = l.get("raw_text") or ""
     db.update_listing(listing_id, raw_text=(old_raw + "\n" + text).strip())
     l = db.get_listing(listing_id)
-    t, kb = _confirm_summary(l, pn, confirming.get("phone_note", ""))
+    t, kb = _confirm_summary(l, pn, confirming.get("phone_note", ""), confirming.get("forward_source", ""))
     await natural_delay(update)
     await update.message.reply_text("Em cập nhật rồi nhé ✓\n\n" + t,
                                     reply_markup=kb)
@@ -322,7 +325,7 @@ async def _handle_confirm_photo(update, ctx, confirming, file_id, caption):
     db.update_listing(listing_id, photo_file_ids=photos, raw_text=raw)
     l = db.get_listing(listing_id)
     pn = get_pronoun(uid)
-    t, kb = _confirm_summary(l, pn, confirming.get("phone_note", ""))
+    t, kb = _confirm_summary(l, pn, confirming.get("phone_note", ""), confirming.get("forward_source", ""))
     await natural_delay(update)
     await update.message.reply_text(
         f"Đã thêm ảnh ✓ (tổng {len(photos)} ảnh)\n\n" + t,
@@ -360,17 +363,22 @@ async def _flush_media_group(key, ctx):
         if entry["caption"]:
             buf["texts"].append(entry["caption"])
         buf["deadline"] = time.time() + COLLECT_WINDOW
+        if not buf.get("forward_source") and entry.get("forward_source"):
+            buf["forward_source"] = entry["forward_source"]
     else:
         _buffers[uid] = {
             "texts": [entry["caption"]] if entry["caption"] else [],
             "photos": list(entry["photos"]),
             "deadline": time.time() + COLLECT_WINDOW,
             "chat_id": entry["chat_id"],
+            "forward_source": entry.get("forward_source"),
         }
+        fwd = entry.get("forward_source")
+        fwd_note = f" (forward từ {fwd})" if fwd else ""
         try:
             await ctx.bot.send_message(
                 entry["chat_id"],
-                "Nhận ảnh! Anh gửi thêm text mô tả giúp em nhé 📥")
+                f"Nhận ảnh{fwd_note}! Anh gửi thêm text mô tả giúp em nhé 📥")
         except Exception:
             pass
         asyncio.create_task(_flush_after(uid, ctx))
@@ -462,6 +470,9 @@ async def on_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
 
     # 2. part of an album? buffer by media_group_id, debounce, then merge
+    # Note: forwarded albums keep a (fresh) media_group_id, so this path
+    # works for forwards too. If media_group_id is ever missing on a
+    # forward, the photo falls through to step 3 and the 5s buffer groups it.
     mg_id = msg.media_group_id
     if mg_id:
         key = f"{uid}:{mg_id}"
@@ -470,21 +481,48 @@ async def on_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             entry["task"].cancel()
         if entry is None:
             entry = {"photos": [], "caption": "", "uid": uid,
-                     "chat_id": msg.chat.id, "task": None}
+                     "chat_id": msg.chat.id, "task": None,
+                     "forward_source": get_forward_source(msg)}
             _media_groups[key] = entry
         entry["photos"].append(file_id)
         if caption and not entry["caption"]:
-            entry["caption"] = caption
+            fwd_cap = get_forward_source(msg)
+            entry["caption"] = strip_forward_noise(caption) if fwd_cap else caption
+        if not entry.get("forward_source"):
+            fwd = get_forward_source(msg)
+            if fwd:
+                entry["forward_source"] = fwd
         entry["task"] = asyncio.create_task(_flush_media_group(key, ctx))
         return
 
     # 3. single photo — caption goes through the same pipeline as text
+    fwd_source = get_forward_source(msg)
+    if fwd_source and caption:
+        caption = strip_forward_noise(caption)
     buf = _buffers.get(uid)
     if buf:
         buf["photos"].append(file_id)
         if caption:
             buf["texts"].append(caption)
         buf["deadline"] = time.time() + COLLECT_WINDOW
+        if not buf.get("forward_source") and fwd_source:
+            buf["forward_source"] = fwd_source
+    elif fwd_source:
+        # Forwarded photo with no active buffer: this is new shared content,
+        # not a forgotten attachment — skip the "stray photo?" question and
+        # start a fresh listing buffer directly. (Without this, each photo
+        # of a forwarded album lacking media_group_id would trigger its own
+        # stray-photo prompt.)
+        _buffers[uid] = {"texts": [caption] if caption else [],
+                         "photos": [file_id],
+                         "deadline": time.time() + COLLECT_WINDOW,
+                         "chat_id": msg.chat.id,
+                         "forward_source": fwd_source}
+        await update.message.reply_text(
+            f"Em nhận 1 ảnh (forward từ {fwd_source}) rồi! "
+            "Đang đợi thêm... 📥\n"
+            "(anh gửi text/ảnh tiếp trong 5s nhé)")
+        asyncio.create_task(_flush_after(uid, ctx))
     else:
         # No active buffer — stray photo. Usually it's for the most recent
         # listing, so ask to confirm instead of starting a new one blindly.

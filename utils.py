@@ -233,11 +233,114 @@ def parse_listing_cb(data, action):
         return None, "0", "s:a"
     return m.group(1), m.group(2), m.group(3) or "s:a"
 
-# per-user collection buffer: {user_id: {"texts": [], "photos": [], "deadline": ts}}
+# per-user collection buffer: {user_id: {"texts": [], "photos": [], "deadline": ts,
+#   "forward_source": str|None}}
+# "forward_source" records where the content was forwarded from (channel name,
+# user name, etc.) so the confirmation can show "(forward từ ...)".
+# Buffer dicts may also carry "guided": True and "chat_id".
 
 _buffers = {}
 
 COLLECT_WINDOW = 5  # seconds of silence before asking "đủ chưa?"
+
+
+import re as _re
+
+_FORWARD_NOISE_PATTERNS = [
+    # bare channel mention / t.me link lines (typical channel footers)
+    _re.compile(r"^@[\w]{5,}$"),
+    _re.compile(r"^(https?://)?t\.me/[\w/]+$"),
+    _re.compile(r"^[👉📌➡️📢]\s*@?[\w]+$"),
+    _re.compile(r"^[👉📌➡️📢]\s*(https?://)?t\.me/[\w/]+$"),
+]
+
+
+def strip_forward_noise(text):
+    """Remove obvious channel-attribution footers from forwarded text.
+
+    Only strips trailing lines (footers) matching channel-promo patterns:
+    bare "@channel", "t.me/..." links, "👉 @channel". Never touches the
+    body — the field-specific parser already ignores most noise, this just
+    keeps raw_text clean.
+    """
+    if not text:
+        return text
+    lines = text.strip().split("\n")
+    while lines:
+        stripped = lines[-1].strip()
+        if any(p.match(stripped) for p in _FORWARD_NOISE_PATTERNS):
+            lines.pop()
+        else:
+            break
+    return "\n".join(lines).strip()
+
+
+def get_forward_source(msg):
+    """Return a short human-readable label for a forwarded message's origin,
+    or None if the message was not forwarded.
+
+    Handles all Telegram forward mechanics (python-telegram-bot 21.x):
+    - forward_from_chat: forwarded from a channel/supergroup -> channel title
+    - forward_from: forwarded from a user (no privacy) -> name / @username
+    - forward_sender_name: sender has forward-privacy enabled -> name string
+    - forward_origin: Bot API 7+ MessageOrigin object (fallback)
+
+    Note on albums: when a user forwards an album, Telegram delivers the
+    photos as separate messages that (in practice) share a fresh
+    media_group_id, so the normal album reassembly still works. If
+    media_group_id is ever absent on a forward, the 5s collection buffer
+    groups the photos anyway — but see on_photo: forwarded photos bypass
+    the "stray photo?" question and go straight into a new buffer.
+    """
+    if msg is None:
+        return None
+    # 1. forwarded from a channel / supergroup
+    ffc = getattr(msg, "forward_from_chat", None)
+    if ffc is not None:
+        title = getattr(ffc, "title", None)
+        username = getattr(ffc, "username", None)
+        if title:
+            return title
+        if username:
+            return "@" + username
+        return "kênh/chat"
+    # 2. forwarded from a user (no privacy restriction)
+    ff = getattr(msg, "forward_from", None)
+    if ff is not None:
+        name = (getattr(ff, "full_name", "") or "").strip()
+        username = getattr(ff, "username", None)
+        if name:
+            return name
+        if username:
+            return "@" + username
+        return "người dùng"
+    # 3. privacy-enabled sender: only a name string is available
+    fsn = getattr(msg, "forward_sender_name", None)
+    if fsn:
+        return fsn
+    # 4. Bot API 7+ forward_origin object
+    fo = getattr(msg, "forward_origin", None)
+    if fo is not None:
+        try:
+            ftype = getattr(fo, "type", "")
+            if ftype == "channel":
+                chat = getattr(fo, "chat", None)
+                title = getattr(chat, "title", None) if chat else None
+                return title or "kênh"
+            if ftype == "user":
+                user = getattr(fo, "sender_user", None)
+                name = (getattr(user, "full_name", "") or "").strip() if user else ""
+                return name or "người dùng"
+            if ftype == "hidden_user":
+                return getattr(fo, "sender_user_name", None) or "người dùng ẩn danh"
+            if ftype == "chat":
+                chat = getattr(fo, "sender_chat", None)
+                title = getattr(chat, "title", None) if chat else None
+                return title or "nhóm/chat"
+        except Exception:
+            pass
+        return "tin forward"
+    return None
 
 # album (media group) reassembly: {f"{uid}:{media_group_id}": {...}}
 # Telegram splits an album into separate messages sharing one media_group_id;
@@ -354,15 +457,20 @@ _PTYPE_SHORT = {"apartment": "Căn hộ", "house": "Nhà", "villa": "Villa",
 _FURN_SHORT = {"full": "Full", "basic": "Cơ bản", "empty": "Trống"}
 
 
-def _confirm_summary(l, pn="anh", phone_note=""):
+def _confirm_summary(l, pn="anh", phone_note="", forward_source=""):
     """Full pre-save summary of every parsed field.
 
     Returns (text, keyboard_or_None). Unknown/empty fields are skipped.
     keyboard is None when nothing was parsed (fallback prompt instead).
+    forward_source: label from get_forward_source() — shown as
+    "(forward từ ...)" so the broker knows the origin was detected.
     """
     p = l.get("parsed") or {}
     photos = l.get("photo_file_ids") or []
     lines = ["Em tóm tắt lại tin này nhé:", ""]
+    if forward_source:
+        lines.append(f"↗️ (forward từ {forward_source})")
+        lines.append("")
     has = False
 
     br = p.get("bedrooms")

@@ -45,6 +45,7 @@ from utils import (
     _buffers, COLLECT_WINDOW,
     natural_delay, react_heart, maybe_send_hint,
     fmt_price, listing_line, _confirm_summary,
+    get_forward_source, strip_forward_noise,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -541,8 +542,12 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     # 2. part of an active collection buffer?
     buf = _buffers.get(uid)
     if buf:
-        buf["texts"].append(text)
+        fwd_here = get_forward_source(update.message)
+        buf["texts"].append(strip_forward_noise(text) if fwd_here else text)
         buf["deadline"] = time.time() + COLLECT_WINDOW
+        # remember forward origin for the confirmation summary
+        if not buf.get("forward_source") and fwd_here:
+            buf["forward_source"] = fwd_here
         return
 
     # 3. natural-language listing query? (not a new listing) — Pro feature
@@ -564,11 +569,17 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
     _buffers[uid] = {"texts": [text], "photos": [],
                      "deadline": time.time() + COLLECT_WINDOW,
-                     "chat_id": update.effective_chat.id}
+                     "chat_id": update.effective_chat.id,
+                     "forward_source": get_forward_source(update.message)}
+    fwd = _buffers[uid]["forward_source"]
+    if fwd:
+        # clean channel promo footers from forwarded text
+        _buffers[uid]["texts"] = [strip_forward_noise(text)]
+    fwd_note = f" (forward từ {fwd})" if fwd else ""
     await update.message.reply_text(
-        "Em nhận text rồi! Đang đợi ảnh... 📥\n"
+        f"Em nhận text{fwd_note} rồi! Đang đợi ảnh... 📥\n"
         "(anh gửi ảnh trong 5s nhé, không có ảnh cũng được)")
-    asyncio.create_task(_flush_after(uid, ctx))
+    asyncio.create_task(feat_intake._flush_after(uid, ctx))
 
 
 async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
