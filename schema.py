@@ -31,6 +31,53 @@ MASTER_SCHEMA = {
 
 CRITICAL_FIELDS = [k for k, v in MASTER_SCHEMA.items() if v[1]]
 
+# Non-scored storage fields (documented for reference, not part of scoring):
+# - photo_file_ids: Telegram file_ids for bot sending
+# - photo_urls: public R2 URLs for web app display
+# - photo_hashes: {r2_url: 16-char hex dhash} for image duplicate detection.
+#   None-valued hashes are not stored (PIL missing at upload time).
+NON_SCORED_FIELDS = {
+    "photo_file_ids": "Telegram file_id list (bot sending)",
+    "photo_urls": "R2 public URL list (web app display)",
+    "photo_hashes": "{r2_url: dhash hex} — image duplicate detection",
+}
+
+# Filter groups for the web app — each group maps to UI filter controls
+FILTER_GROUPS = {
+    "price": {
+        "label": "💰 Giá thuê",
+        "fields": ["price_vnd"],
+        "type": "range",  # min-max slider
+        "unit": "tr",
+    },
+    "rooms": {
+        "label": "🛏️ Phòng",
+        "fields": ["bedrooms", "bathrooms", "property_type"],
+        "type": "chips",
+    },
+    "location": {
+        "label": "📍 Vị trí",
+        "fields": ["district", "building_name"],
+        "type": "select",
+    },
+    "features": {
+        "label": "✨ Tiện ích",
+        "fields": ["furnishing", "pet_friendly", "area_m2"],
+        "type": "chips",
+    },
+    "quality": {
+        "label": "🤖 Chất lượng AI",
+        "fields": ["quality_score"],
+        "type": "range",
+        "unit": "đ",
+    },
+    "status": {
+        "label": "📊 Trạng thái",
+        "fields": ["status"],
+        "type": "chips",
+    },
+}
+
 # Mapping from DB `parsed` keys to schema keys (handles legacy aliases)
 FIELD_ALIASES = {
     "furnished": "furnishing",
