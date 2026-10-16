@@ -177,6 +177,15 @@ def parse_street(text):
 
 
 def parse_building(text):
+    # catalog first: names + aliases, accent-insensitive (Khanh's curated list)
+    try:
+        import buildings as _bld
+        entry = _bld.find_building(text)
+        if entry:
+            return entry["name"], "high"
+    except Exception:
+        pass
+    # fallback: legacy hardcoded list
     t = _norm(text)
     for b in BUILDINGS:
         if b.lower() in t:
@@ -185,6 +194,15 @@ def parse_building(text):
                 return "Mường Thanh", "high"
             return b, "high"
     return None, None
+
+
+def parse_building_entry(text):
+    """Catalog entry for a building mention (for location auto-fill)."""
+    try:
+        import buildings as _bld
+        return _bld.find_building(text)
+    except Exception:
+        return None
 
 
 def parse_floor_unit(text):
@@ -406,6 +424,17 @@ def parse_listing(text, photo_count=0):
 
     bld, c = parse_building(text)
     set_field("building_name", bld, c)
+    # bonus: auto-fill street/ward/district from the catalog entry
+    # (only when the parser didn't already find them)
+    if bld:
+        entry = parse_building_entry(text)
+        if entry:
+            if "street" not in fields and entry.get("street"):
+                set_field("street", entry["street"], "medium")
+            if "district" not in fields and entry.get("district"):
+                set_field("district", entry["district"], "medium")
+            if entry.get("ward"):
+                set_field("ward", entry["ward"], "medium")
 
     floor, unit = parse_floor_unit(text)
     set_field("floor_number", floor, "high" if floor else None)

@@ -626,6 +626,12 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await feat_intake.guided_mode_guided(update, ctx)
     elif data.startswith("guided:amen:"):
         await feat_intake.guided_amen(update, ctx)
+    elif data.startswith("guided:bset:"):
+        await feat_intake.guided_bset(update, ctx)
+    elif data == "guided:badd":
+        await feat_intake.guided_badd(update, ctx)
+    elif data == "guided:bback":
+        await feat_intake.guided_bback(update, ctx)
     elif data.startswith("guided:set:"):
         await feat_intake.guided_set(update, ctx)
     elif data == "guided:back":
