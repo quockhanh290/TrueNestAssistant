@@ -312,6 +312,87 @@ def reflective_summary(parsed):
     return " ".join(parts)
 
 
+# ---------------------------------------------------------------- query parsing
+
+# keywords that signal "this is a search query, not a new listing"
+QUERY_KEYWORDS = [
+    "cho xem", "cho e xem", "xem tin", "tìm tin", "tim tin", "lọc tin",
+    "loc tin", "tìm giúp", "tin nào", "còn tin", "kiếm tin",
+]
+
+
+def looks_like_query(text):
+    """True if the message is a listing search, not a new listing submission."""
+    t = _norm(text)
+    return any(kw in t for kw in QUERY_KEYWORDS)
+
+
+def parse_query(text):
+    """Extract search filters from a natural-language broker query.
+
+    Examples:
+      "cho xem tin 2PN dưới 15tr" -> {"bedrooms": 2.0, "max_price": 15000000.0}
+      "tin ở Sơn Trà"             -> {"district": "Sơn Trà"}
+      "tin có pet"                -> {"pet_friendly": True}
+      "tin còn trống"             -> {"status": "active"}
+      "tin đã cho thuê"           -> {"status": "rented"}
+    Returns {} if no filters detected.
+    """
+    t = _norm(text)
+    f = {}
+
+    # bedrooms
+    if re.search(r"\bstudio\b", t):
+        f["bedrooms"] = 0.0
+    else:
+        m = re.search(r"(\d+)\s*(?:pn|phòng ngủ|phong ngu)", t)
+        if m:
+            f["bedrooms"] = float(m.group(1))
+
+    # price bounds: "dưới 15tr", "trên 10tr", "từ 8tr đến 12tr", "8-12tr"
+    m = re.search(r"(?:dưới|duoi|dưới|dưới)\s*(\d+(?:[.,]\d+)?)\s*(?:tr|triệu|mil)",
+                  t)
+    if m:
+        f["max_price"] = float(m.group(1).replace(",", ".")) * 1_000_000
+    m = re.search(r"(?:trên|tren|từ|tu)\s*(\d+(?:[.,]\d+)?)\s*(?:tr|triệu|mil)", t)
+    if m:
+        f["min_price"] = float(m.group(1).replace(",", ".")) * 1_000_000
+    m = re.search(r"(\d+(?:[.,]\d+)?)\s*[-–—]\s*(\d+(?:[.,]\d+)?)\s*(?:tr|triệu|mil)",
+                  t)
+    if m:
+        f["min_price"] = float(m.group(1).replace(",", ".")) * 1_000_000
+        f["max_price"] = float(m.group(2).replace(",", ".")) * 1_000_000
+
+    # district
+    dist, _ = parse_district(text)
+    if dist:
+        f["district"] = dist
+
+    # building
+    bld, _ = parse_building(text)
+    if bld:
+        f["building_name"] = bld
+
+    # pet
+    if re.search(r"có pet|nuôi pet|pet friendly|cho pet", t):
+        f["pet_friendly"] = True
+    elif re.search(r"không pet|ko pet|cấm pet", t):
+        f["pet_friendly"] = False
+
+    # status
+    if re.search(r"đã cho thuê|da cho thue|đã thuê", t):
+        f["status"] = "rented"
+    elif re.search(r"còn trống|con trong|đang trống|dang trong|còn tin", t):
+        f["status"] = "active"
+
+    # property type
+    ptype, _ = parse_property_type(text)
+    if ptype:
+        f["property_type"] = ptype
+
+    return f
+
+
 if __name__ == "__main__":
     samples = [
         "CHO THUÊ MONARCHY B12.04 1PN 12TR FULL NT tầng 12, cho nuôi pet. LH 0905123456",
@@ -325,3 +406,13 @@ if __name__ == "__main__":
         print("MISS:", r["missing"])
         print("SAY:", reflective_summary(r))
         print()
+    print("--- query parsing ---")
+    for q in [
+        "cho xem tin 2PN dưới 15tr",
+        "tìm tin ở Sơn Trà có pet",
+        "tin nào còn trống vậy em",
+        "cho e xem tin đã cho thuê",
+        "lọc tin monarchy từ 10tr đến 15tr",
+    ]:
+        print("Q  :", q)
+        print("  ->", parse_query(q), "| is_query:", looks_like_query(q))
