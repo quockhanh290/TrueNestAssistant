@@ -149,7 +149,8 @@ def _pending_count(request_id):
     return len(_pending_picks.get(request_id, set()))
 
 def _broadcast_text(req_summary, urgency, broker_label):
-    """Group broadcast message. NEVER includes client name/phone."""
+    """Group broadcast message. NEVER includes client name/phone or any
+    broker's real identity (role label only until mutual consent)."""
     urg_e = CLIENT_URGENCY_EMOJI.get(urgency or "normal", "🟡")
     urg_l = CLIENT_URGENCY_LABEL.get(urgency or "normal", "Bình thường")
     return (
@@ -200,21 +201,61 @@ def _parse_mresp_cb(data):
     return act, mr_id, target
 
 
-def _relay_label(uid, r):
-    """Best-known public label for a broker in this request's context."""
+# ---- anonymous relay: role-based labels until mutual consent ----
+
+REQUESTER_LABEL = "🔍 Cần tìm listing"   # broker who posted the need
+RESPONDER_LABEL = "🏠 Có listing"       # broker who responded with inventory
+
+
+def _anon_label(uid, r):
+    """Role-based anonymous label for a broker in this request."""
     try:
         uid = int(uid)
     except (TypeError, ValueError):
         return "môi giới"
-    b = db.get_broker(uid) or {}
+    if uid == r["broker_id"]:
+        return REQUESTER_LABEL
+    return RESPONDER_LABEL
+
+
+def _public_label(broker):
+    """Real identity label, shown only after mutual consent."""
+    b = broker or {}
     if b.get("username"):
         return f"@{b['username']}"
-    if uid == r["broker_id"]:
-        return b.get("display_name") or b.get("name") or "môi giới"
-    for rp in db.list_responses(r["id"]):
-        if rp["responder_broker_id"] == uid and rp.get("responder_username"):
-            return f"@{rp['responder_username']}"
     return b.get("display_name") or b.get("name") or "môi giới"
+
+
+def _relay_label(uid, r):
+    """Label for a broker in this request's context.
+
+    Anonymous (role-based) until both sides consented to connect;
+    after mutual consent the real identity is shown.
+    """
+    try:
+        uid = int(uid)
+    except (TypeError, ValueError):
+        return "môi giới"
+    if uid != r["broker_id"]:
+        rp = db.get_match_response(r["id"], uid)
+        if rp and rp.get("requester_consent") and rp.get("responder_consent"):
+            return _public_label(db.get_broker(uid))
+    return _anon_label(uid, r)
+
+
+def _contact_card(broker):
+    """Contact info card revealed after mutual consent."""
+    b = broker or {}
+    lines = [f"👤 {b.get('display_name') or b.get('name') or 'Môi giới'}"]
+    if b.get("username"):
+        lines.append(f"✈️ Telegram: @{b['username']}")
+    if b.get("phone"):
+        lines.append(f"📱 SĐT: {b['phone']}")
+    if b.get("zalo"):
+        lines.append(f"💬 Zalo: {b['zalo']}")
+    if b.get("facebook"):
+        lines.append(f"📘 Facebook: {b['facebook']}")
+    return "\n".join(lines)
 
 
 def _listing_brief(lst):
@@ -247,20 +288,20 @@ def _response_listings(rp):
 
 
 def _responses_text_kb(r, resps):
-    """Summary text + relay buttons for the requesting broker.
+    """Summary text + relay/connect buttons for the requesting broker.
 
-    Responder identities stay anonymous ("Môi giới N") until both sides
-    agree to connect via the relay.
+    Responder identities stay anonymous (role-based labels) until both
+    sides agree to connect via the connect flow.
     """
     c = db.get_client(r["client_id"])
     client_name = (c.get("name") if c else None) or "khách"
-    lines = [f"🎉 Có {len(resps)} môi giới phản hồi cho khách"
+    lines = [f"🎉 Có {len(resps)} phản hồi cho khách"
              f" <b>{client_name}</b>:"]
     kb = []
-    for i, rp in enumerate(resps, start=1):
+    for rp in resps:
         lids, scores = _response_listings(rp)
         best = max([scores.get(lid, 0) for lid in lids] + [0])
-        lines.append(f"<b>Môi giới {i}</b> (khớp cao nhất {best}%):")
+        lines.append(f"<b>{RESPONDER_LABEL}</b> (khớp cao nhất {best}%):")
         for lid in lids:
             lst = db.get_listing(lid)
             if not lst:
@@ -268,9 +309,24 @@ def _responses_text_kb(r, resps):
             sc = scores.get(lid)
             score_txt = f" — khớp {sc}%" if sc is not None else ""
             lines.append(f"  • {_listing_brief(lst)}{score_txt}")
-        kb.append([InlineKeyboardButton(
-            f"💬 Nhắn tin (Môi giới {i})",
-            callback_data=f"mresp:msg:{r['id']}:{rp['responder_broker_id']}")])
+        rid = rp["responder_broker_id"]
+        msg_cb = f"mresp:msg:{r['id']}:{rid}"
+        if rp.get("requester_consent") and rp.get("responder_consent"):
+            lines.append("  ✅ Đã kết nối — xem SĐT trong tin nhắn riêng nhé")
+            kb.append([InlineKeyboardButton(
+                f"💬 Nhắn tin ({RESPONDER_LABEL})", callback_data=msg_cb)])
+        elif rp.get("requester_consent"):
+            lines.append("  ⏳ Đã gửi lời mời kết nối, đang chờ phản hồi…")
+            kb.append([InlineKeyboardButton(
+                f"💬 Nhắn tin ({RESPONDER_LABEL})", callback_data=msg_cb)])
+        else:
+            kb.append([
+                InlineKeyboardButton(
+                    f"💬 Nhắn tin", callback_data=msg_cb),
+                InlineKeyboardButton(
+                    "🤝 Kết nối",
+                    callback_data=f"mresp:connect:{r['id']}:{rid}"),
+            ])
     return "\n".join(lines), InlineKeyboardMarkup(kb)
 
 
@@ -326,11 +382,9 @@ async def match_broadcast_send(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                     "⬅️ Quay lại",
                     callback_data=f"client:{client_id}:0:a:a")]]))
         return
-    u = q.from_user
-    broker = db.get_broker(uid) or {}
-    broker_label = (f"@{u.username}" if u.username
-                    else broker.get("display_name") or broker.get("name")
-                    or "môi giới")
+    # broadcast stays anonymous: role label only, real identity is
+    # revealed only after mutual consent in the connect flow
+    broker_label = REQUESTER_LABEL
     req_summary = _client_req_summary(c)
     try:
         sent = await ctx.bot.send_message(
@@ -413,7 +467,7 @@ async def match_request_close(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if config.BROKER_GROUP_ID and r.get("group_message_id"):
         try:
             orig = _broadcast_text(r["requirements_summary"],
-                                   r["urgency"], "môi giới")
+                                   r["urgency"], REQUESTER_LABEL)
             await ctx.bot.edit_message_text(
                 chat_id=int(config.BROKER_GROUP_ID),
                 message_id=r["group_message_id"],
@@ -677,6 +731,7 @@ async def match_responses_view(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     r = db.get_match_request(mr_id)
     if not r or r["broker_id"] != uid:
         return
+    db.mark_responses_seen(r["id"])
     resps = db.list_responses(r["id"])
     c = db.get_client(r["client_id"])
     client_name = (c.get("name") if c else None) or "khách"
@@ -738,6 +793,118 @@ async def match_relay_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await q.edit_message_text("Dạ ok, em hủy rồi nhé.")
 
 
+# ---- mutual-consent connect: reveal real contact info ----
+
+async def match_connect_request(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Requester taps 'Kết nối' -> ask the responder to accept/decline."""
+    q = update.callback_query
+    await q.answer()
+    uid = q.from_user.id
+    _, mr_id, target = _parse_mresp_cb(q.data)
+    r = db.get_match_request(mr_id)
+    if not r or r["broker_id"] != uid or not target.isdigit():
+        return
+    responder_id = int(target)
+    rp = db.get_match_response(mr_id, responder_id)
+    if not rp:
+        return
+    if rp.get("requester_consent") and rp.get("responder_consent"):
+        await q.answer("Đã kết nối rồi nhé!", show_alert=True)
+        return
+    db.set_match_consent(mr_id, responder_id, requester_consent=1)
+    pn = get_pronoun(uid)
+    try:
+        await ctx.bot.send_message(
+            chat_id=responder_id,
+            text=(f"🤝 <b>{REQUESTER_LABEL}</b> muốn kết nối trực tiếp"
+                  f" với {pn} về yêu cầu [{r['requirements_summary']}].\n\n"
+                  f"Đồng ý thì em gửi thông tin liên hệ của 2 bên cho nhau nhé.",
+                  ),
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton(
+                    "✅ Đồng ý kết nối",
+                    callback_data=f"mresp:accept:{mr_id}")],
+                [InlineKeyboardButton(
+                    "❌ Từ chối",
+                    callback_data=f"mresp:decline:{mr_id}")],
+            ]))
+    except Exception as e:
+        log.warning("connect request DM failed: %s", e)
+        await q.edit_message_text(
+            "Em chưa nhắn được cho bên kia, anh thử lại sau nhé.")
+        return
+    await q.edit_message_text(
+        "Em đã gửi lời mời kết nối rồi nhé ✓\n"
+        "Bên kia đồng ý là em gửi thông tin liên hệ ngay.")
+
+
+async def match_connect_accept(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Responder accepts -> mutual consent: reveal contacts to both sides."""
+    q = update.callback_query
+    await q.answer()
+    uid = q.from_user.id
+    _, mr_id, _ = _parse_mresp_cb(q.data)
+    r = db.get_match_request(mr_id)
+    rp = db.get_match_response(mr_id, uid) if r else None
+    if not r or not rp:
+        await q.edit_message_text("Yêu cầu này không còn nữa ạ.")
+        return
+    if not rp.get("requester_consent"):
+        await q.edit_message_text("Bên kia đã rút lời mời rồi ạ.")
+        return
+    _, just_unlocked = db.set_match_consent(mr_id, uid, responder_consent=1)
+    requester_id = r["broker_id"]
+    if just_unlocked:
+        db.bump_match_stats(requester_id, contacts_unlocked=1)
+        db.bump_match_stats(uid, contacts_unlocked=1)
+        req_card = _contact_card(db.get_broker(requester_id))
+        resp_card = _contact_card(db.get_broker(uid))
+        try:
+            await ctx.bot.send_message(
+                chat_id=requester_id,
+                text=(f"🎉 <b>{RESPONDER_LABEL}</b> đã đồng ý kết nối!\n\n"
+                      f"{resp_card}\n\n"
+                      f"Hai bên tự trao đổi tiếp nhé 🤝"),
+                parse_mode="HTML")
+        except Exception as e:
+            log.warning("unlock DM to requester failed: %s", e)
+        try:
+            await ctx.bot.send_message(
+                chat_id=uid,
+                text=(f"🎉 Đã kết nối với <b>{REQUESTER_LABEL}</b>!\n\n"
+                      f"{req_card}\n\n"
+                      f"Hai bên tự trao đổi tiếp nhé 🤝"),
+                parse_mode="HTML")
+        except Exception as e:
+            log.warning("unlock DM to responder failed: %s", e)
+    await q.edit_message_text(
+        "Đã kết nối ✓ Em đã gửi thông tin liên hệ của 2 bên rồi nhé.")
+
+
+async def match_connect_decline(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Responder declines -> notify the requester (stays anonymous)."""
+    q = update.callback_query
+    await q.answer()
+    uid = q.from_user.id
+    _, mr_id, _ = _parse_mresp_cb(q.data)
+    r = db.get_match_request(mr_id)
+    rp = db.get_match_response(mr_id, uid) if r else None
+    if not r or not rp:
+        await q.edit_message_text("Yêu cầu này không còn nữa ạ.")
+        return
+    db.set_match_consent(mr_id, uid, requester_consent=0)
+    try:
+        await ctx.bot.send_message(
+            chat_id=r["broker_id"],
+            text=(f"{RESPONDER_LABEL} đã từ chối kết nối cho yêu cầu"
+                  f" [{r['requirements_summary']}]."),
+            parse_mode="HTML")
+    except Exception as e:
+        log.warning("decline notify failed: %s", e)
+    await q.edit_message_text("Dạ ok, em đã báo lại bên kia rồi nhé.")
+
+
 async def _handle_relay_message(update, ctx, rl, text):
     """Forward one relayed message via the bot; log it to the thread."""
     uid = update.effective_user.id
@@ -774,6 +941,62 @@ async def _handle_relay_message(update, ctx, rl, text):
     other_label = rl.get("other_label") or "bên kia"
     await update.message.reply_text(
         f"Em đã chuyển tin nhắn tới {other_label} rồi nhé ✓")
+
+
+# ---- admin: match demand dashboard ----
+
+def _broker_short(b):
+    b = b or {}
+    if b.get("username"):
+        return f"@{b['username']}"
+    return b.get("display_name") or b.get("name") or f"id:{b.get('user_id')}"
+
+
+async def cmd_matchstats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """/matchstats — admin-only cross-broker match demand dashboard.
+
+    Used to decide whether Phase 2 (per-match fee) is worth building.
+    """
+    if update.effective_user.id != config.ADMIN_TELEGRAM_ID:
+        await update.message.reply_text("⛔ Lệnh này chỉ dành cho admin.")
+        return
+    stats = db.match_overview_stats()
+    w, m = stats["week"], stats["month"]
+
+    def conv(s):
+        if not s["responses"]:
+            return "—"
+        return f"{s['unlocks'] / s['responses'] * 100:.0f}%"
+
+    lines = [
+        "📊 <b>MATCH STATS</b>",
+        "",
+        f"🕐 <b>7 ngày:</b> {w['requests']} yêu cầu ·"
+        f" {w['responses']} phản hồi · {w['unlocks']} kết nối",
+        f"🗓️ <b>30 ngày:</b> {m['requests']} yêu cầu ·"
+        f" {m['responses']} phản hồi · {m['unlocks']} kết nối",
+        f"📈 <b>Tỉ lệ mở khóa liên hệ</b> (kết nối/phản hồi):"
+        f" 7d {conv(w)} · 30d {conv(m)}",
+        "",
+        "🏆 <b>Top đăng nhu cầu:</b>",
+    ]
+    top_req = db.top_match_requesters(limit=5)
+    if top_req:
+        for i, b in enumerate(top_req, start=1):
+            lines.append(f"  {i}. {_broker_short(b)}"
+                         f" — {b['match_requests_sent']} yêu cầu")
+    else:
+        lines.append("  (chưa có)")
+    lines.append("")
+    lines.append("🤝 <b>Top phản hồi:</b>")
+    top_resp = db.top_match_responders(limit=5)
+    if top_resp:
+        for i, b in enumerate(top_resp, start=1):
+            lines.append(f"  {i}. {_broker_short(b)}"
+                         f" — {b['responses']} phản hồi")
+    else:
+        lines.append("  (chưa có)")
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 
 # ---- delete client ----

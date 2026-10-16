@@ -25,6 +25,10 @@ CREATE TABLE IF NOT EXISTS brokers (
     status         TEXT NOT NULL DEFAULT 'new',
     listings_count INTEGER NOT NULL DEFAULT 0,
     approved_count INTEGER NOT NULL DEFAULT 0,
+    match_requests_sent     INTEGER NOT NULL DEFAULT 0,
+    match_responses_received INTEGER NOT NULL DEFAULT 0,
+    match_contacts_unlocked INTEGER NOT NULL DEFAULT 0,
+    last_match_at  REAL,
     created_at     REAL NOT NULL,
     updated_at     REAL NOT NULL
 );
@@ -165,6 +169,8 @@ CREATE TABLE IF NOT EXISTS match_responses (
     listing_ids         TEXT NOT NULL DEFAULT '[]',
     match_scores        TEXT NOT NULL DEFAULT '{}',
     messages            TEXT NOT NULL DEFAULT '[]',
+    requester_consent   INTEGER NOT NULL DEFAULT 0,
+    responder_consent   INTEGER NOT NULL DEFAULT 0,
     created_at          REAL NOT NULL,
     updated_at          REAL NOT NULL
 );
@@ -322,6 +328,15 @@ def _migrate_brokers(conn):
             "ALTER TABLE brokers ADD COLUMN listing_limit INTEGER NOT NULL"
             " DEFAULT 20"
         )
+    # cross-broker match analytics (2026-10-16)
+    for col, ddl in (
+        ("match_requests_sent", "INTEGER NOT NULL DEFAULT 0"),
+        ("match_responses_received", "INTEGER NOT NULL DEFAULT 0"),
+        ("match_contacts_unlocked", "INTEGER NOT NULL DEFAULT 0"),
+        ("last_match_at", "REAL"),
+    ):
+        if col not in cols:
+            conn.execute(f"ALTER TABLE brokers ADD COLUMN {col} {ddl}")
 
 
 def _migrate_match_requests(conn):
@@ -346,6 +361,13 @@ def _migrate_match_responses(conn):
             "ALTER TABLE match_responses"
             " ADD COLUMN match_scores TEXT NOT NULL DEFAULT '{}'"
         )
+    # mutual-consent flags for anonymous-until-consent relay (2026-10-16)
+    for col in ("requester_consent", "responder_consent"):
+        if col not in cols:
+            conn.execute(
+                f"ALTER TABLE match_responses ADD COLUMN {col}"
+                " INTEGER NOT NULL DEFAULT 0"
+            )
 
 
 def _migrate_listings_duplicate_of(conn):
@@ -389,7 +411,9 @@ def get_or_create_broker(user_id, username=None, display_name=None, path=None):
 def update_broker(user_id, path=None, **fields):
     allowed = {"username", "display_name", "name", "pronoun", "phone", "zalo",
                "facebook", "status", "listings_count", "approved_count",
-               "tier", "tier_expires_at", "listing_limit"}
+               "tier", "tier_expires_at", "listing_limit",
+               "match_requests_sent", "match_responses_received",
+               "match_contacts_unlocked", "last_match_at"}
     sets = ", ".join(f"{k} = ?" for k in fields if k in allowed)
     if not sets:
         return
@@ -412,6 +436,161 @@ def get_broker(user_id, path=None):
     ).fetchone()
     conn.close()
     return dict(row) if row else None
+
+
+# ---- cross-broker match analytics (2026-10-16) ----
+
+def bump_match_stats(broker_id, path=None, requests_sent=0,
+                     responses_received=0, contacts_unlocked=0):
+    """Atomically increment a broker's match counters and touch
+    last_match_at. Always bumps last_match_at when called."""
+    sets, vals = [], []
+    if requests_sent:
+        sets.append("match_requests_sent = match_requests_sent + ?")
+        vals.append(requests_sent)
+    if responses_received:
+        sets.append("match_responses_received = match_responses_received + ?")
+        vals.append(responses_received)
+    if contacts_unlocked:
+        sets.append("match_contacts_unlocked = match_contacts_unlocked + ?")
+        vals.append(contacts_unlocked)
+    sets.append("last_match_at = ?")
+    vals.append(_now())
+    vals.append(broker_id)
+    conn = connect(path)
+    conn.execute(f"UPDATE brokers SET {', '.join(sets)} WHERE user_id = ?",
+                 vals)
+    conn.commit()
+    conn.close()
+
+
+def get_match_stats(broker_id, path=None):
+    """Per-broker cross-broker match usage stats."""
+    b = get_broker(broker_id, path=path) or {}
+    return {
+        "match_requests_sent": b.get("match_requests_sent") or 0,
+        "match_responses_received": b.get("match_responses_received") or 0,
+        "match_contacts_unlocked": b.get("match_contacts_unlocked") or 0,
+        "last_match_at": b.get("last_match_at"),
+    }
+
+
+def get_match_response(request_id, responder_broker_id, path=None):
+    """One broker's response row for a request (or None)."""
+    conn = connect(path)
+    row = conn.execute(
+        "SELECT * FROM match_responses"
+        " WHERE request_id = ? AND responder_broker_id = ?",
+        (request_id, responder_broker_id),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def set_match_consent(request_id, responder_broker_id, requester_consent=None,
+                      responder_consent=None, path=None):
+    """Set one side's consent flag. Returns (row_dict, just_unlocked).
+
+    just_unlocked is True only on the transition to both-consented."""
+    conn = connect(path)
+    row = conn.execute(
+        "SELECT * FROM match_responses"
+        " WHERE request_id = ? AND responder_broker_id = ?",
+        (request_id, responder_broker_id),
+    ).fetchone()
+    if not row:
+        conn.close()
+        return None, False
+    was = bool(row["requester_consent"]) and bool(row["responder_consent"])
+    sets, vals = [], []
+    if requester_consent is not None:
+        sets.append("requester_consent = ?")
+        vals.append(1 if requester_consent else 0)
+    if responder_consent is not None:
+        sets.append("responder_consent = ?")
+        vals.append(1 if responder_consent else 0)
+    if sets:
+        vals.extend([_now(), request_id, responder_broker_id])
+        conn.execute(
+            f"UPDATE match_responses SET {', '.join(sets)}, updated_at = ?"
+            " WHERE request_id = ? AND responder_broker_id = ?",
+            vals,
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT * FROM match_responses"
+            " WHERE request_id = ? AND responder_broker_id = ?",
+            (request_id, responder_broker_id),
+        ).fetchone()
+    conn.close()
+    d = dict(row)
+    just = (not was) and bool(d["requester_consent"]) \
+        and bool(d["responder_consent"])
+    return d, just
+
+
+def match_overview_stats(path=None):
+    """Aggregate match demand stats for the admin dashboard.
+
+    Returns {"week": {...}, "month": {...}} with requests/responses/unlocks.
+    Unlocks count mutual-consent pairs (updated_at used as unlock proxy)."""
+    now = _now()
+    out = {}
+    conn = connect(path)
+    for days, key in ((7, "week"), (30, "month")):
+        cutoff = now - days * 86400
+        req = conn.execute(
+            "SELECT COUNT(*) c FROM match_requests WHERE created_at >= ?",
+            (cutoff,),
+        ).fetchone()["c"]
+        resp = conn.execute(
+            "SELECT COUNT(*) c FROM match_responses WHERE created_at >= ?",
+            (cutoff,),
+        ).fetchone()["c"]
+        unl = conn.execute(
+            "SELECT COUNT(*) c FROM match_responses"
+            " WHERE requester_consent = 1 AND responder_consent = 1"
+            " AND updated_at >= ?",
+            (cutoff,),
+        ).fetchone()["c"]
+        out[key] = {"requests": req, "responses": resp, "unlocks": unl}
+    conn.close()
+    return out
+
+
+def top_match_requesters(limit=5, path=None):
+    """Brokers ranked by match_requests_sent."""
+    conn = connect(path)
+    rows = conn.execute(
+        "SELECT user_id, username, display_name, name, match_requests_sent"
+        " FROM brokers WHERE match_requests_sent > 0"
+        " ORDER BY match_requests_sent DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def top_match_responders(limit=5, path=None):
+    """Brokers ranked by number of match responses sent."""
+    conn = connect(path)
+    rows = conn.execute(
+        "SELECT responder_broker_id AS user_id, COUNT(*) AS n"
+        " FROM match_responses GROUP BY responder_broker_id"
+        " ORDER BY n DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
+    conn.close()
+    out = []
+    for r in rows:
+        b = get_broker(r["user_id"], path=path) or {}
+        out.append({
+            "user_id": r["user_id"],
+            "responses": r["n"],
+            "username": b.get("username"),
+            "display_name": b.get("display_name") or b.get("name"),
+        })
+    return out
 
 
 # ---------------------------------------------------------------- tiers
@@ -1756,6 +1935,7 @@ def create_match_request(broker_id, client_id, requirements_summary,
     )
     conn.commit()
     conn.close()
+    bump_match_stats(broker_id, path=path, requests_sent=1)
     return mr_id
 
 
@@ -1984,6 +2164,11 @@ def add_match_response(request_id, responder_broker_id, responder_username=None,
     ).fetchone()["c"]
     conn.commit()
     conn.close()
+    # analytics: requester gained a response; responder was active
+    req = get_match_request(request_id, path=path)
+    if req:
+        bump_match_stats(req["broker_id"], path=path, responses_received=1)
+    bump_match_stats(responder_broker_id, path=path)
     return True, n
 
 
