@@ -661,13 +661,44 @@ async def _upload_photos_and_check_dups(photos_mod, listing_id, file_ids,
         db.add_photo_url(lid, url)
         db.add_photo_hash(lid, url, dhash, phash)
 
+    # Notify: photos are uploading (instead of silence)
+    n = len(file_ids) if file_ids else 0
+    status_msg = None
+    if n:
+        try:
+            status_msg = await ctx.bot.send_message(
+                chat_id, f"\U0001f4e4 \u0110ang up {n} \u1ea3nh l\u00ean cloud...")
+        except Exception:
+            log.warning("upload status msg failed", exc_info=True)
+
     try:
         done = await photos_mod.upload_listing_photos(
             listing_id, file_ids, token, _store)
     except Exception:
         log.warning("bg photo upload failed for %s", listing_id,
                     exc_info=True)
+        if status_msg:
+            try:
+                await ctx.bot.edit_message_text(
+                    "\u274c Up \u1ea3nh th\u1ea5t b\u1ea1i, th\u1eed l\u1ea1i sau nh\u00e9.",
+                    chat_id, status_msg.message_id)
+            except Exception:
+                pass
         return
+
+    # Notify completion
+    if status_msg:
+        try:
+            ok = len(done)
+            if ok >= n:
+                txt = f"\u2705 \u0110\u00e3 up xong {ok} \u1ea3nh."
+            else:
+                txt = (f"\u2705 \u0110\u00e3 up {ok}/{n} \u1ea3nh "
+                       f"({n - ok} \u1ea3nh l\u1ed7i).")
+            await ctx.bot.edit_message_text(txt, chat_id,
+                                            status_msg.message_id)
+        except Exception:
+            log.warning("upload done msg failed", exc_info=True)
 
     # Dedup check: collect first match per other listing.
     seen_old = {}
