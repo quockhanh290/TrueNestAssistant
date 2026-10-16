@@ -31,7 +31,7 @@ log = logging.getLogger("linh")
 
 MENU_KB = InlineKeyboardMarkup([
     [InlineKeyboardButton("📝 Gửi tin mới", callback_data="menu:new")],
-    [InlineKeyboardButton("📋 Tin của tôi", callback_data="menu:list:0:all")],
+    [InlineKeyboardButton("📋 Tin của tôi", callback_data="menu:list:0:s:a")],
     [InlineKeyboardButton("✍️ Viết tin FB", callback_data="menu:write")],
     [InlineKeyboardButton("❓ Hướng dẫn", callback_data="menu:help")],
 ])
@@ -48,6 +48,98 @@ LIST_FILTERS = {
     "rented": {"label": "Đã cho thuê", "statuses": ("rented",)},
 }
 
+# status labels for display
+STATUS_LABEL = {
+    "draft": "nháp", "pending_info": "thiếu info", "submitted": "đang trống",
+    "rented": "đã cho thuê", "expired": "hết hạn", "deleted": "đã xoá",
+}
+
+# filter option codes (compact for callback_data)
+DISTRICT_CODES = {
+    "st": "Sơn Trà", "hc": "Hải Châu", "nhs": "Ngũ Hành Sơn",
+    "lc": "Liên Chiểu", "cl": "Cẩm Lệ", "tk": "Thanh Khê",
+}
+PRICE_RANGES = {
+    # code: (label, min_vnd, max_vnd)
+    "u8": ("Dưới 8tr", None, 8_000_000),
+    "812": ("8-12tr", 8_000_000, 12_000_000),
+    "1220": ("12-20tr", 12_000_000, 20_000_000),
+    "o20": ("Trên 20tr", 20_000_000, None),
+}
+BR_OPTIONS = [("0", "Studio"), ("1", "1PN"), ("2", "2PN"), ("3", "3PN"), ("4", "4PN+")]
+
+
+def _parse_filter_str(fs):
+    """'s:a,br:2,pr:812,di:st' -> {'s': 'a', 'br': '2', ...}"""
+    d = {}
+    for part in (fs or "").split(","):
+        if ":" in part:
+            k, v = part.split(":", 1)
+            if v and v != "-":
+                d[k] = v
+    return d
+
+
+def _build_filter_str(d):
+    return ",".join(f"{k}:{v}" for k, v in sorted(d.items()) if v and v != "-")
+
+
+def _filters_to_search(f):
+    """Convert UI filter dict to db.search_listings() filters."""
+    sf = {}
+    s = f.get("s", "a")
+    if s == "t":
+        sf["status"] = "active"
+    elif s == "r":
+        sf["status"] = "rented"
+    # s == "a" -> default (hide deleted)
+
+    br = f.get("br")
+    if br == "0":
+        sf["bedrooms"] = 0.0
+    elif br in ("1", "2", "3"):
+        sf["bedrooms"] = float(br)
+    elif br == "4":
+        sf["min_bedrooms"] = 4.0
+
+    pr = f.get("pr")
+    if pr in PRICE_RANGES:
+        _, mn, mx = PRICE_RANGES[pr]
+        if mn:
+            sf["min_price"] = float(mn)
+        if mx:
+            sf["max_price"] = float(mx)
+
+    di = f.get("di")
+    if di in DISTRICT_CODES:
+        sf["district"] = DISTRICT_CODES[di]
+
+    return sf
+
+
+def _describe_ui_filters(f):
+    """Short Vietnamese description of active UI filters."""
+    bits = []
+    s = f.get("s", "a")
+    if s == "t":
+        bits.append("đang trống")
+    elif s == "r":
+        bits.append("đã cho thuê")
+    br = f.get("br")
+    if br == "0":
+        bits.append("Studio")
+    elif br in ("1", "2", "3"):
+        bits.append(f"{br}PN")
+    elif br == "4":
+        bits.append("4PN+")
+    pr = f.get("pr")
+    if pr in PRICE_RANGES:
+        bits.append(PRICE_RANGES[pr][0])
+    di = f.get("di")
+    if di in DISTRICT_CODES:
+        bits.append(DISTRICT_CODES[di])
+    return ", ".join(bits)
+
 
 def rel_time(ts):
     """'3 ngày trước', '2 giờ trước', 'vừa xong'."""
@@ -62,14 +154,14 @@ def rel_time(ts):
 
 
 def parse_listing_cb(data, action):
-    """Parse 'action:tg:<hex>:page[:filter]' — listing ids contain a colon.
-    Returns (listing_id, page, filt)."""
+    """Parse 'action:tg:<hex>:page[:filter_str]' — listing ids contain a colon.
+    Returns (listing_id, page, filter_str). filter_str like 's:a,br:2'."""
     rest = data[len(action) + 1:]          # strip "action:"
-    # rest = "tg:<hex>:page[:filter]"
-    m = __import__("re").match(r"^(tg:[0-9a-f]+):(\d+)(?::(\w+))?$", rest)
+    # rest = "tg:<hex>:page[:filter_str]"
+    m = __import__("re").match(r"^(tg:[0-9a-f]+):(\d+)(?::(.+))?$", rest)
     if not m:
-        return None, "0", "all"
-    return m.group(1), m.group(2), m.group(3) or "all"
+        return None, "0", "s:a"
+    return m.group(1), m.group(2), m.group(3) or "s:a"
 
 # per-user collection buffer: {user_id: {"texts": [], "photos": [], "deadline": ts}}
 _buffers = {}
@@ -95,13 +187,38 @@ def fmt_price(v):
 
 
 def listing_line(l):
+    """Two-line compact display with essential info:
+    🏠 2PN An Thượng, 12tr/tháng
+    📐 52m² | 🛋️ Full NT | 🐾 Pet OK | 👀 23 | ✅ đang trống
+    """
     p = l["parsed"]
     br = p.get("bedrooms")
     br_s = "studio" if br == 0.0 else (f"{int(br)}PN" if br else "?PN")
     loc = p.get("building_name") or p.get("district") or "?"
-    st = STATUS_EMOJI.get(l["status"], "•")
-    return (f"{st} {br_s} {loc}, {fmt_price(p.get('price_vnd'))}"
-            f" — 👀 {l['view_count']}")
+    price = fmt_price(p.get("price_vnd"))
+
+    line1 = f"🏠 {br_s} {loc}, {price}/tháng"
+
+    bits = []
+    area = p.get("area_m2")
+    if area:
+        bits.append(f"📐 {area:g}m²")
+    furn = p.get("furnishing")
+    if furn:
+        furn_s = {"full": "Full NT", "basic": "NT cơ bản",
+                  "empty": "Trống"}.get(furn, furn)
+        bits.append(f"🛋️ {furn_s}")
+    pet = p.get("pet_friendly")
+    if pet is True:
+        bits.append("🐾 Pet OK")
+    elif pet is False:
+        bits.append("🐾 No pet")
+    bits.append(f"👀 {l['view_count']}")
+    st_emoji = STATUS_EMOJI.get(l["status"], "•")
+    st_label = STATUS_LABEL.get(l["status"], l["status"])
+    bits.append(f"{st_emoji} {st_label}")
+
+    return f"{line1}\n{' | '.join(bits)}"
 
 
 # ---------------------------------------------------------------- /start
@@ -132,8 +249,9 @@ async def show_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "❓ <b>Hướng dẫn</b>\n\n"
         "📝 <b>Gửi tin mới:</b> bấm nút rồi gửi text + ảnh của tin. "
         "Gửi xong em tự đọc và tóm tắt lại, thiếu gì em hỏi thêm.\n\n"
-        "📋 <b>Tin của tôi:</b> xem lại các tin đã gửi, lọc theo trạng thái, "
-        "đánh dấu đã cho thuê. Anh cũng có thể gõ trực tiếp kiểu "
+        "📋 <b>Tin của tôi:</b> xem lại các tin đã gửi, lọc theo trạng thái "
+        "(đang trống / đã cho thuê), theo số PN, khoảng giá, khu vực. "
+        "Đánh dấu đã cho thuê khi xong. Anh cũng có thể gõ trực tiếp kiểu "
         "'cho xem tin 2PN dưới 15tr' để em tìm giúp.\n\n"
         "✍️ <b>Viết tin FB:</b> em viết giúp anh tin đăng Facebook "
         "tiếng Việt / Anh / Hàn / Trung / Nga từ tin đã có.\n\n"
@@ -457,50 +575,144 @@ async def show_my_listings(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     uid = q.from_user.id
-    parts = q.data.split(":")
-    page = int(parts[2]) if len(parts) > 2 else 0
-    filt = parts[3] if len(parts) > 3 else "all"
-    if filt not in LIST_FILTERS:
-        filt = "all"
+    # callback: menu:list:{page}:{filter_str}  e.g. menu:list:0:s:a,br:2
+    rest = q.data[len("menu:list:"):]
+    parts = rest.split(":", 1)
+    page = int(parts[0]) if parts[0].isdigit() else 0
+    fstr = parts[1] if len(parts) > 1 else "s:a"
+    f = _parse_filter_str(fstr)
+    if "s" not in f:
+        f["s"] = "a"
+    fstr = _build_filter_str(f) or "s:a"
+
     per = 5
-    statuses = LIST_FILTERS[filt]["statuses"]
-    total = db.count_broker_listings(uid, statuses=statuses)
-    items = db.list_broker_listings(uid, limit=per, offset=page * per,
-                                    statuses=statuses)
+    sf = _filters_to_search(f)
+    total = db.count_search(uid, sf)
+    items = db.search_listings(uid, sf, limit=per, offset=page * per)
+
+    # header with active filter description
+    desc = _describe_ui_filters(f)
+    has_extra = any(k in f for k in ("br", "pr", "di"))
     if not items:
-        msg = ("Anh chưa có tin nào trong mục này. "
-               "Bấm 📝 Gửi tin mới để bắt đầu nhé!"
-               if total == 0 else
-               "Không có tin nào trong mục này anh ơi.")
-        await q.edit_message_text(msg, reply_markup=MENU_KB)
+        msg = ("Anh chưa có tin nào. Bấm 📝 Gửi tin mới để bắt đầu nhé!"
+               if total == 0 and not has_extra else
+               f"Không có tin nào khớp bộ lọc ({desc}) anh ơi. "
+               "Thử nới điều kiện ra nhé?")
+        kb = [[InlineKeyboardButton("❌ Xóa hết lọc",
+                                    callback_data="menu:list:0:s:a")]] \
+            if has_extra else None
+        await q.edit_message_text(
+            msg,
+            reply_markup=InlineKeyboardMarkup(kb) if kb else MENU_KB)
         return
+
     lines = [f"<b>📋 Tin của anh ({total}):</b>"]
+    if has_extra or f.get("s", "a") != "a":
+        lines.append(f"🔍 Đang lọc: {desc}")
     kb = []
-    # quick filter row
-    frow = []
-    for key, meta in LIST_FILTERS.items():
-        mark = "● " if key == filt else ""
-        frow.append(InlineKeyboardButton(
-            f"{mark}{meta['label']}",
-            callback_data=f"menu:list:0:{key}"))
-    kb.append(frow)
+
+    # row 1: status quick filters
+    srow = []
+    for key, code in (("all", "a"), ("active", "t"), ("rented", "r")):
+        label = LIST_FILTERS[key]["label"]
+        mark = "● " if f.get("s", "a") == code else ""
+        nf = dict(f)
+        nf["s"] = code
+        srow.append(InlineKeyboardButton(
+            f"{mark}{label}",
+            callback_data=f"menu:list:0:{_build_filter_str(nf)}"))
+    kb.append(srow)
+
+    # row 2: attribute filters
+    arow = []
+    for label, kind in (("🛏️ PN", "br"), ("💰 Giá", "pr"), ("📍 Khu vực", "di")):
+        mark = "● " if f.get(kind) else ""
+        arow.append(InlineKeyboardButton(
+            f"{mark}{label}",
+            callback_data=f"flt:{kind}:{page}:{fstr}"))
+    kb.append(arow)
+
+    # listings (2-line display, ━━━ separator)
     for i, l in enumerate(items, start=page * per + 1):
+        if i > page * per + 1:
+            lines.append("━━━━━━━━━━━━")
         lines.append(f"{i}. {listing_line(l)}")
         kb.append([InlineKeyboardButton(
-            f"{i}. Chi tiết", callback_data=f"detail:{l['id']}:{page}:{filt}")])
+            f"{i}. Chi tiết", callback_data=f"detail:{l['id']}:{page}:{fstr}")])
+
+    # clear-all row (only when extra filters active)
+    if has_extra:
+        kb.append([InlineKeyboardButton("❌ Xóa hết lọc",
+                                        callback_data="menu:list:0:s:a")])
+
     nav = []
     if page > 0:
         nav.append(InlineKeyboardButton(
-            "⬅️", callback_data=f"menu:list:{page-1}:{filt}"))
+            "⬅️", callback_data=f"menu:list:{page-1}:{fstr}"))
     if (page + 1) * per < total:
         nav.append(InlineKeyboardButton(
-            "➡️", callback_data=f"menu:list:{page+1}:{filt}"))
+            "➡️", callback_data=f"menu:list:{page+1}:{fstr}"))
     if nav:
         kb.append(nav)
     kb.append([InlineKeyboardButton("⬅️ Menu", callback_data="menu:back")])
     await natural_delay(update)
     await q.edit_message_text("\n".join(lines), parse_mode="HTML",
                               reply_markup=InlineKeyboardMarkup(kb))
+
+
+# ---------------------------------------------------------------- filter pickers
+
+async def show_filter_picker(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Show bedroom / price / district picker. callback: flt:{kind}:{page}:{fstr}"""
+    q = update.callback_query
+    await q.answer()
+    parts = q.data.split(":", 3)  # flt, kind, page, fstr
+    kind = parts[1]
+    page = parts[2]
+    fstr = parts[3] if len(parts) > 3 else "s:a"
+    f = _parse_filter_str(fstr)
+
+    kb = []
+    if kind == "br":
+        title = "Chọn số phòng ngủ:"
+        for code, label in BR_OPTIONS:
+            mark = "● " if f.get("br") == code else ""
+            nf = dict(f)
+            nf["br"] = code
+            kb.append([InlineKeyboardButton(
+                f"{mark}{label}",
+                callback_data=f"menu:list:0:{_build_filter_str(nf)}")])
+    elif kind == "pr":
+        title = "Chọn khoảng giá:"
+        for code, (label, _, _) in PRICE_RANGES.items():
+            mark = "● " if f.get("pr") == code else ""
+            nf = dict(f)
+            nf["pr"] = code
+            kb.append([InlineKeyboardButton(
+                f"{mark}{label}",
+                callback_data=f"menu:list:0:{_build_filter_str(nf)}")])
+    elif kind == "di":
+        title = "Chọn khu vực:"
+        for code, label in DISTRICT_CODES.items():
+            mark = "● " if f.get("di") == code else ""
+            nf = dict(f)
+            nf["di"] = code
+            kb.append([InlineKeyboardButton(
+                f"{mark}{label}",
+                callback_data=f"menu:list:0:{_build_filter_str(nf)}")])
+    else:
+        return
+
+    # "clear this filter" option
+    if f.get(kind):
+        nf = dict(f)
+        nf.pop(kind, None)
+        kb.append([InlineKeyboardButton(
+            "❌ Bỏ lọc này",
+            callback_data=f"menu:list:0:{_build_filter_str(nf) or 's:a'}")])
+    kb.append([InlineKeyboardButton(
+        "⬅️ Quay lại", callback_data=f"menu:list:{page}:{fstr}")])
+    await q.edit_message_text(title, reply_markup=InlineKeyboardMarkup(kb))
 
 
 async def show_detail(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -937,6 +1149,8 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await on_new_listing_prompt(update, ctx)
     elif data.startswith("menu:list:"):
         await show_my_listings(update, ctx)
+    elif data.startswith("flt:"):
+        await show_filter_picker(update, ctx)
     elif data == "menu:write":
         await on_write_post_prompt(update, ctx)
     elif data == "write:new":
