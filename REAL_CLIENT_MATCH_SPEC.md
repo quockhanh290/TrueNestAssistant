@@ -160,7 +160,27 @@ Bảng mới: `commission_disputes` hoặc dùng chung cơ chế.
 - Nếu không ai nhận concierge → hoàn tiền khách? → chưa quyết định
 
 ## Chưa quyết định
-- [ ] Phí/mô hình kinh doanh cho match khách thật (free? thu phí broker? thu phí khách?)
-- [ ] Chế tài broker bypass (liên hệ khách ngoài luồng)
 - [ ] Bot nhận yêu cầu khách (build sau)
 - [ ] Concierge: không ai nhận thì hoàn tiền khách?
+
+## Pricing (rõ từ đầu, không free rồi đột ngột thu)
+- Beta 3 tháng đầu: FREE toàn bộ (đo demand, build case study)
+- Sau beta:
+  - Match thường: free
+  - Concierge: 250-300K/tin (khách trả, platform lấy 50K/tin)
+  - Hoa hồng deal: 20% cho platform
+
+## Broker xác nhận deal (thay voucher khách)
+- Sau 7 ngày: bot hỏi "Deal với [khách] sao rồi?"
+  [✅ Đã chốt] [❌ Chưa] [⏳ Đang đàm phán]
+- Sau 14 ngày (nếu chưa xong): hỏi lại
+- Sau 30 ngày: chốt sổ, không trả lời = "không chốt"
+- Tỷ lệ xác nhận → tính vào điểm uy tín
+
+## Lease tracking (chống bypass dài hạn)
+- Khi chốt: hỏi thời hạn HĐ → lưu ngày hết
+- Trước 45 ngày: bot chủ động nhắn khách
+  "Hợp đồng sắp hết. Gia hạn hay tìm chỗ mới?"
+  [Gia hạn với broker cũ] [Tìm chỗ mới]
+- Khách chọn broker cũ → platform vẫn track được deal
+- Khách chọn mới → chạy lại flow match
