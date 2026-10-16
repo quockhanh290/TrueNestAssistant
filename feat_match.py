@@ -626,6 +626,16 @@ async def on_group_reply(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return  # don't notify on own replies
     if db.has_responded(r["id"], replier.id):
         return  # already recorded: ignore silently
+    # Debt block: brokers with unpaid deals cannot reserve/submit.
+    if db.has_unpaid_debt(replier.id):
+        try:
+            await msg.reply_text(
+                "Anh còn công nợ chưa thanh toán 💰\n"
+                "Anh up bill chuyển khoản vào chat riêng với em"
+                " để tiếp tục nhé!")
+        except Exception as e:
+            log.warning("debt block reply failed: %s", e)
+        return
     pend = _pending_picks.setdefault(r["id"], set())
     if replier.id in pend:
         try:

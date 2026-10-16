@@ -46,3 +46,7 @@ FREE_LISTING_LIMIT = int(os.getenv("FREE_LISTING_LIMIT", "20"))  # max active li
 # Payment info for premium upgrades (shown in /premium)
 PAYMENT_BANK = os.getenv("PAYMENT_BANK", "VCB 1234567890 - NGUYEN VAN A")
 PAYMENT_MOMO = os.getenv("PAYMENT_MOMO", "0905123456")
+
+# Platform commission on closed deals (20%). Broker transfers this amount
+# after closing; receipt photo is verified by admin on phone.
+PLATFORM_FEE_RATE = float(os.getenv("PLATFORM_FEE_RATE", "0.20"))
