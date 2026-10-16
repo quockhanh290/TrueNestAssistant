@@ -105,39 +105,85 @@ def listing_detail(row):
 # ---------------------------------------------------------------- endpoints
 
 def get_listings(broker_id, q=None, bedrooms=None, status=None,
-                 limit=50, offset=0):
-    """GET /api/listings"""
-    if q or bedrooms or status:
-        filters = {}
-        if q:
-            # search_listings has no free-text; filter client-side instead
-            pass
-        if bedrooms:
-            if bedrooms == "studio":
-                filters["property_type"] = "studio"
-            elif bedrooms.endswith("+"):
-                try:
-                    filters["min_bedrooms"] = float(bedrooms[:-1])
-                except ValueError:
-                    pass
-            else:
-                try:
-                    filters["bedrooms"] = float(bedrooms)
-                except ValueError:
-                    pass
-        if status:
-            filters["status"] = status
-        rows = db.search_listings(broker_id, filters, limit=limit,
-                                  offset=offset)
+                 limit=50, offset=0, min_price=None, max_price=None,
+                 min_score=None, district=None, furnishing=None,
+                 pet_friendly=None, min_area=None, property_type=None,
+                 ids=None):
+    """GET /api/listings — filters map to schema FILTER_GROUPS.
+
+    ids: optional list of listing IDs to return (broker ownership checked).
+    Used by batch deep links (?view=batch&ids=...).
+    """
+    # Batch/deep-link mode: return exactly these IDs (ownership-checked).
+    if ids:
+        items = []
+        for lid in ids:
+            row = db.get_listing(lid)
+            if row and row.get("broker_id") == broker_id:
+                items.append(listing_summary(row))
+        return {"items": items, "total": len(items),
+                "limit": limit, "offset": 0,
+                "filter_groups": master_schema.FILTER_GROUPS}, 200
+
+    filters = {}
+    if bedrooms:
+        if bedrooms == "studio":
+            filters["property_type"] = "studio"
+        elif bedrooms.endswith("+"):
+            try:
+                filters["min_bedrooms"] = float(bedrooms[:-1])
+            except ValueError:
+                pass
+        else:
+            try:
+                filters["bedrooms"] = float(bedrooms)
+            except ValueError:
+                pass
+    if status:
+        filters["status"] = status
+    if property_type:
+        filters["property_type"] = property_type
+    if district:
+        filters["district"] = district
+
+    if filters:
+        rows = db.search_listings(broker_id, filters, limit=200, offset=0)
     else:
-        rows = db.list_broker_listings(broker_id, limit=limit, offset=offset)
-    items = [listing_summary(r) for r in rows]
+        rows = db.list_broker_listings(broker_id, limit=200, offset=0)
+
+    items = []
+    for r in rows:
+        p = master_schema.normalize_parsed(r.get("parsed") or {})
+        photo_count = len(r.get("photo_file_ids") or [])
+        score, _ = master_schema.quality_score(p, photo_count)
+
+        # Python-side filters (not in db.search_listings)
+        price = p.get("price_vnd")
+        if min_price and (not price or price < min_price):
+            continue
+        if max_price and (not price or price > max_price):
+            continue
+        if min_score and score < min_score:
+            continue
+        if furnishing and p.get("furnishing") != furnishing:
+            continue
+        if pet_friendly is not None and p.get("pet_friendly") != pet_friendly:
+            continue
+        area = p.get("area_m2")
+        if min_area and (not area or area < min_area):
+            continue
+
+        items.append(listing_summary(r))
+
     if q:
         ql = q.lower()
         items = [i for i in items if ql in i["title"].lower()]
-    total = db.count_broker_listings(broker_id)
+
+    total = len(items)
+    items = items[offset:offset + limit]
     return {"items": items, "total": total,
-            "limit": limit, "offset": offset}, 200
+            "limit": limit, "offset": offset,
+            "filter_groups": master_schema.FILTER_GROUPS}, 200
 
 
 def get_listing(broker_id, listing_id):
