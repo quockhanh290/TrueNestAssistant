@@ -372,6 +372,19 @@ async def _try_final_submit(update_or_q, ctx, uid, listing_id, chat_id, pn,
     except Exception:
         log.warning("auto-generate vi post failed for %s", listing_id,
                     exc_info=True)
+    # Upload photos to R2 in the background so the web app can display
+    # them. Non-blocking — the bot responds immediately; failures are
+    # logged and the listing still works via Telegram file_id.
+    try:
+        import photos as _photos  # lazy: avoid cycle
+        _fids = list(l.get("photo_file_ids") or [])
+        _token = getattr(config, "BOT_TOKEN", "")
+        if _fids and _token:
+            asyncio.create_task(_photos.upload_listing_photos(
+                listing_id, _fids, _token, db.add_photo_url))
+    except Exception:
+        log.warning("R2 photo upload task failed to start for %s",
+                    listing_id, exc_info=True)
     from feat_write import _maybe_write_post_finish  # lazy: avoid cycle
     if await _maybe_write_post_finish(chat_id, uid, listing_id, ctx):
         await _promote_next_confirming(ctx, chat_id, uid)
