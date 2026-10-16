@@ -989,6 +989,8 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await feat_stale.stale_action_cb(update, ctx)
     elif data.startswith("dup:"):
         await feat_intake.dup_action_cb(update, ctx)
+    elif data.startswith("imgdup:"):
+        await feat_intake.imgdup_action_cb(update, ctx)
     elif data.startswith("deal:"):
         rest = data[len("deal:"):]
         if rest == "new":
