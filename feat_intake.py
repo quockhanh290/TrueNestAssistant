@@ -361,6 +361,13 @@ async def _try_final_submit(update_or_q, ctx, uid, listing_id, chat_id, pn,
                                          reply_to_message_id)
             return False
     db.set_listing_status(listing_id, "submitted", changed_by="bot")
+    # Referral auto-check: if this broker was invited and now qualifies,
+    # run fraud checks and credit the inviter (Khanh 2026-10-16).
+    try:
+        from feat_referral import on_listing_submitted  # lazy: avoid cycle
+        await on_listing_submitted(ctx, uid)
+    except Exception:
+        log.warning("referral auto-check failed", exc_info=True)
     # auto-generate Vietnamese FB post and save with the listing.
     # Silent — broker sees it in the ✍️ write menu. Other languages
     # are generated on demand from there.
@@ -643,16 +650,16 @@ async def _upload_photos_and_check_dups(photos_mod, listing_id, file_ids,
                                         token, chat_id, uid, ctx, pn):
     """Background task: upload photos to R2, store hashes, suggest dups.
 
-    1. Uploads each photo (url + dhash), stores via db.add_photo_url and
-       db.add_photo_hash.
+    1. Uploads each photo (url + dhash + phash), stores via db.add_photo_url
+       and db.add_photo_hash.
     2. For each hashed photo, finds near-duplicate images in the broker's
-       OTHER listings (hamming distance <= 5).
+       OTHER listings (dHash OR pHash hamming distance <= 5).
     3. If matches found, suggests the first one: broker chooses view /
        keep / link-as-duplicate. Never auto-merges.
     """
-    def _store(lid, url, dhash):
+    def _store(lid, url, dhash, phash):
         db.add_photo_url(lid, url)
-        db.add_photo_hash(lid, url, dhash)
+        db.add_photo_hash(lid, url, dhash, phash)
 
     try:
         done = await photos_mod.upload_listing_photos(
@@ -664,12 +671,12 @@ async def _upload_photos_and_check_dups(photos_mod, listing_id, file_ids,
 
     # Dedup check: collect first match per other listing.
     seen_old = {}
-    for _url, dhash in done:
-        if not dhash:
+    for _url, dhash, phash in done:
+        if not dhash and not phash:
             continue
         try:
             matches = db.find_photos_by_hash(
-                dhash, max_distance=5, exclude_id=listing_id)
+                dhash, max_distance=5, exclude_id=listing_id, phash=phash)
         except Exception:
             log.warning("find_photos_by_hash failed", exc_info=True)
             continue
@@ -1041,6 +1048,12 @@ async def _handle_photo_answer(update, ctx, awaiting, file_id, caption):
     else:
         ctx.user_data.pop("awaiting", None)
         db.set_listing_status(listing_id, "submitted", changed_by="bot")
+        # Referral auto-check (same as final-submit path).
+        try:
+            from feat_referral import on_listing_submitted  # lazy
+            await on_listing_submitted(ctx, uid)
+        except Exception:
+            log.warning("referral auto-check failed", exc_info=True)
         await update.message.reply_text(
             f"Đã nhận ảnh ✓ (tổng {len(photos)} ảnh)")
         from feat_write import _maybe_write_post_finish  # lazy: avoid cycle
