@@ -6,45 +6,48 @@ web app use this schema — no field should exist outside it.
 
 # Field: (type, required, weight_in_quality_score, vietnamese_label)
 #
-# QUALITY WEIGHTS — MUST SUM TO EXACTLY 100 (rebalanced 2026-10-16)
+# QUALITY WEIGHTS — MUST SUM TO EXACTLY 100 (rebalanced 2026-10-16, v2: amenities/highlights scored)
 # ┌─────────────────┬────────┐
-# │ price_vnd       │ 15     │ Giá thuê
+# │ price_vnd       │ 12     │ Giá thuê
 # │ primary_phone   │  5     │ SĐT liên hệ
 # │ photos          │ 10     │ Ảnh (≥3)
-# │ bedrooms        │ 10     │ Số phòng ngủ
-# │ bathrooms       │  8     │ Số WC
-# │ property_type   │  7     │ Loại hình
-# │ district        │ 12     │ Khu vực
-# │ street          │  8     │ Địa chỉ chi tiết
-# │ area_m2         │  8     │ Diện tích
-# │ furnishing      │  7     │ Nội thất
-# │ description     │  8     │ Mô tả (>50 ký tự)
+# │ bedrooms        │  8     │ Số phòng ngủ
+# │ bathrooms       │  6     │ Số WC
+# │ property_type   │  5     │ Loại hình
+# │ district        │ 10     │ Khu vực
+# │ street          │  6     │ Địa chỉ chi tiết
+# │ area_m2         │  6     │ Diện tích
+# │ furnishing      │  6     │ Nội thất
+# │ description     │  6     │ Mô tả (>50 ký tự)
 # │ deposit_months  │  2     │ Đặt cọc
+# │ amenities       │ 10     │ Tiện ích (VD: hồ bơi, gym...)
+# │ highlights      │  8     │ Điểm nổi bật
 # ├─────────────────┼────────┤
 # │ TOTAL           │ 100    │
 # └─────────────────┴────────┘
-# pet_friendly/building_name/amenities/highlights/floor_number/available_from = 0
+# pet_friendly/building_name/floor_number/available_from = 0
 # (tracked but not scored — informational fields)
 MASTER_SCHEMA = {
     # Critical — listing is unusable without these
-    "price_vnd":      ("number",  True,  15, "Giá thuê"),
+    "price_vnd":      ("number",  True,  12, "Giá thuê"),
     "primary_phone":  ("string",  True,   5, "SĐT liên hệ"),
     "photos":         ("array",   True,  10, "Ảnh (tối thiểu 3)"),
     # Important
-    "bedrooms":       ("number",  False, 10, "Số phòng ngủ"),
-    "bathrooms":      ("number",  False,  8, "Số WC"),
-    "property_type":  ("string",  False,  7, "Loại hình"),
-    "district":       ("string",  False, 12, "Khu vực"),
-    "street":         ("string",  False,  8, "Địa chỉ chi tiết"),
-    "area_m2":        ("number",  False,  8, "Diện tích"),
-    "furnishing":     ("string",  False,  7, "Nội thất"),
-    "description":    ("string",  False,  8, "Mô tả chi tiết"),
+    "bedrooms":       ("number",  False,  8, "Số phòng ngủ"),
+    "bathrooms":      ("number",  False,  6, "Số WC"),
+    "property_type":  ("string",  False,  5, "Loại hình"),
+    "district":       ("string",  False, 10, "Khu vực"),
+    "street":         ("string",  False,  6, "Địa chỉ chi tiết"),
+    "area_m2":        ("number",  False,  6, "Diện tích"),
+    "furnishing":     ("string",  False,  6, "Nội thất"),
+    "description":    ("string",  False,  6, "Mô tả chi tiết"),
     "deposit_months": ("number",  False,  2, "Đặt cọc (tháng)"),
+    # Amenities & highlights — what clients actually care about
+    "amenities":      ("array",   False, 10, "Tiện ích"),
+    "highlights":     ("array",   False,  8, "Điểm nổi bật"),
     # Nice to have (informational, not scored)
     "pet_friendly":   ("boolean", False,  0, "Chính sách pet"),
     "building_name":  ("string",  False,  0, "Tòa nhà"),
-    "amenities":      ("array",   False,  0, "Tiện ích"),
-    "highlights":     ("array",   False,  0, "Điểm nổi bật"),
     "floor_number":   ("number",  False,  0, "Tầng"),
     "available_from": ("string",  False,  0, "Ngày trống"),
 }
