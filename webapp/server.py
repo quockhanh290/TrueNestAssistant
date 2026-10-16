@@ -115,7 +115,8 @@ class Handler(BaseHTTPRequestHandler):
         if b64:
             try:
                 import base64
-                # fix padding
+                # base64url -> standard base64
+                b64 = b64.replace("-", "+").replace("_", "/")
                 b64 += "=" * (-len(b64) % 4)
                 init_data = base64.b64decode(b64).decode("utf-8", "replace")
             except Exception:

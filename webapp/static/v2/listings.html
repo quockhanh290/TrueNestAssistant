@@ -59,7 +59,7 @@
       if (initData || tgUid) {
         // Send both: server validates initData, falls back to tg_user_id
         const parts = ['limit=50'];
-        if (initData) parts.push('init_data_b64=' + btoa(initData));
+        if (initData) parts.push('init_data_b64=' + btoa(initData).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''));
         if (tgUid) parts.push('tg_user_id=' + tgUid);
         url = '/api/listings?' + parts.join('&');
       } else {
