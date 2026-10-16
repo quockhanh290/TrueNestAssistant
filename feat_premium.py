@@ -94,9 +94,11 @@ def _plans_text(uid, pn):
     mark = " ✅ <i>(đang dùng)</i>" if tier == "free" else ""
     lines.append(
         f"🆓 <b>Free</b>{mark}\n"
-        f"• {config.FREE_LISTING_LIMIT} tin, quản lý cơ bản\n"
+        f"• Không giới hạn số tin\n"
+        f"• Quản lý tin/khách cơ bản\n"
         f"• Chọn tin thủ công cho khách\n"
         f"• Viết bài Việt + Anh\n"
+        f"• Nhắc follow-up\n"
     )
     # Pro
     mark = " ✅ <i>(đang dùng)</i>" if tier == "pro" else ""
@@ -107,7 +109,6 @@ def _plans_text(uid, pn):
         exp = f" (hết hạn {d.strftime('%d/%m')})"
     lines.append(
         f"\n💎 <b>Pro — 99k/tháng</b>{mark}{exp}\n"
-        f"• Không giới hạn tin\n"
         f"• Auto-match tin cho khách\n"
         f"• Tìm kiếm bằng ngôn ngữ tự nhiên\n"
         f"• Viết bài 5 ngôn ngữ\n"

@@ -114,8 +114,8 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "👥 Quản lý khách — theo dõi, nhắc follow-up, lưu feedback từng căn\n"
         "⏰ Nhắc việc — sáng/trưa/tối em báo cáo, không để sót việc nào\n"
         "✍️ Viết bài FB đẹp — Việt/Anh free, thêm Hàn/Trung/Nga ở gói Pro\n\n"
-        "🆓 Dùng free không giới hạn thời gian (20 tin).\n"
-        "💎 Gói Pro 99k/tháng: không giới hạn tin + tính năng thông minh.\n\n"
+        "🆓 Dùng free thoải mái, không giới hạn số tin.\n"
+        "💎 Gói Pro 99k/tháng: mở khóa tính năng thông minh.\n\n"
         f"👉 Để bắt đầu, {pn} cứ gửi tin đầu tiên cho em nhé! (text kèm ảnh)\n\n"
         "Gõ /menu để mở menu, /help để xem hướng dẫn, /premium để nâng cấp.",
         reply_markup=MENU_KB,
