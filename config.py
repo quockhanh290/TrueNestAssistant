@@ -50,3 +50,10 @@ PAYMENT_MOMO = os.getenv("PAYMENT_MOMO", "0905123456")
 # Platform commission on closed deals (20%). Broker transfers this amount
 # after closing; receipt photo is verified by admin on phone.
 PLATFORM_FEE_RATE = float(os.getenv("PLATFORM_FEE_RATE", "0.20"))
+
+# Free translation for saved posts (MyMemory primary, Lingva fallback).
+# When a broker edits the Vietnamese post, other language versions are
+# auto-translated. Set TRANSLATION_EMAIL for MyMemory 50k chars/day
+# (anonymous = 5k chars/day).
+TRANSLATION_ENABLED = os.getenv("TRANSLATION_ENABLED", "1") == "1"
+TRANSLATION_EMAIL = os.getenv("TRANSLATION_EMAIL", "")
