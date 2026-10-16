@@ -23,9 +23,28 @@ from utils import (
     get_pronoun, natural_delay, fmt_price, listing_line,
 )
 
+from feat_write import (
+    PTYPE_VI, PTYPE_EN, PTYPE_KO, PTYPE_ZH, PTYPE_RU,
+    FURN_VI, FURN_EN, FURN_KO, FURN_ZH, FURN_RU,
+)
+
 log = logging.getLogger("linh")
 
 MAX_PICK = 4
+
+# Language metadata for the send-to-client picker
+S2C_LANGS = [
+    ("vi", "🇻🇳 Tiếng Việt"),
+    ("en", "🇬🇧 English"),
+    ("ko", "🇰🇷 한국어"),
+    ("zh", "🇨🇳 中文"),
+    ("ru", "🇷🇺 Русский"),
+]
+
+PTYPE_MAP = {"vi": PTYPE_VI, "en": PTYPE_EN, "ko": PTYPE_KO,
+             "zh": PTYPE_ZH, "ru": PTYPE_RU}
+FURN_MAP = {"vi": FURN_VI, "en": FURN_EN, "ko": FURN_KO,
+            "zh": FURN_ZH, "ru": FURN_RU}
 
 VN_WD_FULL = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5",
               "Thứ 6", "Thứ 7", "Chủ nhật"]
@@ -230,22 +249,81 @@ async def s2c_toggle(update, ctx):
     await _render_picker(q, ctx, uid, c, listings, True)
 
 
-def _listing_brief(l):
+def _fmt_price_lang(v, lang):
+    """Price formatted for the client message language."""
+    if not v:
+        return "?"
+    if lang == "vi":
+        return f"{fmt_price(v)}/tháng"
+    if lang == "en":
+        return f"{v / 1_000_000:g}M ₫/month"
+    if lang == "ko":
+        return f"월 {v / 10_000:.0f}만 VND"
+    if lang == "zh":
+        return f"{v / 10_000:.0f}万₫/月"
+    if lang == "ru":
+        return f"{v / 1_000_000:g} млн ₫/мес"
+    return f"{fmt_price(v)}/tháng"
+
+
+def _br_label(br, lang):
+    """Bedroom label per language: 2PN / 2BR / 2房 / 2-комн. / Studio."""
+    if br == 0.0:
+        return {"vi": "Studio", "en": "Studio", "ko": "스튜디오",
+                "zh": "单间", "ru": "студия"}.get(lang, "Studio")
+    if br:
+        n = int(br)
+        return {"vi": f"{n}PN", "en": f"{n}BR", "ko": f"{n}BR",
+                "zh": f"{n}房", "ru": f"{n}-комн."}.get(lang, f"{n}PN")
+    return ""
+
+
+def _listing_brief(l, lang="vi"):
     """One listing as a numbered message block for the client."""
     p = l.get("parsed") or {}
-    br = p.get("bedrooms")
-    br_s = "Studio" if br == 0.0 else (f"{int(br)}PN" if br else "")
+    br_s = _br_label(p.get("bedrooms"), lang)
     addr_bits = [b for b in (p.get("building_name"), p.get("street"),
                              p.get("district")) if b]
-    lines = [f"🏠 {br_s} {', '.join(addr_bits)}, "
-             f"{fmt_price(p.get('price_vnd'))}/tháng".strip(" ,")]
+    price_s = _fmt_price_lang(p.get("price_vnd"), lang)
+
+    if lang == "vi":
+        # Original template — keep exactly as-is
+        lines = [f"🏠 {br_s} {', '.join(addr_bits)}, "
+                 f"{price_s}".strip(" ,")]
+        det = []
+        if p.get("area_m2"):
+            det.append(f"📐 {p['area_m2']:g}m²")
+        furn = p.get("furnishing")
+        if furn:
+            det.append({"full": "full nội thất", "basic": "nội thất cơ bản",
+                        "empty": "nhà trống"}.get(furn, furn))
+        if det:
+            lines.append("   " + ", ".join(det))
+        hls = p.get("highlights") or []
+        if hls:
+            lines.append("   ✨ " + ", ".join(hls[:3]))
+        return "\n".join(lines)
+
+    # Other languages: property type + translated furnishing
+    # (skip ptype when bedrooms already says "Studio" to avoid duplication)
+    br = p.get("bedrooms")
+    ptype = ""
+    if br != 0.0:
+        ptype = PTYPE_MAP.get(lang, {}).get(p.get("property_type") or "",
+                                            p.get("property_type") or "")
+    addr = ", ".join(addr_bits)
+    head = f"🏠 {br_s} {ptype}".strip()
+    if addr:
+        head += f" — {addr}" if lang in ("en", "ru") else f", {addr}"
+    lines = [f"{head}: {price_s}".strip(" ,:")]
+
     det = []
     if p.get("area_m2"):
         det.append(f"📐 {p['area_m2']:g}m²")
     furn = p.get("furnishing")
     if furn:
-        det.append({"full": "full nội thất", "basic": "nội thất cơ bản",
-                    "empty": "nhà trống"}.get(furn, furn))
+        furn_t = FURN_MAP.get(lang, {}).get(furn, furn)
+        det.append(furn_t)
     if det:
         lines.append("   " + ", ".join(det))
     hls = p.get("highlights") or []
@@ -254,25 +332,110 @@ def _listing_brief(l):
     return "\n".join(lines)
 
 
-def _build_client_message(c, listings, pn):
-    cname = c.get("name") or "anh/chị"
-    lines = [f"Chào {cname}! Em có {len(listings)} căn hợp với nhu cầu "
-             f"của {'anh' if pn == 'anh' else 'chị'} đây ạ:\n"]
-    for i, l in enumerate(listings, 1):
-        lines.append(f"{i}. {_listing_brief(l)}\n")
-    lines.append("Anh/chị ưng căn nào để em sắp xếp đi xem ạ? 😊")
-    return "\n".join(lines)
+def _build_client_message(c, listings, pn, lang="vi"):
+    n = len(listings)
+    if lang == "vi":
+        # Original template — keep exactly as-is
+        cname = c.get("name") or "anh/chị"
+        lines = [f"Chào {cname}! Em có {n} căn hợp với nhu cầu "
+                 f"của {'anh' if pn == 'anh' else 'chị'} đây ạ:\n"]
+        for i, l in enumerate(listings, 1):
+            lines.append(f"{i}. {_listing_brief(l, lang)}\n")
+        lines.append("Anh/chị ưng căn nào để em sắp xếp đi xem ạ? 😊")
+        return "\n".join(lines)
+
+    cname = c.get("name") or ""
+    briefs = "\n".join(
+        f"{i}. {_listing_brief(l, lang)}\n"
+        for i, l in enumerate(listings, 1))
+
+    if lang == "en":
+        head = (f"Hi {cname}! I found {n} "
+                f"{'property' if n == 1 else 'properties'} "
+                f"matching your needs:\n" if cname else
+                f"Hi! I found {n} "
+                f"{'property' if n == 1 else 'properties'} "
+                f"matching your needs:\n")
+        tail = "Which one would you like to view? 😊"
+    elif lang == "ko":
+        head = (f"안녕하세요 {cname}님! 요청하신 조건에 맞는 "
+                f"매물 {n}개를 찾았습니다:\n" if cname else
+                f"안녕하세요! 요청하신 조건에 맞는 매물 {n}개를 "
+                f"찾았습니다:\n")
+        tail = "어떤 매물을 보시겠어요? 😊"
+    elif lang == "zh":
+        head = (f"您好{cname}！我找到了{n}套符合您需求的房源：\n"
+                if cname else
+                f"您好！我找到了{n}套符合您需求的房源：\n")
+        tail = "您想看哪一套呢？😊"
+    elif lang == "ru":
+        head = (f"Здравствуйте, {cname}! Нашёл {n} "
+                f"{_ru_variant(n)} по вашему запросу:\n" if cname else
+                f"Здравствуйте! Нашёл {n} {_ru_variant(n)} "
+                f"по вашему запросу:\n")
+        tail = "Какой вариант хотите посмотреть? 😊"
+    else:
+        return _build_client_message(c, listings, pn, "vi")
+
+    return f"{head}\n{briefs}\n{tail}"
+
+
+def _ru_variant(n):
+    """Russian noun agreement for 'вариант'."""
+    if n % 10 == 1 and n % 100 != 11:
+        return "вариант"
+    if n % 10 in (2, 3, 4) and n % 100 not in (12, 13, 14):
+        return "варианта"
+    return "вариантов"
 
 
 async def s2c_done(update, ctx):
-    """Step 2: generate the copy-ready message."""
+    """Step 2a: pick message language before generating."""
+    q = update.callback_query
+    await q.answer()
+    uid = q.from_user.id
+    s2c = ctx.user_data.get("send2client")
+    if not s2c or not s2c.get("selected"):
+        await q.answer("Anh tích ít nhất 1 căn nhé!", show_alert=True)
+        return
+    c = db.get_client(s2c["client_id"])
+    if not c:
+        await q.edit_message_text("Khách này không còn nữa.",
+                                  reply_markup=MENU_KB)
+        return
+    kb = []
+    row = []
+    for code, label in S2C_LANGS:
+        row.append(InlineKeyboardButton(
+            label, callback_data=f"send2client:lang:{code}"))
+        if len(row) == 2:
+            kb.append(row)
+            row = []
+    if row:
+        kb.append(row)
+    kb.append([InlineKeyboardButton(
+        "⬅️ Chọn lại tin",
+        callback_data=f"send2client:start:{c['id']}")])
+    await q.edit_message_text(
+        f"Chọn ngôn ngữ tin nhắn gửi cho <b>{c.get('name') or 'khách'}</b> "
+        f"({len(s2c['selected'])} căn):",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(kb))
+
+
+async def s2c_lang(update, ctx):
+    """Step 2b: language chosen -> generate the copy-ready message."""
     q = update.callback_query
     await q.answer()
     uid = q.from_user.id
     pn = get_pronoun(uid)
+    act, lang = _parse_s2c_cb(q.data)
+    if lang not in ("vi", "en", "ko", "zh", "ru"):
+        lang = "vi"
     s2c = ctx.user_data.get("send2client")
     if not s2c or not s2c.get("selected"):
-        await q.answer("Anh tích ít nhất 1 căn nhé!", show_alert=True)
+        await q.edit_message_text("Phiên gửi tin hết hạn, anh làm lại nhé.",
+                                  reply_markup=MENU_KB)
         return
     c = db.get_client(s2c["client_id"])
     if not c:
@@ -285,17 +448,21 @@ async def s2c_done(update, ctx):
         await q.edit_message_text("Tin đã chọn không còn nữa.",
                                   reply_markup=MENU_KB)
         return
-    msg = _build_client_message(c, listings, pn)
+    msg = _build_client_message(c, listings, pn, lang)
     s2c["message"] = msg
+    s2c["lang"] = lang
     ctx.user_data["send2client"] = s2c
+    lang_label = dict(S2C_LANGS).get(lang, lang)
     await q.edit_message_text(
-        msg + "\n\n<i>👆 Tin nhắn đã soạn xong</i>",
+        msg + f"\n\n<i>👆 Tin nhắn đã soạn xong ({lang_label})</i>",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("📋 Copy tin nhắn",
                                   callback_data="send2client:copy")],
             [InlineKeyboardButton("✅ Đã gửi cho khách",
                                   callback_data="send2client:sent")],
+            [InlineKeyboardButton("🌐 Đổi ngôn ngữ",
+                                  callback_data="send2client:done")],
             [InlineKeyboardButton("⬅️ Chọn lại",
                                   callback_data=f"send2client:start:{c['id']}")],
         ]))
