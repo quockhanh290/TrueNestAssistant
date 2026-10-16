@@ -773,6 +773,8 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await onboard_dname_cb(update, ctx)
     elif data.startswith("cfm:save:"):
         await feat_intake.confirm_save_cb(update, ctx)
+    elif data.startswith("cfm:hl_done:"):
+        await feat_intake.hl_done_cb(update, ctx)
     elif data.startswith("cfm:edit:"):
         await feat_listings.confirm_edit_cb(update, ctx)
     elif data.startswith("contact:edit:"):
