@@ -313,3 +313,45 @@ def require_trial(broker_id, feature):
         return {"error": "trial_exhausted",
                 "required_tier": db.TRIAL_TIER[feature]}, 402
     return None
+
+
+# ---------------------------------------------------------------- share pages
+
+def create_share(broker_id, listing_ids, title="", client_id=None):
+    """POST /api/share — create a public share page (trial-gated: send2client)."""
+    gate = require_trial(broker_id, "send2client")
+    if gate:
+        return gate
+    valid = []
+    for lid in (listing_ids or []):
+        row = db.get_listing(lid)
+        if row and row.get("broker_id") == broker_id:
+            valid.append(lid)
+    if not valid:
+        return {"error": "no_valid_listings"}, 400
+    token = db.create_share_page(broker_id, valid, title=title,
+                                 client_id=client_id)
+    use_trial(broker_id, "send2client")  # consume trial (no-op if tier-covered)
+    import config  # noqa: E402
+    url = f"{config.WEBAPP_URL.rstrip('/')}/s/{token}"
+    return {"token": token, "url": url,
+            "listing_count": len(valid)}, 200
+
+
+def list_shares(broker_id):
+    """GET /api/shares — broker's share pages with views + bookings."""
+    out = []
+    for p in db.list_share_pages(broker_id):
+        bookings = db.list_share_bookings(token=p["token"])
+        out.append({
+            "token": p["token"],
+            "title": p["title"],
+            "client_id": p["client_id"],
+            "listing_count": len(p["listing_ids"]),
+            "view_count": p["view_count"],
+            "booking_count": len(bookings),
+            "bookings": bookings,
+            "created_at": p["created_at"],
+            "expires_at": p["expires_at"],
+        })
+    return {"shares": out}, 200
