@@ -119,33 +119,36 @@ Bảng mới: `commission_disputes` hoặc dùng chung cơ chế.
 
 **Flow:**
 1. Khách bấm "Chọn từng tin" → tick các tin muốn xem → "Yêu cầu concierge"
-2. Khách đồng ý trả phí concierge: **250K-300K** (cố định)
+2. Khách đồng ý trả phí concierge: **250K-300K** (cố định, trả cho broker làm job)
 3. Bot broadcast lên channel với tag `🎩 CONCIERGE`:
    ```
    🎩 CONCIERGE REQUEST
-   🏠 2PN An Thượng, 12tr (tin của @brokerA)
-   🏠 1PN Sơn Trà, 8tr (tin của @brokerB)
-   💰 Phí: 300K (broker nhận 250K, platform 50K)
+   🏠 2PN An Thượng, 12tr
+   🏠 1PN Sơn Trà, 8tr
+   💰 Phí: 300K
    [Nhận job]
    ```
 4. Broker bấm "Nhận" → bot release contact khách cho broker đó
-5. Broker dẫn khách xem các tin đã pick
-6. Nếu chốt deal → broker trả hoa hồng như bình thường
+5. **Broker tự lo** việc lấy thông tin các căn (liên hệ chủ tin, v.v.)
+   - Nếu chủ tin đòi chia hoa hồng mới hợp tác → 2 broker tự thỏa thuận, platform không can thiệp
+6. Broker dẫn khách xem các tin đã pick
 
 **Dòng tiền:**
-| | Số tiền | Ai trả | Ai nhận |
-|---|---|---|---|
-| Phí concierge | 250-300K | Khách | Broker (làm job) |
-| Cắt platform | 50K | (từ phí concierge) | Platform |
-| Hoa hồng deal | theo chuẩn | Broker | Platform |
+| | Số tiền | Ghi chú |
+|---|---|---|
+| Phí concierge | 250-300K | Khách → broker làm job |
+| Hoa hồng deal (nếu chốt) | 20% cho platform | Broker trả như bình thường |
+
+**Chống gian lận (giống match thường):**
+- Khách confirm đã chốt 1 trong các căn concierge
+- Broker không trả lời / không xác nhận → warning
+- Warning 3 lần → ban
 
 **Lưu ý:**
-- Broker gốc (chủ tin) có được ưu tiên nhận concierge cho chính tin của mình không? → chưa quyết định
 - Nếu không ai nhận concierge → hoàn tiền khách? → chưa quyết định
 
 ## Chưa quyết định
 - [ ] Phí/mô hình kinh doanh cho match khách thật (free? thu phí broker? thu phí khách?)
 - [ ] Chế tài broker bypass (liên hệ khách ngoài luồng)
 - [ ] Bot nhận yêu cầu khách (build sau)
-- [ ] Concierge: broker gốc có ưu tiên không?
 - [ ] Concierge: không ai nhận thì hoàn tiền khách?
