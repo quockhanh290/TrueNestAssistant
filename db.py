@@ -141,6 +141,13 @@ def create_listing(broker_id, raw_text="", photo_file_ids=None,
         " VALUES (?, NULL, ?, 'broker', ?)",
         (listing_id, status, now),
     )
+    if status == "submitted":
+        # created directly as submitted (no missing fields) — count it,
+        # since set_listing_status's draft/pending_info→submitted path won't fire
+        conn.execute(
+            "UPDATE brokers SET approved_count = approved_count + 1"
+            " WHERE user_id = ?", (broker_id,),
+        )
     conn.commit()
     conn.close()
     return listing_id
@@ -208,7 +215,9 @@ def set_listing_status(listing_id, new_status, changed_by="broker", path=None):
         " VALUES (?, ?, ?, ?, ?)",
         (listing_id, old_status, new_status, changed_by, now),
     )
-    if new_status == "submitted":
+    if new_status == "submitted" and old_status in ("draft", "pending_info"):
+        # first-time submission only — toggling negotiating/deposited/rented
+        # back to submitted must not inflate the qualification counter
         conn.execute(
             "UPDATE brokers SET approved_count = approved_count + 1"
             " WHERE user_id = ?", (row["broker_id"],),
@@ -216,6 +225,19 @@ def set_listing_status(listing_id, new_status, changed_by="broker", path=None):
     conn.commit()
     conn.close()
     return True
+
+
+def touch_listing(listing_id, path=None):
+    """Refresh a listing: bump created_at/updated_at to now (repost).
+    Used by the 'Làm mới tin' button for stale (>30d) listings."""
+    now = _now()
+    conn = connect(path)
+    conn.execute(
+        "UPDATE tg_listings SET created_at = ?, updated_at = ? WHERE id = ?",
+        (now, now, listing_id),
+    )
+    conn.commit()
+    conn.close()
 
 
 def list_broker_listings(broker_id, limit=5, offset=0, statuses=None, path=None):
@@ -281,8 +303,10 @@ def search_listings(broker_id, filters, limit=50, offset=0, path=None):
     district (str), building_name (str), pet_friendly (bool),
     property_type (str), status ("active" | "rented" | exact status).
     "active" expands to draft/pending_info/submitted.
+    "inactive" expands to rented/negotiating/deposited.
     """
     ACTIVE = ("draft", "pending_info", "submitted")
+    INACTIVE = ("rented", "negotiating", "deposited")
     conds = ["broker_id = ?"]
     vals = [broker_id]
 
@@ -291,6 +315,10 @@ def search_listings(broker_id, filters, limit=50, offset=0, path=None):
         ph = ", ".join("?" for _ in ACTIVE)
         conds.append(f"status IN ({ph})")
         vals.extend(ACTIVE)
+    elif st == "inactive":
+        ph = ", ".join("?" for _ in INACTIVE)
+        conds.append(f"status IN ({ph})")
+        vals.extend(INACTIVE)
     elif st == "rented":
         conds.append("status = ?")
         vals.append("rented")
@@ -346,6 +374,7 @@ def search_listings(broker_id, filters, limit=50, offset=0, path=None):
 def count_search(broker_id, filters, path=None):
     """COUNT(*) for the same filter set as search_listings()."""
     ACTIVE = ("draft", "pending_info", "submitted")
+    INACTIVE = ("rented", "negotiating", "deposited")
     conds = ["broker_id = ?"]
     vals = [broker_id]
 
@@ -354,6 +383,10 @@ def count_search(broker_id, filters, path=None):
         ph = ", ".join("?" for _ in ACTIVE)
         conds.append(f"status IN ({ph})")
         vals.extend(ACTIVE)
+    elif st == "inactive":
+        ph = ", ".join("?" for _ in INACTIVE)
+        conds.append(f"status IN ({ph})")
+        vals.extend(INACTIVE)
     elif st == "rented":
         conds.append("status = ?")
         vals.append("rented")
