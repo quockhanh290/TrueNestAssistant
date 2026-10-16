@@ -113,7 +113,39 @@ Bảng mới: `commission_disputes` hoặc dùng chung cơ chế.
 - Broker chỉ thấy contact khách SAU KHI được khách chọn
 - Broker tìm cách liên hệ khách ngoài luồng → chưa định nghĩa chế tài
 
+## Concierge Service (pick từng tin lẻ)
+
+**Khi nào:** khách không thích cả 5 căn của 1 broker, muốn pick từng tin lẻ từ danh sách đề xuất.
+
+**Flow:**
+1. Khách bấm "Chọn từng tin" → tick các tin muốn xem → "Yêu cầu concierge"
+2. Khách đồng ý trả phí concierge: **250K-300K** (cố định)
+3. Bot broadcast lên channel với tag `🎩 CONCIERGE`:
+   ```
+   🎩 CONCIERGE REQUEST
+   🏠 2PN An Thượng, 12tr (tin của @brokerA)
+   🏠 1PN Sơn Trà, 8tr (tin của @brokerB)
+   💰 Phí: 300K (broker nhận 250K, platform 50K)
+   [Nhận job]
+   ```
+4. Broker bấm "Nhận" → bot release contact khách cho broker đó
+5. Broker dẫn khách xem các tin đã pick
+6. Nếu chốt deal → broker trả hoa hồng như bình thường
+
+**Dòng tiền:**
+| | Số tiền | Ai trả | Ai nhận |
+|---|---|---|---|
+| Phí concierge | 250-300K | Khách | Broker (làm job) |
+| Cắt platform | 50K | (từ phí concierge) | Platform |
+| Hoa hồng deal | theo chuẩn | Broker | Platform |
+
+**Lưu ý:**
+- Broker gốc (chủ tin) có được ưu tiên nhận concierge cho chính tin của mình không? → chưa quyết định
+- Nếu không ai nhận concierge → hoàn tiền khách? → chưa quyết định
+
 ## Chưa quyết định
 - [ ] Phí/mô hình kinh doanh cho match khách thật (free? thu phí broker? thu phí khách?)
 - [ ] Chế tài broker bypass (liên hệ khách ngoài luồng)
 - [ ] Bot nhận yêu cầu khách (build sau)
+- [ ] Concierge: broker gốc có ưu tiên không?
+- [ ] Concierge: không ai nhận thì hoàn tiền khách?
