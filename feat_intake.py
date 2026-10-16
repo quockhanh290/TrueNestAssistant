@@ -375,13 +375,15 @@ async def _try_final_submit(update_or_q, ctx, uid, listing_id, chat_id, pn,
     # Upload photos to R2 in the background so the web app can display
     # them. Non-blocking — the bot responds immediately; failures are
     # logged and the listing still works via Telegram file_id.
+    # After upload, dhash image-duplicate check runs; matches from the
+    # broker's other listings trigger a suggestion (never auto-merge).
     try:
         import photos as _photos  # lazy: avoid cycle
         _fids = list(l.get("photo_file_ids") or [])
         _token = getattr(config, "BOT_TOKEN", "")
         if _fids and _token:
-            asyncio.create_task(_photos.upload_listing_photos(
-                listing_id, _fids, _token, db.add_photo_url))
+            asyncio.create_task(_upload_photos_and_check_dups(
+                _photos, listing_id, _fids, _token, chat_id, uid, ctx, pn))
     except Exception:
         log.warning("R2 photo upload task failed to start for %s",
                     listing_id, exc_info=True)
@@ -635,6 +637,134 @@ async def dup_action_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await _promote_next_confirming(ctx, q.message.chat_id, uid)
     else:
         await q.answer("Anh chọn giúp em nhé 👆")
+
+
+async def _upload_photos_and_check_dups(photos_mod, listing_id, file_ids,
+                                        token, chat_id, uid, ctx, pn):
+    """Background task: upload photos to R2, store hashes, suggest dups.
+
+    1. Uploads each photo (url + dhash), stores via db.add_photo_url and
+       db.add_photo_hash.
+    2. For each hashed photo, finds near-duplicate images in the broker's
+       OTHER listings (hamming distance <= 5).
+    3. If matches found, suggests the first one: broker chooses view /
+       keep / link-as-duplicate. Never auto-merges.
+    """
+    def _store(lid, url, dhash):
+        db.add_photo_url(lid, url)
+        db.add_photo_hash(lid, url, dhash)
+
+    try:
+        done = await photos_mod.upload_listing_photos(
+            listing_id, file_ids, token, _store)
+    except Exception:
+        log.warning("bg photo upload failed for %s", listing_id,
+                    exc_info=True)
+        return
+
+    # Dedup check: collect first match per other listing.
+    seen_old = {}
+    for _url, dhash in done:
+        if not dhash:
+            continue
+        try:
+            matches = db.find_photos_by_hash(
+                dhash, max_distance=5, exclude_id=listing_id)
+        except Exception:
+            log.warning("find_photos_by_hash failed", exc_info=True)
+            continue
+        for old_id, _murl, _dist in matches:
+            if old_id in seen_old:
+                continue
+            old = db.get_listing(old_id)
+            if not old or old.get("broker_id") != uid:
+                continue
+            seen_old[old_id] = old
+    if not seen_old:
+        return
+    old_id, old = next(iter(seen_old.items()))
+    try:
+        await _ask_image_dup_confirm(ctx, chat_id, uid, pn,
+                                     listing_id, old)
+    except Exception:
+        log.warning("image dup notify failed for %s", listing_id,
+                    exc_info=True)
+
+
+async def _ask_image_dup_confirm(ctx, chat_id, uid, pn, new_id, old):
+    """Suggest an image-hash duplicate. Never auto-merge or block.
+
+    Reuses the duplicate-suggestion UX pattern: broker chooses view old /
+    keep new / link as duplicate. No timeout auto-action — the listing is
+    already submitted, so silence means "keep".
+    """
+    op = old.get("parsed") or {}
+    br = op.get("bedrooms")
+    br_s = "Studio" if br == 0.0 else (f"{int(br)}PN" if br else "?PN")
+    loc = op.get("building_name") or op.get("district") or "?"
+    price = op.get("price_vnd")
+    price_s = f"{price / 1_000_000:g}tr/tháng" if price else "?/tháng"
+    ctx.user_data["imgdup_check"] = {"new_id": new_id, "old_id": old["id"]}
+    text = (
+        f"⚠️ Ảnh trong tin mới giống với ảnh trong tin"
+        f" <b>{br_s} {loc}, {price_s}</b> của {pn}.\n\n"
+        f"Có phải cùng một căn không {pn} 👇")
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("👀 Xem tin cũ",
+                              callback_data="imgdup:view")],
+        [InlineKeyboardButton("✅ Vẫn giữ tin mới",
+                              callback_data="imgdup:keep")],
+        [InlineKeyboardButton("🔗 Gộp vào tin cũ",
+                              callback_data="imgdup:merge")],
+    ])
+    await ctx.bot.send_message(chat_id, text, parse_mode="HTML",
+                               reply_markup=kb)
+
+
+async def imgdup_action_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Handle imgdup:* callbacks from the image-duplicate suggestion."""
+    from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+    q = update.callback_query
+    await q.answer()
+    uid = q.from_user.id
+    act = q.data.split(":", 1)[1] if ":" in q.data else ""
+    dc = ctx.user_data.get("imgdup_check") or {}
+    new_id = dc.get("new_id")
+    old_id = dc.get("old_id")
+
+    if act == "view" and old_id:
+        from feat_listings import _detail_content
+        old = db.get_listing(old_id)
+        if not old or old["broker_id"] != uid:
+            await q.edit_message_text("Tin cũ không còn nữa 😅",
+                                      reply_markup=MENU_KB)
+            return
+        text, kb = _detail_content(old, page=0, filt="a")
+        rows = kb.inline_keyboard if kb else []
+        kb = InlineKeyboardMarkup(
+            [[InlineKeyboardButton("⬅️ Quay lại quyết định",
+                                   callback_data="imgdup:back")]] + rows)
+        await q.edit_message_text(text, parse_mode="HTML", reply_markup=kb)
+        return
+    if act == "back" and old_id and new_id:
+        old = db.get_listing(old_id)
+        if old:
+            await _ask_image_dup_confirm(ctx, q.message.chat_id, uid,
+                                         get_pronoun(uid), new_id, old)
+            return
+    ctx.user_data.pop("imgdup_check", None)
+    if act == "merge":
+        # link as duplicate — keep for reference, never delete either side.
+        if old_id and new_id:
+            db.update_listing(new_id, duplicate_of=old_id)
+        await q.edit_message_text(
+            "Ok ạ, em đã lưu tin này dạng trùng để tham khảo 🔗\n"
+            "Tin gốc vẫn giữ nguyên, không gộp không xóa gì đâu ạ.",
+            reply_markup=MENU_KB)
+    else:
+        # keep (or anything else) — listing stays as submitted.
+        await q.edit_message_text("Vâng, em giữ tin mới như cũ nhé ✅",
+                                  reply_markup=MENU_KB)
 
 
 _CONFIRM_WORDS = {"đúng rồi", "dung roi", "đúng", "dung", "ok", "oke",
