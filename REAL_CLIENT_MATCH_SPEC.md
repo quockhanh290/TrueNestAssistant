@@ -2,6 +2,16 @@
 
 _Quyết định: 2026-10-16, Khanh thiết kế_
 
+## Kiến trúc: 2 bot riêng biệt
+
+| | Bot Broker (Linh) | Bot Khách (chưa đặt tên) |
+|---|---|---|
+| Đối tượng | Môi giới | Khách thuê / lead |
+| Chức năng | Quản lý tin, nhận match, concierge | Gửi yêu cầu, xem đề xuất, chọn broker |
+| Build sau? | Đã có | Chưa build |
+
+Hai bot giao tiếp qua backend chung, không bao giờ lộ contact chéo.
+
 ## Nguyên tắc
 - **Công bằng:** mọi broker đều thấy cùng thông tin
 - **Không lộ contact khách:** tuyệt đối không broadcast SĐT/tên khách
