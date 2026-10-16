@@ -134,6 +134,8 @@ CREATE TABLE IF NOT EXISTS match_responses (
     responder_broker_id INTEGER NOT NULL,
     responder_username  TEXT,
     listing_id          TEXT,
+    listing_ids         TEXT NOT NULL DEFAULT '[]',
+    match_scores        TEXT NOT NULL DEFAULT '{}',
     messages            TEXT NOT NULL DEFAULT '[]',
     created_at          REAL NOT NULL
 );
@@ -155,6 +157,7 @@ def init_db(path=None):
     _migrate_brokers(conn)
     _migrate_clients(conn)
     _migrate_match_requests(conn)
+    _migrate_match_responses(conn)
     conn.commit()
     conn.close()
 
@@ -184,6 +187,21 @@ def _migrate_match_requests(conn):
     cols = {r["name"] for r in conn.execute("PRAGMA table_info(match_requests)")}
     if "closed_reason" not in cols:
         conn.execute("ALTER TABLE match_requests ADD COLUMN closed_reason TEXT")
+
+
+def _migrate_match_responses(conn):
+    """Add listing_ids/match_scores to match_responses (no data loss)."""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(match_responses)")}
+    if "listing_ids" not in cols:
+        conn.execute(
+            "ALTER TABLE match_responses"
+            " ADD COLUMN listing_ids TEXT NOT NULL DEFAULT '[]'"
+        )
+    if "match_scores" not in cols:
+        conn.execute(
+            "ALTER TABLE match_responses"
+            " ADD COLUMN match_scores TEXT NOT NULL DEFAULT '{}'"
+        )
 
 
 def _now():
@@ -1291,9 +1309,11 @@ def record_broadcast(broker_id, path=None):
 # ---- broadcast responses (max 3 responders) ----
 
 def add_match_response(request_id, responder_broker_id, responder_username=None,
-                       listing_id=None, path=None):
+                       listing_id=None, listing_ids=None, match_scores=None,
+                       path=None):
     """Record one broker's response. Returns (ok, response_count).
-    ok=False when this broker already responded (deduped)."""
+    ok=False when this broker already responded (deduped).
+    listing_ids/match_scores are stored as JSON (set after scoring passes)."""
     conn = connect(path)
     exists = conn.execute(
         "SELECT 1 FROM match_responses"
@@ -1307,12 +1327,17 @@ def add_match_response(request_id, responder_broker_id, responder_username=None,
         ).fetchone()["c"]
         conn.close()
         return False, n
+    lids = listing_ids or ([listing_id] if listing_id else [])
     conn.execute(
         "INSERT INTO match_responses (id, request_id, responder_broker_id,"
-        " responder_username, listing_id, messages, created_at)"
-        " VALUES (?, ?, ?, ?, ?, '[]', ?)",
+        " responder_username, listing_id, listing_ids, match_scores,"
+        " messages, created_at)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, '[]', ?)",
         ("mresp:" + uuid.uuid4().hex[:12], request_id, responder_broker_id,
-         responder_username, listing_id, _now()),
+         responder_username, lids[0] if lids else listing_id,
+         json.dumps(lids, ensure_ascii=False),
+         json.dumps(match_scores or {}, ensure_ascii=False),
+         _now()),
     )
     n = conn.execute(
         "SELECT COUNT(*) c FROM match_responses WHERE request_id = ?",

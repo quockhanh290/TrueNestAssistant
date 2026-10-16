@@ -1,5 +1,6 @@
 """Cross-broker matching/broadcast."""
 import asyncio
+import json
 import logging
 import random
 import time
@@ -29,6 +30,123 @@ from utils import (
 log = logging.getLogger("linh")
 
 from feat_clients import parse_client_cb, _client_req_summary
+
+# ---- Phase 1: inventory verification + match scoring ----
+
+# Da Nang district adjacency for match scoring (+10 for neighbours).
+ADJACENT_DISTRICTS = {
+    "Sơn Trà": ["Ngũ Hành Sơn", "Hải Châu"],
+    "Hải Châu": ["Sơn Trà", "Ngũ Hành Sơn", "Cẩm Lệ", "Thanh Khê",
+                 "Liên Chiểu"],
+    "Ngũ Hành Sơn": ["Sơn Trà", "Hải Châu", "Cẩm Lệ"],
+    "Liên Chiểu": ["Thanh Khê", "Hải Châu"],
+    "Cẩm Lệ": ["Hải Châu", "Ngũ Hành Sơn", "Thanh Khê"],
+    "Thanh Khê": ["Hải Châu", "Liên Chiểu", "Cẩm Lệ"],
+}
+
+MATCH_PASS_SCORE = 50   # minimum score for a listing to be forwarded
+MATCH_INVENTORY_MIN = 40  # minimum best-score to pass the inventory gate
+
+
+def _parsed_float(lst, key):
+    try:
+        v = (lst.get("parsed") or {}).get(key)
+        return float(v) if v is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _client_float(c, key):
+    try:
+        v = c.get(key)
+        return float(v) if v else None
+    except (TypeError, ValueError):
+        return None
+
+
+def score_match(lst, c):
+    """0-100 match score between a listing and client requirements.
+
+    Bedrooms: exact +40, off by 1 +20. Price: within budget +30,
+    within 20% over max +15. District: exact +20, adjacent +10.
+    >= 3 photos +10. Missing requirement on the client side gives
+    neutral partial credit (never 0 for unknown).
+    """
+    score = 0
+    # Bedrooms
+    lb = _parsed_float(lst, "bedrooms")
+    cb = _client_float(c, "bedrooms")
+    if lb is not None and cb is not None:
+        if lb == cb:
+            score += 40
+        elif abs(lb - cb) == 1:
+            score += 20
+    elif cb is None:
+        score += 20
+    # Price
+    lp = _parsed_float(lst, "price_vnd")
+    bmin = _client_float(c, "budget_min")
+    bmax = _client_float(c, "budget_max")
+    if lp is not None and (bmin or bmax):
+        over_max = bool(bmax and lp > bmax)
+        under_min = bool(bmin and lp < bmin)
+        if not over_max and not under_min:
+            score += 30
+        elif over_max and lp <= bmax * 1.2:
+            score += 15
+    elif lp is not None:
+        score += 15
+    # District
+    ld = ((lst.get("parsed") or {}).get("district") or "").strip()
+    cd = (c.get("district") or "").strip()
+    if cd and ld:
+        if ld == cd:
+            score += 20
+        elif ld in ADJACENT_DISTRICTS.get(cd, []):
+            score += 10
+    elif not cd:
+        score += 10
+    # Photos
+    photos = lst.get("photo_file_ids") or []
+    if len(photos) >= 3:
+        score += 10
+    return min(score, 100)
+
+
+def _responder_candidates(broker_id, c):
+    """Broad inventory fetch for a responder; score_match() ranks them.
+
+    Uses loose DB filters (price with 20% headroom, no district filter)
+    then narrows bedrooms to exact +/-1 in Python so scoring branches
+    (off-by-one, adjacent district) stay meaningful.
+    """
+    f = {"status": "active"}
+    bmin = _client_float(c, "budget_min")
+    bmax = _client_float(c, "budget_max")
+    if bmin:
+        f["min_price"] = bmin * 0.8
+    if bmax:
+        f["max_price"] = bmax * 1.2
+    listings = db.search_listings(broker_id, f, limit=50)
+    cb = _client_float(c, "bedrooms")
+    if cb is not None:
+        kept = []
+        for l in listings:
+            lb = _parsed_float(l, "bedrooms")
+            if lb is None or abs(lb - cb) <= 1:
+                kept.append(l)
+        listings = kept
+    return listings
+
+
+# Slots reserved while a responder is picking listings (request_id -> set).
+# Prevents a 4th broker grabbing a slot mid-pick; the DB record is only
+# created AFTER scoring passes.
+_pending_picks = {}
+
+
+def _pending_count(request_id):
+    return len(_pending_picks.get(request_id, set()))
 
 def _broadcast_text(req_summary, urgency, broker_label):
     """Group broadcast message. NEVER includes client name/phone."""
@@ -100,33 +218,58 @@ def _relay_label(uid, r):
 
 
 def _listing_brief(lst):
-    """Short ' — 🏠 2PN Sơn Trà 12tr' suffix for a responder's listing."""
-    beds = lst.get("bedrooms")
-    bed_txt = f"{int(beds)}PN " if beds else ""
-    dist = (lst.get("district") or "").strip()
-    price = lst.get("price_vnd")
-    return f" — 🏠 {bed_txt}{dist} {fmt_price(price)}".strip()
+    """Short '🏠 2PN Sơn Trà 12tr' for a listing (reads parsed fields)."""
+    p = lst.get("parsed") or {}
+    br = p.get("bedrooms")
+    try:
+        bed_txt = ("Studio " if float(br) == 0 else f"{int(float(br))}PN ") \
+            if br is not None else ""
+    except (TypeError, ValueError):
+        bed_txt = ""
+    dist = (p.get("district") or "").strip()
+    price = p.get("price_vnd")
+    return f"🏠 {bed_txt}{dist} {fmt_price(price)}".strip()
+
+
+def _response_listings(rp):
+    """(listing_ids, match_scores) from a match_responses row, JSON-decoded."""
+    try:
+        lids = json.loads(rp.get("listing_ids") or "[]")
+    except (ValueError, TypeError):
+        lids = []
+    try:
+        scores = json.loads(rp.get("match_scores") or "{}")
+    except (ValueError, TypeError):
+        scores = {}
+    if not lids and rp.get("listing_id"):
+        lids = [rp["listing_id"]]  # legacy rows
+    return lids, scores
 
 
 def _responses_text_kb(r, resps):
-    """Summary text + relay buttons for the requesting broker."""
+    """Summary text + relay buttons for the requesting broker.
+
+    Responder identities stay anonymous ("Môi giới N") until both sides
+    agree to connect via the relay.
+    """
     c = db.get_client(r["client_id"])
     client_name = (c.get("name") if c else None) or "khách"
     lines = [f"🎉 Có {len(resps)} môi giới phản hồi cho khách"
              f" <b>{client_name}</b>:"]
     kb = []
     for i, rp in enumerate(resps, start=1):
-        uname = (f"@{rp['responder_username']}"
-                 if rp.get("responder_username")
-                 else f"môi giới {rp['responder_broker_id']}")
-        line = f"{i}. {uname}"
-        if rp.get("listing_id"):
-            lst = db.get_listing(rp["listing_id"])
-            if lst:
-                line += _listing_brief(lst)
-        lines.append(line)
+        lids, scores = _response_listings(rp)
+        best = max([scores.get(lid, 0) for lid in lids] + [0])
+        lines.append(f"<b>Môi giới {i}</b> (khớp cao nhất {best}%):")
+        for lid in lids:
+            lst = db.get_listing(lid)
+            if not lst:
+                continue
+            sc = scores.get(lid)
+            score_txt = f" — khớp {sc}%" if sc is not None else ""
+            lines.append(f"  • {_listing_brief(lst)}{score_txt}")
         kb.append([InlineKeyboardButton(
-            f"💬 Nhắn tin ({i})",
+            f"💬 Nhắn tin (Môi giới {i})",
             callback_data=f"mresp:msg:{r['id']}:{rp['responder_broker_id']}")])
     return "\n".join(lines), InlineKeyboardMarkup(kb)
 
@@ -287,9 +430,179 @@ async def match_request_close(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("⬅️ Quay lại", callback_data=back)]]))
 
 
+def _parse_mpick_cb(data):
+    """mpick:toggle:mr:<hex>:tg:<hex> | mpick:send:mr:<hex> |
+    mpick:cancel:mr:<hex>. Both ids contain a colon."""
+    parts = data.split(":")
+    act = parts[1] if len(parts) > 1 else ""
+    mr_id = (parts[2] + ":" + parts[3]) if len(parts) > 3 else ""
+    listing_id = (parts[4] + ":" + parts[5]) if len(parts) > 5 else ""
+    return act, mr_id, listing_id
+
+
+def _picker_text_kb(pick):
+    """Render the listing picker (toggle up to 3)."""
+    cands = pick["candidates"]
+    sel = set(pick["selected"])
+    lines = [f"Chọn tối đa 3 tin phù hợp nhất để gửi"
+             f" ({len(sel)}/3 đã chọn):"]
+    kb = []
+    for i, cd in enumerate(cands):
+        mark = "✅" if cd["id"] in sel else "⬜"
+        lines.append(f"{mark} {i + 1}. {_listing_brief(cd['listing'])}"
+                     f" — khớp {cd['score']}%")
+        kb.append([InlineKeyboardButton(
+            f"{mark} Tin {i + 1}",
+            callback_data=f"mpick:toggle:{pick['request_id']}:{cd['id']}")])
+    kb.append([InlineKeyboardButton(
+        f"✅ Gửi {len(sel)} tin này",
+        callback_data=f"mpick:send:{pick['request_id']}")])
+    kb.append([InlineKeyboardButton(
+        "❌ Hủy", callback_data=f"mpick:cancel:{pick['request_id']}")])
+    return "\n".join(lines), InlineKeyboardMarkup(kb)
+
+
+async def _send_picker_dm(ctx, user_id, r, scored):
+    """DM the responder their top-5 scored listings to pick from."""
+    top5 = scored[:5]
+    pick = {
+        "request_id": r["id"],
+        "candidates": [
+            {"id": lst["id"], "score": sc, "listing": lst}
+            for lst, sc in top5
+        ],
+        "selected": [],
+    }
+    # NOTE: user_data is per-user across chats, so setting it here in the
+    # group handler is visible when they tap buttons in DM.
+    ctx.application.user_data[user_id]["match_picking"] = pick
+    text, kb = _picker_text_kb(pick)
+    c = db.get_client(r["client_id"])
+    req = r["requirements_summary"]
+    await ctx.bot.send_message(
+        chat_id=user_id,
+        text=(f"Anh có {len(top5)} tin phù hợp với yêu cầu [{req}].\n\n"
+              + text),
+        reply_markup=kb)
+
+
+async def match_pick_toggle(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Toggle one listing in the responder's pick (max 3)."""
+    q = update.callback_query
+    await q.answer()
+    uid = q.from_user.id
+    _, mr_id, listing_id = _parse_mpick_cb(q.data)
+    pick = ctx.user_data.get("match_picking")
+    if not pick or pick["request_id"] != mr_id:
+        await q.edit_message_text(
+            "Phiên chọn tin đã hết hạn, anh reply lại trong nhóm nhé.")
+        return
+    sel = pick["selected"]
+    if listing_id in sel:
+        sel.remove(listing_id)
+    elif len(sel) >= 3:
+        await q.answer("Tối đa 3 tin thôi ạ!", show_alert=True)
+        return
+    else:
+        sel.append(listing_id)
+    text, kb = _picker_text_kb(pick)
+    await q.edit_message_text(text, reply_markup=kb)
+
+
+async def match_pick_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Responder cancels picking; frees the reserved slot."""
+    q = update.callback_query
+    await q.answer()
+    uid = q.from_user.id
+    _, mr_id, _ = _parse_mpick_cb(q.data)
+    ctx.user_data.pop("match_picking", None)
+    _pending_picks.get(mr_id, set()).discard(uid)
+    await q.edit_message_text(
+        "Dạ ok, em hủy rồi nhé. Anh có thể reply lại trong nhóm"
+        " bất cứ lúc nào.")
+
+
+async def _notify_new_response(ctx, r, n):
+    """DM the requesting broker: heads-up for 1st/2nd, full summary on 3rd."""
+    if n >= db.MAX_RESPONDERS:
+        db.update_match_request(r["id"], status="matched")
+        await _send_full_summary(ctx, r)
+        return
+    c = db.get_client(r["client_id"])
+    client_name = (c.get("name") if c else None) or "khách"
+    try:
+        await ctx.bot.send_message(
+            chat_id=r["broker_id"],
+            text=(f"🎉 Có môi giới phản hồi cho khách <b>{client_name}</b>"
+                  f" ({n}/{db.MAX_RESPONDERS})."),
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton(
+                    "👀 Xem phản hồi",
+                    callback_data=f"mresp:view:{r['id']}")]]))
+    except Exception as e:
+        log.warning("notify broker failed: %s", e)
+
+
+async def match_pick_send(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Responder submits picks -> score them -> record only if >= 1 passes."""
+    q = update.callback_query
+    await q.answer()
+    uid = q.from_user.id
+    _, mr_id, _ = _parse_mpick_cb(q.data)
+    pick = ctx.user_data.get("match_picking")
+    if not pick or pick["request_id"] != mr_id:
+        await q.edit_message_text(
+            "Phiên chọn tin đã hết hạn, anh reply lại trong nhóm nhé.")
+        return
+    r = db.get_match_request(mr_id)
+    if not r or r["status"] not in ("open", "matched"):
+        ctx.user_data.pop("match_picking", None)
+        _pending_picks.get(mr_id, set()).discard(uid)
+        await q.edit_message_text("Yêu cầu này đã đóng rồi ạ.")
+        return
+    c = db.get_client(r["client_id"])
+    sel_ids = list(pick["selected"])
+    if not sel_ids:
+        await q.answer("Anh chọn ít nhất 1 tin nhé!", show_alert=True)
+        return
+    by_id = {cd["id"]: cd for cd in pick["candidates"]}
+    passed = []
+    for lid in sel_ids:
+        lst = db.get_listing(lid)
+        if not lst:
+            continue
+        sc = score_match(lst, c) if c else 0
+        if sc >= MATCH_PASS_SCORE:
+            passed.append((lid, sc))
+    if not passed:
+        text, kb = _picker_text_kb(pick)
+        await q.edit_message_text(
+            f"⚠️ Các tin này chưa đủ khớp (cần ≥{MATCH_PASS_SCORE}đ)."
+            f" Anh chọn tin khác nhé.\n\n{text}",
+            reply_markup=kb)
+        return
+    listing_ids = [lid for lid, _ in passed]
+    match_scores = {lid: sc for lid, sc in passed}
+    ok, n = db.add_match_response(
+        mr_id, uid, q.from_user.username,
+        listing_ids=listing_ids, match_scores=match_scores)
+    ctx.user_data.pop("match_picking", None)
+    _pending_picks.get(mr_id, set()).discard(uid)
+    if not ok:
+        await q.edit_message_text("Em đã nhận tin của anh rồi nhé ✓")
+        return
+    await q.edit_message_text(
+        f"Em đã gửi {len(passed)} tin cho bên cần nhà rồi nhé ✓")
+    r = db.get_match_request(mr_id)
+    if r:
+        await _notify_new_response(ctx, r, n)
+
+
 async def on_group_reply(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """Detect replies to broadcast messages in the broker group and
-    notify the requesting broker. Max 3 responders per request."""
+    """Detect replies to broadcast messages, verify the replier's inventory,
+    and DM them a listing picker. The DB response record is only created
+    AFTER scoring passes (slot reserved via _pending_picks meanwhile)."""
     msg = update.effective_message
     if not msg or not msg.reply_to_message:
         return
@@ -300,42 +613,59 @@ async def on_group_reply(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     replier = update.effective_user
     if replier.id == r["broker_id"]:
         return  # don't notify on own replies
-    # Same broker replying again -> ignore silently (no double count).
     if db.has_responded(r["id"], replier.id):
+        return  # already recorded: ignore silently
+    pend = _pending_picks.setdefault(r["id"], set())
+    if replier.id in pend:
+        try:
+            await msg.reply_text(
+                "Anh đang chọn tin rồi, check tin nhắn riêng với em nhé! 📩")
+        except Exception:
+            pass
         return
-    # 4th+ responder -> tell them it's full, don't record or notify.
-    if db.count_responses(r["id"]) >= db.MAX_RESPONDERS:
+    # 4th+ responder (recorded + in-pick) -> tell them it's full.
+    if db.count_responses(r["id"]) + len(pend) >= db.MAX_RESPONDERS:
         try:
             await msg.reply_text(
                 "Yêu cầu này đã đủ 3 môi giới phản hồi rồi ạ.")
         except Exception as e:
             log.warning("full reply failed: %s", e)
         return
-    ok, n = db.add_match_response(r["id"], replier.id, replier.username)
-    if not ok:
-        return
-    if n >= db.MAX_RESPONDERS:
-        # Full: close to new responders, DM the complete list.
-        db.update_match_request(r["id"], status="matched")
-        await _send_full_summary(ctx, r)
-        return
-    # 1-2 responders: short heads-up with a [Xem phản hồi] button.
+    # ---- inventory verification ----
     c = db.get_client(r["client_id"])
-    client_name = c.get("name") if c else "khách"
-    replier_label = (f"@{replier.username}" if replier.username
-                     else replier.full_name)
+    if not c:
+        return
+    candidates = _responder_candidates(replier.id, c)
+    scored = sorted(((l, score_match(l, c)) for l in candidates),
+                    key=lambda t: t[1], reverse=True)
+    if not scored or scored[0][1] < MATCH_INVENTORY_MIN:
+        try:
+            await msg.reply_text(
+                "Anh chưa có tin nào phù hợp với yêu cầu này. "
+                "Anh gửi tin vào bot trước đã nhé! 📝")
+        except Exception as e:
+            log.warning("no-match reply failed: %s", e)
+        return
+    # Reserve the slot, then DM the picker.
+    pend.add(replier.id)
     try:
-        await ctx.bot.send_message(
-            chat_id=r["broker_id"],
-            text=(f"📨 <b>{replier_label}</b> vừa phản hồi yêu cầu cho"
-                  f" khách <b>{client_name}</b> ({n}/{db.MAX_RESPONDERS})."),
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton(
-                    "👀 Xem phản hồi",
-                    callback_data=f"mresp:view:{r['id']}")]]))
+        await _send_picker_dm(ctx, replier.id, r, scored)
     except Exception as e:
-        log.warning("notify broker failed: %s", e)
+        log.warning("picker DM failed: %s", e)
+        pend.discard(replier.id)
+        try:
+            await msg.reply_text(
+                "Em không nhắn riêng được cho anh. Anh mở chat riêng"
+                " với em và bấm /start trước nhé!")
+        except Exception:
+            pass
+        return
+    try:
+        await msg.reply_text(
+            "Em đã gửi danh sách tin phù hợp vào tin nhắn riêng,"
+            " anh check nhé! 📩")
+    except Exception:
+        pass
 
 
 async def match_responses_view(update: Update, ctx: ContextTypes.DEFAULT_TYPE):

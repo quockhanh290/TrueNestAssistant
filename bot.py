@@ -632,6 +632,12 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await feat_match.match_relay_prompt(update, ctx)
     elif data == "mresp:cancel":
         await feat_match.match_relay_cancel(update, ctx)
+    elif data.startswith("mpick:toggle:"):
+        await feat_match.match_pick_toggle(update, ctx)
+    elif data.startswith("mpick:send:"):
+        await feat_match.match_pick_send(update, ctx)
+    elif data.startswith("mpick:cancel:"):
+        await feat_match.match_pick_cancel(update, ctx)
     elif data.startswith("client:match:"):
         await feat_clients.client_match(update, ctx)
     elif data.startswith("client:seturg:"):
