@@ -353,6 +353,13 @@ def _migrate_brokers(conn):
             "ALTER TABLE brokers ADD COLUMN listing_limit INTEGER NOT NULL"
             " DEFAULT 20"
         )
+    # contextual hints (2026-10-16): track which first-time feature hints
+    # the broker has already seen, so we only show each once.
+    if "seen_hints" not in cols:
+        conn.execute(
+            "ALTER TABLE brokers ADD COLUMN seen_hints TEXT NOT NULL"
+            " DEFAULT '[]'"
+        )
     # cross-broker match analytics (2026-10-16)
     for col, ddl in (
         ("match_requests_sent", "INTEGER NOT NULL DEFAULT 0"),
@@ -477,7 +484,7 @@ def get_or_create_broker(user_id, username=None, display_name=None, path=None):
 def update_broker(user_id, path=None, **fields):
     allowed = {"username", "display_name", "name", "pronoun", "phone", "zalo",
                "facebook", "status", "listings_count", "approved_count",
-               "tier", "tier_expires_at", "listing_limit",
+               "tier", "tier_expires_at", "listing_limit", "seen_hints",
                "match_requests_sent", "match_responses_received",
                "match_contacts_unlocked", "last_match_at"}
     sets = ", ".join(f"{k} = ?" for k in fields if k in allowed)
@@ -502,6 +509,29 @@ def get_broker(user_id, path=None):
     ).fetchone()
     conn.close()
     return dict(row) if row else None
+
+
+# ---- contextual hints (2026-10-16) ----
+
+def get_seen_hints(broker_id, path=None):
+    """Return list of hint keys this broker has already seen."""
+    import json
+    b = get_broker(broker_id, path=path)
+    if not b:
+        return []
+    try:
+        return json.loads(b.get("seen_hints") or "[]")
+    except (ValueError, TypeError):
+        return []
+
+
+def mark_hint_seen(broker_id, hint_key, path=None):
+    """Record that a broker has seen a hint (idempotent)."""
+    import json
+    seen = get_seen_hints(broker_id, path=path)
+    if hint_key not in seen:
+        seen.append(hint_key)
+        update_broker(broker_id, path=path, seen_hints=json.dumps(seen))
 
 
 # ---- cross-broker match analytics (2026-10-16) ----
