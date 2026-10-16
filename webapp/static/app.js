@@ -573,6 +573,9 @@
         maxListings: d.max_listings || 5,
         listings: d.listings || [],
         failedSummary: d.failed_summary || {},
+        staleCount: d.stale_count || 0,
+        staleIds: d.stale_ids || [],
+        cooldownUntil: d.propose_cooldown_until || 0,
         selected: {},
         submitted: false,
         expanded: {},
@@ -794,6 +797,28 @@
       "</div>" +
       '<div class="propose-sort">Sắp xếp theo: điểm match × điểm chất lượng</div>';
 
+    // Stale listings banner (Khanh 2026-10-16, revised): >60-day listings
+    // are hidden from propose and require re-verification.
+    if (st.staleCount > 0) {
+      html += '<div class="propose-warn">⚠️ ' + st.staleCount +
+        " tin của anh quá cũ (&gt;60 ngày) nên bị ẩn<br>" +
+        "Hãy kiểm tra thực tế rồi cập nhật để mở lại.<br>" +
+        '<button class="btn btn-primary btn-sm" id="propose-refresh-all" ' +
+        'style="margin-top:8px">🔄 Kiểm tra &amp; cập nhật</button></div>';
+    }
+
+    // Propose cooldown banner (Khanh 2026-10-16): 3 false refresh claims
+    // -> 7-day propose ban.
+    if (st.cooldownUntil && st.cooldownUntil > Date.now() / 1000) {
+      var cd = new Date(st.cooldownUntil * 1000);
+      var cstr = ("0" + cd.getDate()).slice(-2) + "/" +
+        ("0" + (cd.getMonth() + 1)).slice(-2) + "/" + cd.getFullYear();
+      html += '<div class="propose-warn">🔒 Anh đang bị hạn chế đề xuất đến ' +
+        esc(cstr) + " do báo sai trạng thái tin 3 lần.</div>";
+      body.innerHTML = html;
+      return;
+    }
+
     if (!st.listings.length) {
       var fs = st.failedSummary || {};
       var fsKeys = Object.keys(fs);
@@ -844,7 +869,23 @@
         '<div class="propose-title">' + esc(l.title) + "</div>" +
         '<div class="propose-meta">' + esc(l.price) + "/tháng</div>" +
         '<div class="propose-scores">🎯 Match ' + (l.match_score || 0) +
-        "% · 🤖 " + q + "đ</div>";
+        "% · 🤖 " + q + "đ" +
+        (l.freshness_emoji
+          ? ' · <span class="propose-fresh" title="' +
+            esc(l.freshness_label || "") + '">' +
+            esc(l.freshness_emoji) + " " +
+            esc(Math.floor(l.age_days || 0) + " ngày") + "</span>"
+          : "") +
+        "</div>";
+      // Freshness nudge (Khanh 2026-10-16, revised): push brokers to keep
+      // status fresh. 30-60d listings are NOT hidden (market reality) but
+      // get a 0.5 multiplier + warning.
+      var fe = l.freshness_emoji || "";
+      if (fe === "🟡" || fe === "🟠" || fe === "🔴") {
+        card += '<div class="propose-fresh-tip">💡 Cập nhật trạng thái để tăng độ tin cậy' +
+          ' <button class="btn btn-sm propose-refresh" data-id="' + esc(l.id) +
+          '" data-title="' + esc(l.title) + '">🔄 Cập nhật</button></div>';
+      }
       // Quality improvement suggestions (Khanh 2026-10-16)
       if (q < 80 && l.quality_missing && l.quality_missing.length) {
         if (qExp) {
@@ -907,6 +948,13 @@
           openEdit(id, { view: "propose", requestId: st.requestId });
           return;
         }
+        // "Cập nhật" freshness — stop propagation, open verify modal
+        if (e.target.classList.contains("propose-refresh")) {
+          e.stopPropagation();
+          refreshProposeListing(id,
+            e.target.getAttribute("data-title") || "");
+          return;
+        }
         // toggle expand on "xem chi tiết" click, else toggle select
         if (e.target.classList.contains("propose-expand")) {
           st.expanded[id] = !st.expanded[id];
@@ -927,8 +975,100 @@
     });
     var more = document.getElementById("propose-more");
     if (more) more.onclick = function () { st.showAll = true; renderPropose(); };
+    var rAll = document.getElementById("propose-refresh-all");
+    if (rAll) rAll.onclick = function () { refreshAllStale(); };
     var sub = document.getElementById("propose-submit");
     if (sub) sub.onclick = function () { proposePreSubmitCheck(); };
+  }
+
+  function refreshProposeListing(id, title) {
+    // Confirmation modal (Khanh 2026-10-16, revised): refresh is NOT 1-tap.
+    // Broker must confirm real-world verification; false claims are penalized.
+    var st = proposeState;
+    var ov = document.createElement("div");
+    ov.className = "modal-overlay";
+    ov.innerHTML =
+      '<div class="modal">' +
+      "<h3>🔄 Cập nhật tin</h3>" +
+      '<p><b>"' + esc(title || id) + '"</b></p>' +
+      "<p>Anh đã kiểm tra thực tế tin này chưa?</p>" +
+      '<button class="btn btn-primary" id="rf-available" ' +
+      'style="width:100%;margin-bottom:8px">✅ Còn trống — cập nhật</button>' +
+      '<button class="btn" id="rf-rented" ' +
+      'style="width:100%;margin-bottom:8px">❌ Đã cho thuê</button>' +
+      '<button class="btn" id="rf-cancel" ' +
+      'style="width:100%">Để sau</button>' +
+      '<p class="modal-warn">⚠️ Lưu ý: Cập nhật mà không kiểm tra thực tế, ' +
+      "nếu bị phát hiện sẽ bị trừ điểm uy tín và ảnh hưởng chất lượng hồ sơ của anh.</p>" +
+      "</div>";
+    document.getElementById("propose-body").appendChild(ov);
+    function close() { ov.remove(); }
+    function send(status) {
+      api("/api/listing/" + encodeURIComponent(id) + "/refresh",
+          { method: "POST", body: { status: status } }).then(function (d) {
+        close();
+        if (d.error) {
+          toast(d.error_vi || "Cập nhật thất bại");
+          return;
+        }
+        if (status === "rented") {
+          toast("Đã đánh dấu đã cho thuê.");
+        } else {
+          toast("Đã cập nhật ✅" + (d.warning_vi ? " " + d.warning_vi : ""));
+        }
+        openPropose(st.requestId);  // reload: ages + scores recomputed
+      }).catch(function () {
+        close();
+        toast("Cập nhật thất bại");
+      });
+    }
+    ov.querySelector("#rf-available").onclick = function () { send("available"); };
+    ov.querySelector("#rf-rented").onclick = function () { send("rented"); };
+    ov.querySelector("#rf-cancel").onclick = close;
+    ov.onclick = function (e) { if (e.target === ov) close(); };
+  }
+
+  function refreshAllStale() {
+    // Bulk refresh (Khanh 2026-10-16, revised): one confirmation modal for
+    // all stale listings — broker confirms real-world verification.
+    var st = proposeState;
+    var ids = st.staleIds || [];
+    if (!ids.length) return;
+    var ov = document.createElement("div");
+    ov.className = "modal-overlay";
+    ov.innerHTML =
+      '<div class="modal">' +
+      "<h3>🔄 Cập nhật " + ids.length + " tin cũ?</h3>" +
+      "<p>Anh đã kiểm tra thực tế các tin này chưa?</p>" +
+      '<button class="btn btn-primary" id="rf-all-available" ' +
+      'style="width:100%;margin-bottom:8px">✅ Tất cả còn trống — cập nhật</button>' +
+      '<button class="btn" id="rf-all-cancel" ' +
+      'style="width:100%">Để sau</button>' +
+      '<p class="modal-warn">⚠️ Lưu ý: Cập nhật mà không kiểm tra thực tế, ' +
+      "nếu bị phát hiện sẽ bị trừ điểm uy tín và ảnh hưởng chất lượng hồ sơ của anh.</p>" +
+      "</div>";
+    document.getElementById("propose-body").appendChild(ov);
+    function close() { ov.remove(); }
+    ov.querySelector("#rf-all-cancel").onclick = close;
+    ov.onclick = function (e) { if (e.target === ov) close(); };
+    ov.querySelector("#rf-all-available").onclick = function () {
+      ov.querySelector("#rf-all-available").disabled = true;
+      toast("Đang cập nhật " + ids.length + " tin...");
+      var done = 0;
+      (function next(i) {
+        if (i >= ids.length) {
+          close();
+          toast("Đã cập nhật " + done + "/" + ids.length + " tin ✅");
+          openPropose(st.requestId);  // reload: stale listings reappear
+          return;
+        }
+        api("/api/listing/" + encodeURIComponent(ids[i]) + "/refresh",
+            { method: "POST", body: { status: "available" } }).then(function (d) {
+          if (!d.error) done++;
+          next(i + 1);
+        }).catch(function () { next(i + 1); });
+      })(0);
+    };
   }
 
   function proposePreSubmitCheck() {
