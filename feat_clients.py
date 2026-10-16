@@ -1260,6 +1260,35 @@ def _rank_by_keywords(matches, extra_keywords):
     return sorted(matches, key=_score, reverse=True)
 
 
+def _completeness_boost_key(l):
+    """Sort key: completeness-boosted rank. Higher completeness → higher rank.
+
+    Listings with score >= 80 get +20% boost, < 50 get -10% penalty.
+    This incentivizes brokers to fill in complete listing data.
+    """
+    try:
+        comp, _ = completeness_score(l)
+    except Exception:
+        comp = 50
+    # Use a synthetic base of 50 so boost/penalty applies even without
+    # a prior relevance score — higher completeness always ranks higher.
+    base = 50
+    if comp >= 80:
+        return base * 1.2
+    if comp < 50:
+        return base * 0.9
+    return base
+
+
+def is_high_completeness(l):
+    """True if listing is complete enough for the ⭐ indicator."""
+    try:
+        comp, _ = completeness_score(l)
+    except Exception:
+        return False
+    return comp >= 80
+
+
 def _enrichment_warnings(uid, c, extra_keywords):
     """Find search criteria that can't match well because the broker's
     own listings lack that data.
@@ -1314,6 +1343,8 @@ def _match_hits_content(uid, client_id, c, pn, limit, extra_keywords):
     matches = db.search_listings(uid, _client_to_search_filters(c),
                                  limit=limit)
     matches = _rank_by_keywords(matches, extra_keywords)
+    # Completeness boost: complete listings rank higher (incentive loop)
+    matches = sorted(matches, key=_completeness_boost_key, reverse=True)
     kb = []
     for i, l in enumerate(matches, start=1):
         kb.append([InlineKeyboardButton(
@@ -1330,7 +1361,8 @@ def _match_hits_content(uid, client_id, c, pn, limit, extra_keywords):
         lines.append(f"🎯 Ưu tiên: {', '.join(extra_keywords)}")
     for i, l in enumerate(matches, start=1):
         lines.append("")
-        lines.append(f"{i}. {listing_line(l)}")
+        star = " ⭐" if is_high_completeness(l) else ""
+        lines.append(f"{i}. {listing_line(l)}{star}")
     lines.append("")
     lines.append("Chọn tin để gửi cho khách nhé 👇")
     warnings = _enrichment_warnings(uid, c, extra_keywords)
