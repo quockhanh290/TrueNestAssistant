@@ -38,21 +38,75 @@ MENU_KB = InlineKeyboardMarkup([
 
 STATUS_EMOJI = {
     "draft": "📝", "pending_info": "⏳", "submitted": "✅",
-    "rented": "🔑", "expired": "📦",
+    "rented": "🔴", "negotiating": "🤝", "deposited": "💰",
+    "expired": "📦",
 }
 
 # listing list filters for "📋 Tin của tôi"
 LIST_FILTERS = {
     "all": {"label": "Tất cả", "statuses": None},          # None = all except deleted
     "active": {"label": "Đang trống", "statuses": ("draft", "pending_info", "submitted")},
-    "rented": {"label": "Đã cho thuê", "statuses": ("rented",)},
+    "inactive": {"label": "Không còn trống",
+                 "statuses": ("rented", "negotiating", "deposited")},
 }
 
 # status labels for display
 STATUS_LABEL = {
     "draft": "nháp", "pending_info": "thiếu info", "submitted": "đang trống",
-    "rented": "đã cho thuê", "expired": "hết hạn", "deleted": "đã xoá",
+    "rented": "đã cho thuê", "negotiating": "đang đàm phán", "deposited": "đã cọc",
+    "expired": "hết hạn", "deleted": "đã xoá",
 }
+
+# completeness scoring — weights sum to 100. Only uses the listing's own
+# fields + timestamps (no market data needed).
+COMPLETENESS_FIELDS = {
+    'price_vnd': (20, "Giá thuê"),
+    'primary_phone': (15, "SĐT liên hệ"),
+    'bedrooms': (10, "Số phòng ngủ"),
+    'district': (10, "Khu vực"),
+    'area_m2': (10, "Diện tích"),
+    'photos': (15, "Ảnh (tối thiểu 3)"),
+    'furnishing': (5, "Nội thất"),
+    'pet_friendly': (5, "Chính sách pet"),
+    'description': (10, "Mô tả chi tiết"),
+}
+
+
+def completeness_score(listing):
+    """0-100% based on filled fields. Returns (score, [missing labels])."""
+    p = listing.get("parsed") or {}
+    score = 0
+    missing = []
+    checks = {
+        'price_vnd': bool(p.get('price_vnd')),
+        'primary_phone': bool(p.get('primary_phone')),
+        'bedrooms': p.get('bedrooms') is not None,
+        'district': bool(p.get('district')),
+        'area_m2': bool(p.get('area_m2')),
+        'photos': len(listing.get('photo_file_ids') or []) >= 3,
+        'furnishing': bool(p.get('furnishing')),
+        'pet_friendly': p.get('pet_friendly') is not None,
+        'description': len(listing.get('raw_text') or '') > 50,
+    }
+    for key, (weight, label) in COMPLETENESS_FIELDS.items():
+        if checks[key]:
+            score += weight
+        else:
+            missing.append(label)
+    return score, missing
+
+
+def freshness_badge(created_at):
+    """(emoji, label) for listing age. No market data needed."""
+    age_d = (time.time() - created_at) / 86400
+    if age_d < 3:
+        label = "mới" if age_d < 1 else f"{int(age_d)} ngày"
+        return "🟢", label
+    if age_d <= 14:
+        return "🟡", f"{int(age_d)} ngày"
+    if age_d <= 30:
+        return "🟠", f"{int(age_d)} ngày"
+    return "🔴", f"{int(age_d)} ngày"
 
 # filter option codes (compact for callback_data)
 DISTRICT_CODES = {
@@ -91,7 +145,7 @@ def _filters_to_search(f):
     if s == "t":
         sf["status"] = "active"
     elif s == "r":
-        sf["status"] = "rented"
+        sf["status"] = "inactive"   # rented + negotiating + deposited
     # s == "a" -> default (hide deleted)
 
     br = f.get("br")
@@ -124,7 +178,7 @@ def _describe_ui_filters(f):
     if s == "t":
         bits.append("đang trống")
     elif s == "r":
-        bits.append("đã cho thuê")
+        bits.append("không còn trống")
     br = f.get("br")
     if br == "0":
         bits.append("Studio")
@@ -228,8 +282,8 @@ def fmt_price(v):
 
 
 def listing_line(l):
-    """Two-line compact display with essential info:
-    🏠 2PN An Thượng, 12tr/tháng
+    """Two-line compact display with essential info + freshness:
+    🏠 2PN An Thượng, 12tr/tháng 🟢 2 ngày
     📐 52m² | 🛋️ Full NT | 🐾 Pet OK | 👀 23 | ✅ đang trống
     """
     p = l["parsed"]
@@ -237,8 +291,9 @@ def listing_line(l):
     br_s = "studio" if br == 0.0 else (f"{int(br)}PN" if br else "?PN")
     loc = p.get("building_name") or p.get("district") or "?"
     price = fmt_price(p.get("price_vnd"))
+    fresh_emoji, fresh_label = freshness_badge(l["created_at"])
 
-    line1 = f"🏠 {br_s} {loc}, {price}/tháng"
+    line1 = f"🏠 {br_s} {loc}, {price}/tháng {fresh_emoji} {fresh_label}"
 
     bits = []
     area = p.get("area_m2")
@@ -738,7 +793,7 @@ async def show_query_detail(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if p.get("furnishing"):
         lines.append(f"Nội thất: {p['furnishing']}")
     kb = []
-    if l["status"] not in ("rented", "deleted"):
+    if l["status"] not in ("rented", "negotiating", "deposited", "deleted"):
         kb.append([InlineKeyboardButton("🔑 Đánh dấu đã cho thuê",
                                        callback_data=f"qrented:{listing_id}")])
     kb.append([InlineKeyboardButton("⬅️ Menu", callback_data="menu:back")])
@@ -800,7 +855,7 @@ async def show_my_listings(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     # row 1: status quick filters
     srow = []
-    for key, code in (("all", "a"), ("active", "t"), ("rented", "r")):
+    for key, code in (("all", "a"), ("active", "t"), ("inactive", "r")):
         label = LIST_FILTERS[key]["label"]
         mark = "● " if f.get("s", "a") == code else ""
         nf = dict(f)
@@ -902,6 +957,81 @@ async def show_filter_picker(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await q.edit_message_text(title, reply_markup=InlineKeyboardMarkup(kb))
 
 
+def parse_status_cb(data):
+    """Parse 'setstatus:tg:<hex>:<new_status>:<page>:<filter_str>'.
+    Returns (listing_id, new_status, page, filter_str)."""
+    import re as _re
+    rest = data[len("setstatus:"):]
+    m = _re.match(r"^(tg:[0-9a-f]+):([a-z_]+):(\d+)(?::(.+))?$", rest)
+    if not m:
+        return None, None, "0", "s:a"
+    return m.group(1), m.group(2), m.group(3), m.group(4) or "s:a"
+
+
+def _detail_content(l, page, filt):
+    """Build (text, InlineKeyboardMarkup) for a listing detail view."""
+    p = l["parsed"]
+    lines = [
+        f"<b>{listing_line(l)}</b>",
+        f"📸 {len(l['photo_file_ids'])} ảnh | 👀 {l['view_count']} lượt xem",
+        f"📅 Đăng {rel_time(l['created_at'])}",
+        f"Trạng thái: {STATUS_EMOJI.get(l['status'], '')} "
+        f"{STATUS_LABEL.get(l['status'], l['status'])}",
+    ]
+    if p.get("area_m2"):
+        lines.append(f"Diện tích: {p['area_m2']:g}m²")
+    if p.get("furnishing"):
+        lines.append(f"Nội thất: {p['furnishing']}")
+
+    # completeness score + suggestions (listing's own data only)
+    score, missing = completeness_score(l)
+    lines.append(f"📊 Độ đầy đủ: {score}%")
+    if missing:
+        lines.append("💡 Để tin nổi bật hơn, anh bổ sung giúp em:")
+        for m in missing:
+            lines.append(f"   • {m}")
+
+    kb = []
+
+    # refresh prompt for old listings (>30 days)
+    age_days = (time.time() - l["created_at"]) / 86400
+    if age_days > 30:
+        lines.append(
+            f"\n💡 Tin này đã {int(age_days)} ngày rồi, "
+            "anh có muốn làm mới không?")
+        kb.append([InlineKeyboardButton(
+            "🔄 Làm mới tin",
+            callback_data=f"refresh:{l['id']}:{page}:{filt}")])
+
+    # status toggle buttons
+    if l["status"] in ("draft", "pending_info", "submitted"):
+        kb.append([
+            InlineKeyboardButton(
+                "🔑 Đã cho thuê",
+                callback_data=f"setstatus:{l['id']}:rented:{page}:{filt}"),
+            InlineKeyboardButton(
+                "🤝 Đàm phán",
+                callback_data=f"setstatus:{l['id']}:negotiating:{page}:{filt}"),
+        ])
+        kb.append([
+            InlineKeyboardButton(
+                "💰 Đã cọc",
+                callback_data=f"setstatus:{l['id']}:deposited:{page}:{filt}"),
+        ])
+    elif l["status"] in ("rented", "negotiating", "deposited"):
+        kb.append([InlineKeyboardButton(
+            "✅ Đánh dấu còn trống",
+            callback_data=f"setstatus:{l['id']}:submitted:{page}:{filt}")])
+
+    kb.append([InlineKeyboardButton(
+        "🗑 Xoá tin",
+        callback_data=f"delete:{l['id']}:{page}:{filt}")])
+    kb.append([InlineKeyboardButton(
+        "⬅️ Danh sách",
+        callback_data=f"menu:list:{page}:{filt}")])
+    return "\n".join(lines), InlineKeyboardMarkup(kb)
+
+
 async def show_detail(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
@@ -910,27 +1040,44 @@ async def show_detail(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not l:
         await q.edit_message_text("Tin này không còn nữa.", reply_markup=MENU_KB)
         return
-    p = l["parsed"]
-    lines = [
-        f"<b>{listing_line(l)}</b>",
-        f"📸 {len(l['photo_file_ids'])} ảnh | 👀 {l['view_count']} lượt xem",
-        f"📅 Đăng {rel_time(l['created_at'])}",
-        f"Trạng thái: {STATUS_EMOJI.get(l['status'], '')} {l['status']}",
-    ]
-    if p.get("area_m2"):
-        lines.append(f"Diện tích: {p['area_m2']:g}m²")
-    if p.get("furnishing"):
-        lines.append(f"Nội thất: {p['furnishing']}")
-    kb = []
-    if l["status"] not in ("rented", "deleted"):
-        kb.append([InlineKeyboardButton("🔑 Đánh dấu đã cho thuê",
-                                       callback_data=f"rented:{listing_id}:{page}:{filt}")])
-    kb.append([InlineKeyboardButton("🗑 Xoá tin",
-                                    callback_data=f"delete:{listing_id}:{page}:{filt}")])
-    kb.append([InlineKeyboardButton("⬅️ Danh sách",
-                                    callback_data=f"menu:list:{page}:{filt}")])
-    await q.edit_message_text("\n".join(lines), parse_mode="HTML",
-                              reply_markup=InlineKeyboardMarkup(kb))
+    text, kb = _detail_content(l, page, filt)
+    await q.edit_message_text(text, parse_mode="HTML", reply_markup=kb)
+
+
+async def set_status_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Handle extended status buttons: rented / negotiating / deposited /
+    submitted. Re-renders the detail view."""
+    q = update.callback_query
+    await q.answer()
+    listing_id, new_status, page, filt = parse_status_cb(q.data)
+    if listing_id and new_status in ("submitted", "rented",
+                                     "negotiating", "deposited"):
+        db.set_listing_status(listing_id, new_status, changed_by="broker")
+    l = db.get_listing(listing_id) if listing_id else None
+    if not l:
+        await q.edit_message_text("Tin này không còn nữa.", reply_markup=MENU_KB)
+        return
+    text, kb = _detail_content(l, page, filt)
+    await natural_delay(update)
+    await q.edit_message_text(text, parse_mode="HTML", reply_markup=kb)
+
+
+async def refresh_listing_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """'Làm mới tin' — bump created_at/updated_at so the listing reads as new."""
+    q = update.callback_query
+    await q.answer()
+    listing_id, page, filt = parse_listing_cb(q.data, "refresh")
+    if listing_id:
+        db.touch_listing(listing_id)
+    l = db.get_listing(listing_id) if listing_id else None
+    if not l:
+        await q.edit_message_text("Tin này không còn nữa.", reply_markup=MENU_KB)
+        return
+    text, kb = _detail_content(l, page, filt)
+    await natural_delay(update)
+    await q.edit_message_text(
+        "Đã làm mới tin ✓ Giờ tin của anh lại hiện như mới!\n\n" + text,
+        parse_mode="HTML", reply_markup=kb)
 
 
 async def mark_rented(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -1357,6 +1504,10 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await show_query_detail(update, ctx)
     elif data.startswith("rented:"):
         await mark_rented(update, ctx)
+    elif data.startswith("setstatus:"):
+        await set_status_cb(update, ctx)
+    elif data.startswith("refresh:"):
+        await refresh_listing_cb(update, ctx)
     elif data.startswith("qrented:"):
         await mark_query_rented(update, ctx)
     elif data.startswith("delete:"):
