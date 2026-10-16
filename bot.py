@@ -520,6 +520,12 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await feat_viewings._handle_viewing_feedback(update, ctx, vf, text)
         return
 
+    # 1b10. guided listing intake? (False during photo step -> buffer routing)
+    gd = ctx.user_data.get("guided")
+    if gd:
+        if await feat_intake.handle_guided_text(update, ctx, gd, text):
+            return
+
     # 1c. adding photos to a listing? text is not expected here
     if ctx.user_data.get("adding_photos"):
         await update.message.reply_text(
@@ -603,6 +609,18 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await feat_intake.buf_confirm_done(update, ctx)
     elif data == "buf:more":
         await feat_intake.buf_confirm_more(update, ctx)
+    elif data == "guided:mode:free":
+        await feat_intake.guided_mode_free(update, ctx)
+    elif data == "guided:mode:guided":
+        await feat_intake.guided_mode_guided(update, ctx)
+    elif data.startswith("guided:amen:"):
+        await feat_intake.guided_amen(update, ctx)
+    elif data.startswith("guided:set:"):
+        await feat_intake.guided_set(update, ctx)
+    elif data == "guided:back":
+        await feat_intake.guided_back(update, ctx)
+    elif data == "guided:skip":
+        await feat_intake.guided_skip(update, ctx)
     elif data == "menu:viewings":
         if not feat_premium.requires_tier(update.callback_query.from_user.id,
                                           "viewings"):
