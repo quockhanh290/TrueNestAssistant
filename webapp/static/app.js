@@ -438,5 +438,32 @@
   if (tg) {
     tg.BackButton.onClick(function () { show("view-list"); });
   }
-  loadListings();
+  // Deep links: ?view=listing&id=<id>[&tab=post] or ?view=batch&ids=id1,id2
+  var dlView = qs.get("view");
+  var dlId = qs.get("id");
+  var dlIds = qs.get("ids");
+  var dlTab = qs.get("tab") || "info";
+  if (dlView === "listing" && dlId) {
+    openDetail(dlId, dlTab);
+    // also load list in background for back navigation
+    loadListings();
+  } else if (dlView === "batch" && dlIds) {
+    loadBatch(dlIds);
+  } else {
+    loadListings();
+  }
+
+  function loadBatch(ids) {
+    document.getElementById("listing-list").innerHTML =
+      '<div class="loading">Đang tải...</div>';
+    api("/api/listings?limit=100&ids=" + encodeURIComponent(ids)).then(function (data) {
+      state.items = data.items || [];
+      renderList();
+      var n = state.items.length;
+      toast(n ? ("Đã nhập " + n + " căn trong đợt này ✅") : "Không tìm thấy căn nào");
+    }).catch(function () {
+      document.getElementById("listing-list").innerHTML =
+        '<div class="empty"><div class="big">⚠️</div>Không tải được dữ liệu.</div>';
+    });
+  }
 })();
