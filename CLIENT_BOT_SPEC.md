@@ -82,6 +82,8 @@ Bạn đang phân vân giữa 3 tin:
 3. Broadcast cho broker (như spec match)
 4. Nhận đề xuất → hiện kèm so sánh giá + cảnh báo
 5. Khách chọn broker HOẶC pick tin lẻ (concierge)
+   HOẶC bấm "xem thêm căn khác" → hiện tin ngoài đề xuất
+   → vẫn không ưng → gợi ý nới tiêu chí → match lại
 6. Kết nối → follow-up → xác nhận → đánh giá
 7. Trước hết HĐ 45 ngày → hỏi gia hạn/tìm mới
 ```
