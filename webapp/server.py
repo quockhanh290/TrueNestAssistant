@@ -166,9 +166,25 @@ class Handler(BaseHTTPRequestHandler):
                 offset = int(query.get("offset", "0"))
             except ValueError:
                 limit, offset = 50, 0
+            def _f(name):
+                try:
+                    v = query.get(name)
+                    return float(v) if v else None
+                except ValueError:
+                    return None
+            pf = query.get("pet_friendly")
+            ids_raw = query.get("ids", "")
+            ids = [i.strip() for i in ids_raw.split(",") if i.strip()] or None
             data, code = api.get_listings(
                 broker_id, q=query.get("q"), bedrooms=query.get("bedrooms"),
-                status=query.get("status"), limit=limit, offset=offset)
+                status=query.get("status"), limit=limit, offset=offset,
+                min_price=_f("min_price"), max_price=_f("max_price"),
+                min_score=_f("min_score"), district=query.get("district"),
+                furnishing=query.get("furnishing"),
+                pet_friendly=(pf == "true" if pf else None),
+                min_area=_f("min_area"),
+                property_type=query.get("property_type"),
+                ids=ids)
             return self._json(code, data)
         if parts[0] == "listing" and len(parts) == 2:
             data, code = api.get_listing(broker_id, parts[1])
