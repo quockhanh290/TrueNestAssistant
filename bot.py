@@ -597,6 +597,12 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             update, ctx, uid, text, fwd_here)
         return
 
+    # 0b3. editing a saved FB post? typed text = the edited version.
+    ep = ctx.user_data.get("editing_post")
+    if ep:
+        await feat_write.handle_edit_post(update, ctx, ep, text)
+        return
+
     # 0c. confirming a draft summary? typed text = correction (or "đúng rồi")
     confirming = ctx.user_data.get("confirming")
     if confirming:
@@ -788,8 +794,18 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await feat_write.on_write_post_prompt(update, ctx)
     elif data == "write:new":
         await feat_write.on_write_new(update, ctx)
+    elif data.startswith("writeview:"):
+        await feat_write.on_write_view(update, ctx)
+    elif data.startswith("writecopy:"):
+        await feat_write.on_write_copy(update, ctx)
+    elif data.startswith("writeedit:"):
+        await feat_write.on_write_edit_prompt(update, ctx)
+    elif data.startswith("writeaddlang:"):
+        await feat_write.on_write_add_lang(update, ctx)
+    elif data.startswith("writegenlang:"):
+        await feat_write.on_write_gen_lang(update, ctx)
     elif data.startswith("write:"):
-        await feat_write.on_write_lang(update, ctx)
+        await feat_write.on_write_view(update, ctx)
     elif data.startswith("writelang:"):
         await feat_write.on_write_generate(update, ctx)
     elif data == "menu:help":
