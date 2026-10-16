@@ -25,6 +25,7 @@ STATIC_DIR = os.path.join(HERE, "static")
 
 sys.path.insert(0, HERE)
 import api  # noqa: E402
+import api_clients_deals as api2  # noqa: E402
 import share  # noqa: E402
 
 PORT = int(os.environ.get("WEBAPP_PORT", "8080"))
@@ -242,6 +243,30 @@ class Handler(BaseHTTPRequestHandler):
         if parts[0] == "xbroker" and len(parts) == 1:
             data, code = api.get_xbroker_requests(broker_id)
             return self._json(code, data)
+        # ---- clients / deals / profile (api_clients_deals) ----
+        if parts[0] == "clients" and len(parts) == 1:
+            data, code = api2.list_clients_api(
+                broker_id, status=query.get("status"))
+            return self._json(code, data)
+        if parts[0] == "client" and len(parts) == 2:
+            data, code = api2.get_client_api(broker_id, parts[1])
+            return self._json(code, data)
+        if parts[0] == "viewings" and len(parts) == 1:
+            data, code = api2.list_viewings_api(broker_id)
+            return self._json(code, data)
+        if parts[0] == "deals" and len(parts) == 1:
+            data, code = api2.list_deals_api(
+                broker_id, month=query.get("month"))
+            return self._json(code, data)
+        if parts[0] == "profile" and len(parts) == 1:
+            data, code = api2.get_profile_api(broker_id)
+            return self._json(code, data)
+        if parts[0] == "notify" and len(parts) == 2 and parts[1] == "prefs":
+            data, code = api2.get_notify_prefs_api(broker_id)
+            return self._json(code, data)
+        if parts[0] == "referral" and len(parts) == 1:
+            data, code = api2.get_referral_api(broker_id)
+            return self._json(code, data)
         return self._json(404, {"error": "not_found"})
 
     def _api_put(self, broker_id, rest, query, body):
@@ -258,6 +283,18 @@ class Handler(BaseHTTPRequestHandler):
             data, code = api.put_post(broker_id, parts[1],
                                       body.get("lang", "vi"),
                                       body.get("text", ""))
+            return self._json(code, data)
+        if parts[0] == "client" and len(parts) == 2:
+            data, code = api2.update_client_api(
+                broker_id, parts[1], body.get("fields"))
+            return self._json(code, data)
+        if parts[0] == "profile" and len(parts) == 1:
+            data, code = api2.update_profile_api(
+                broker_id, body.get("fields"))
+            return self._json(code, data)
+        if parts[0] == "notify" and len(parts) == 2 and parts[1] == "prefs":
+            data, code = api2.set_notify_pref_api(
+                broker_id, body.get("pref"), body.get("enabled"))
             return self._json(code, data)
         return self._json(404, {"error": "not_found"})
 
@@ -281,6 +318,23 @@ class Handler(BaseHTTPRequestHandler):
         if parts[0] == "listing" and len(parts) == 3 and parts[2] == "refresh":
             data, code = api.refresh_listing(broker_id, parts[1],
                                              body.get("status"))
+            return self._json(code, data)
+        if parts[0] == "clients" and len(parts) == 1:
+            data, code = api2.create_client_api(broker_id, body)
+            return self._json(code, data)
+        if parts[0] == "client" and len(parts) == 3 and parts[2] == "notes":
+            data, code = api2.add_client_note_api(
+                broker_id, parts[1], body.get("note"))
+            return self._json(code, data)
+        if parts[0] == "viewings" and len(parts) == 1:
+            data, code = api2.create_viewing_api(broker_id, body)
+            return self._json(code, data)
+        if parts[0] == "deals" and len(parts) == 1:
+            data, code = api2.create_deal_api(broker_id, body)
+            return self._json(code, data)
+        if parts[0] == "premium" and len(parts) == 2 and parts[1] == "request":
+            data, code = api2.request_premium_api(
+                broker_id, body.get("tier"))
             return self._json(code, data)
         return self._json(404, {"error": "not_found"})
 
