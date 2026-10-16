@@ -861,30 +861,15 @@ def _unaccent(s):
 
 
 def _landmark_suggestions(district_code, area_name, limit=6):
-    """Suggest buildings.json landmarks for a district, ranked by area match."""
-    blds = _load_buildings_cache()
-    dname = _BUILDING_DISTRICT.get(district_code)
-    if not dname:
+    """Suggest catalog landmarks for a district, ranked by area match."""
+    try:
+        import buildings as _bld
+        d = _district_by_code(district_code)
+        dname = d["name"] if d else ""
+        entries = _bld.buildings_in_district(dname, area_name or "")
+        return [e["name"] for e in entries[:limit]]
+    except Exception:
         return []
-    area_words = [w for w in _unaccent(area_name).split() if len(w) > 2]
-    scored = []
-    for b in blds:
-        if b.get("district") != dname:
-            continue
-        name = b.get("name") or ""
-        nlow = _unaccent(name)
-        score = sum(1 for w in area_words if w in nlow)
-        scored.append((score, name))
-    scored.sort(key=lambda x: (-x[0], x[1]))
-    out, seen = [], set()
-    for score, name in scored:
-        if name in seen:
-            continue
-        seen.add(name)
-        out.append(name)
-        if len(out) >= limit:
-            break
-    return out
 
 
 def _guided_back_kb(extra_rows=None):
@@ -1219,7 +1204,7 @@ async def guided_set(update, ctx):
         if value == "custom":
             gd["awaiting_free"] = step
             await q.edit_message_text(
-                "Gần landmark nào ạ? (gõ tên giúp em)",
+                "Gõ tên tòa nhà (3 chữ trở lên), em tìm trong danh sách giúp anh 🔍",
                 reply_markup=_guided_back_kb())
             return
         opts = gd.get("landmark_options") or []
@@ -1234,6 +1219,81 @@ async def guided_set(update, ctx):
         await _guided_arm_photos(update, q.from_user.id, ctx,
                                  chat_id=q.message.chat_id, edit=True)
         return
+    await _guided_show(update, ctx, edit=True)
+
+
+async def guided_bset(update, ctx):
+    """Broker picked a building from catalog search results."""
+    q = update.callback_query
+    await q.answer()
+    gd = ctx.user_data.get("guided")
+    if not gd:
+        return
+    try:
+        idx = int(q.data.rsplit(":", 1)[-1])
+        name = gd["bsearch"]["names"][idx]
+    except (KeyError, IndexError, ValueError):
+        await q.edit_message_text("Hết hạn rồi, anh gõ lại giúp em nhé 😅")
+        return
+    answers = gd["answers"]
+    answers["landmark"] = name
+    # bonus: auto-fill street/district from the catalog entry
+    try:
+        import buildings as _bld
+        entry = _bld.find_building(name)
+        if entry:
+            if not answers.get("street") and entry.get("street"):
+                answers["street"] = entry["street"]
+            if not answers.get("district") and entry.get("district"):
+                answers["district"] = entry["district"]
+                # keep district_code in sync for downstream steps
+                for code, dname in GUIDED_DISTRICTS:
+                    if dname == entry["district"]:
+                        answers["district_code"] = code
+                        break
+    except Exception:
+        pass
+    gd.pop("bsearch", None)
+    _guided_advance(gd)
+    await _guided_show(update, ctx, edit=True)
+
+
+async def guided_badd(update, ctx):
+    """Broker's building isn't in the catalog — add it, then continue."""
+    q = update.callback_query
+    await q.answer()
+    gd = ctx.user_data.get("guided")
+    if not gd:
+        return
+    bs = gd.get("bsearch") or {}
+    query = (bs.get("query") or "").strip()
+    if not query:
+        await q.edit_message_text("Hết hạn rồi, anh gõ lại giúp em nhé 😅")
+        return
+    try:
+        import buildings as _bld
+        entry = _bld.add_building(query)
+        name = entry["name"]
+    except Exception:
+        await q.edit_message_text(
+            "Em chưa lưu được, anh thử lại giúp em nhé 😅")
+        return
+    gd["answers"]["landmark"] = name
+    gd.pop("bsearch", None)
+    await q.edit_message_text(f"Đã thêm \"{name}\" vào danh sách tòa nhà ✓")
+    _guided_advance(gd)
+    await _guided_show(update, ctx, edit=False)
+
+
+async def guided_bback(update, ctx):
+    """Back from building search results -> re-show the landmark step."""
+    q = update.callback_query
+    await q.answer()
+    gd = ctx.user_data.get("guided")
+    if not gd:
+        return
+    gd.pop("bsearch", None)
+    # gd["step"] is still the landmark step (never advanced)
     await _guided_show(update, ctx, edit=True)
 
 
@@ -1383,7 +1443,38 @@ async def handle_guided_text(update, ctx, gd, text):
             return True
         await _guided_show(update, ctx, edit=False)
         return True
-    if awaiting in ("street", "landmark"):
+    if awaiting == "landmark":
+        # typed building name -> fuzzy search the catalog
+        if not t:
+            await update.message.reply_text("Anh gõ lại giúp em nhé 🤔")
+            gd["awaiting_free"] = awaiting
+            return True
+        if len(t) < 3:
+            await update.message.reply_text(
+                "Anh gõ thêm vài chữ nữa giúp em nhé (tối thiểu 3 chữ) 🔍")
+            gd["awaiting_free"] = awaiting
+            return True
+        import buildings as _bld
+        results = _bld.search_buildings(t, limit=5)
+        gd["bsearch"] = {"query": t,
+                         "names": [r["name"] for r in results]}
+        rows = []
+        for i, r in enumerate(results):
+            rows.append([InlineKeyboardButton(
+                r["name"][:40], callback_data=f"guided:bset:{i}")])
+        rows.append([InlineKeyboardButton(
+            f"➕ Thêm tòa mới: \"{t[:30]}\"", callback_data="guided:badd")])
+        rows.append([InlineKeyboardButton("⬅️ Quay lại",
+                                         callback_data="guided:bback")])
+        if results:
+            msg = f"Em tìm được {len(results)} tòa, phải cái này không anh?"
+        else:
+            msg = (f"Em không tìm thấy \"{t}\" trong danh sách 😅\n"
+                   f"Anh thêm mới nhé?")
+        await update.message.reply_text(msg,
+                                        reply_markup=InlineKeyboardMarkup(rows))
+        return True
+    if awaiting == "street":
         if not t:
             await update.message.reply_text(
                 "Anh gõ lại giúp em nhé 🤔")
@@ -1395,8 +1486,16 @@ async def handle_guided_text(update, ctx, gd, text):
         return True
 
     if step in ("bedrooms", "bathrooms", "ptype", "district", "area_loc",
-                "street", "landmark", "furnishing", "pet", "amenities",
+                "street", "furnishing", "pet", "amenities",
                 "pay_schedule"):
+        await update.message.reply_text("Anh bấm nút giúp em nhé 👆")
+        return True
+
+    if step == "landmark":
+        # broker typed again instead of tapping a search result -> new search
+        if gd.get("bsearch"):
+            gd["awaiting_free"] = "landmark"
+            return await handle_guided_text(update, ctx, gd, text)
         await update.message.reply_text("Anh bấm nút giúp em nhé 👆")
         return True
 
