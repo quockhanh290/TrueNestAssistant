@@ -230,6 +230,26 @@ def listing_line(l):
 
 # ---------------------------------------------------------------- /start
 
+HELP_TEXT = (
+    "📖 <b>HƯỚNG DẪN SỬ DỤNG</b>\n\n"
+    "📝 <b>Gửi tin mới:</b>\n"
+    "- Gửi text mô tả + ảnh trực tiếp cho em (như đăng group FB)\n"
+    "- Có thể gửi ảnh kèm caption, hoặc text riêng + ảnh riêng\n"
+    "- Em sẽ tóm tắt lại để anh xác nhận, thiếu gì em hỏi thêm (tối đa 2 câu)\n\n"
+    "📋 <b>Tin của tôi:</b>\n"
+    "- Xem tất cả tin của anh\n"
+    "- Lọc theo phòng ngủ, giá tiền, khu vực, trạng thái\n"
+    "- Đánh dấu “đã cho thuê” / “còn trống” để em cập nhật\n"
+    "- Hoặc gõ trực tiếp kiểu “cho xem tin 2PN dưới 15tr” để em tìm giúp\n\n"
+    "✍️ <b>Viết tin FB:</b>\n"
+    "- Em viết bài đăng FB từ tin của anh\n"
+    "- 5 ngôn ngữ: Việt, Anh, Hàn, Trung, Nga\n\n"
+    "⌨️ <b>Lệnh nhanh:</b>\n"
+    "/menu — mở menu chính\n"
+    "/help — xem hướng dẫn này"
+)
+
+
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
     db.get_or_create_broker(u.id, u.username, u.full_name)
@@ -237,8 +257,26 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"Chào anh! Em là {config.BOT_NAME}, trợ lý quản lý tin cho thuê.\n\n"
         "Anh gửi tin thoải mái như đăng group — text + ảnh kiểu gì cũng được, "
-        "em tự sắp xếp lại cho gọn gàng.",
+        "em tự sắp xếp lại cho gọn gàng.\n\n"
+        "Gõ /menu bất cứ lúc nào để mở menu, /help để xem hướng dẫn chi tiết.",
         reply_markup=MENU_KB,
+    )
+
+
+async def cmd_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    u = update.effective_user
+    db.get_or_create_broker(u.id, u.username, u.full_name)
+    await natural_delay(update)
+    await update.message.reply_text("Anh cần gì ạ?", reply_markup=MENU_KB)
+
+
+async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    await natural_delay(update)
+    await update.message.reply_text(
+        HELP_TEXT,
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("⬅️ Menu", callback_data="menu:back")]]),
     )
 
 
@@ -253,16 +291,7 @@ async def show_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await q.answer()
     await natural_delay(update)
     await q.edit_message_text(
-        "❓ <b>Hướng dẫn</b>\n\n"
-        "📝 <b>Gửi tin mới:</b> bấm nút rồi gửi text + ảnh của tin. "
-        "Gửi xong em tự đọc và tóm tắt lại, thiếu gì em hỏi thêm.\n\n"
-        "📋 <b>Tin của tôi:</b> xem lại các tin đã gửi, lọc theo trạng thái "
-        "(đang trống / đã cho thuê), theo số PN, khoảng giá, khu vực. "
-        "Đánh dấu đã cho thuê khi xong. Anh cũng có thể gõ trực tiếp kiểu "
-        "'cho xem tin 2PN dưới 15tr' để em tìm giúp.\n\n"
-        "✍️ <b>Viết tin FB:</b> em viết giúp anh tin đăng Facebook "
-        "tiếng Việt / Anh / Hàn / Trung / Nga từ tin đã có.\n\n"
-        "Mẹo: cứ gửi như anh đăng group là được, không cần theo mẫu gì cả.",
+        HELP_TEXT,
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("⬅️ Menu", callback_data="menu:back")]]),
@@ -1296,6 +1325,8 @@ def main():
     db.init_db()
     app = Application.builder().token(config.BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", cmd_start))
+    app.add_handler(CommandHandler("menu", cmd_menu))
+    app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CallbackQueryHandler(on_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
     app.add_handler(MessageHandler(filters.PHOTO, on_photo))
