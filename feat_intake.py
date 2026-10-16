@@ -1,9 +1,12 @@
 """Listing intake: collection buffer, parsing, confirmation, missing fields."""
 import asyncio
+import json
 import logging
+import os
 import random
 import re
 import time
+import unicodedata
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, Update
 from telegram.ext import ContextTypes
@@ -636,18 +639,25 @@ async def _handle_answer(update, ctx, awaiting, text):
 # ---------------------------------------------------------------- guided intake
 # Step-by-step listing creation for brokers who don't have a listing written.
 
-GUIDED_STEPS = ["bedrooms", "bathrooms", "ptype", "price", "area", "address",
-                "district", "floor", "furnishing", "pet",
+GUIDED_STEPS = ["bedrooms", "bathrooms", "ptype", "price", "area",
+                "district", "area_loc", "street", "landmark", "building_detail",
+                "floor", "furnishing", "pet",
                 "availability", "lease_min", "deposit", "pay_schedule",
                 "amenities", "photos", "description"]
 
 GUIDED_DISTRICTS = [("st", "Sơn Trà"), ("hc", "Hải Châu"),
                     ("nhs", "Ngũ Hành Sơn"), ("lc", "Liên Chiểu"),
-                    ("cl", "Cẩm Lệ"), ("tk", "Thanh Khê")]
+                    ("cl", "Cẩm Lệ"), ("tk", "Thanh Khê"),
+                    ("hv", "Hòa Vang")]
 
-GUIDED_PTYPES = [("apartment", "🏢 Căn hộ chung cư"), ("house", "🏠 Nhà riêng"),
-                 ("villa", "🏰 Villa"), ("studio", "Studio"),
-                 ("penthouse", "Penthouse"), ("shophouse", "Shophouse")]
+GUIDED_PTYPES = [("lux_apt", "🏢 Chung cư cao cấp"),
+                 ("house", "🏠 Nhà riêng nguyên căn"),
+                 ("mini_apt", "🏘️ Căn hộ mini"),
+                 ("serviced", "🏨 Căn hộ dịch vụ"),
+                 ("villa", "🏰 Villa/Biệt thự"),
+                 ("penthouse", "🏙️ Penthouse"),
+                 ("shophouse", "🏪 Shophouse"),
+                 ("street_house", "🏡 Nhà mặt tiền")]
 
 GUIDED_AMENITIES = [
     ("pool", "🏊 Hồ bơi"), ("gym", "🏋️ Gym"),
@@ -668,12 +678,84 @@ _AMENITY_TEXT = {
     "ac": "điều hòa", "cleaning": "dọn phòng",
 }
 
-_PTYPE_TEXT = {"apartment": "căn hộ chung cư", "house": "nhà riêng",
-               "villa": "villa", "penthouse": "penthouse",
-               "shophouse": "shophouse"}
+_PTYPE_TEXT = {"lux_apt": "chung cư cao cấp", "house": "nhà riêng nguyên căn",
+               "mini_apt": "căn hộ mini", "serviced": "căn hộ dịch vụ",
+               "villa": "villa/biệt thự", "penthouse": "penthouse",
+               "shophouse": "shophouse", "street_house": "nhà mặt tiền"}
 
 _GUIDED_CANCEL_WORDS = {"huy", "/huy", "huỷ", "hủy", "cancel"}
 _GUIDED_SKIP_WORDS = {"bỏ qua", "bo qua", "skip", "ko", "không", "k"}
+
+# ---------------------------------------------------------------- location data
+# data/locations.json: {districts: [{code, name, areas: [{name, note, streets}]}]}
+
+_LOCATIONS = None
+_BUILDINGS_CACHE = None
+
+
+def _load_locations():
+    global _LOCATIONS
+    if _LOCATIONS is None:
+        p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         "data", "locations.json")
+        with open(p, encoding="utf-8") as f:
+            _LOCATIONS = json.load(f)
+    return _LOCATIONS
+
+
+def _district_by_code(code):
+    for d in _load_locations()["districts"]:
+        if d["code"] == code:
+            return d
+    return None
+
+
+def _load_buildings_cache():
+    global _BUILDINGS_CACHE
+    if _BUILDINGS_CACHE is None:
+        p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         "data", "buildings.json")
+        with open(p, encoding="utf-8") as f:
+            _BUILDINGS_CACHE = json.load(f)
+    return _BUILDINGS_CACHE
+
+
+_BUILDING_DISTRICT = {"hc": "Hai Chau", "st": "Son Tra",
+                      "nhs": "Ngu Hanh Son", "tk": "Thanh Khe",
+                      "cl": "Cam Le", "lc": "Lien Chieu", "hv": "Hoa Vang"}
+
+
+def _unaccent(s):
+    s = unicodedata.normalize("NFD", s or "")
+    s = "".join(c for c in s if unicodedata.category(c) != "Mn")
+    return s.replace("đ", "d").replace("Đ", "d").lower()
+
+
+def _landmark_suggestions(district_code, area_name, limit=6):
+    """Suggest buildings.json landmarks for a district, ranked by area match."""
+    blds = _load_buildings_cache()
+    dname = _BUILDING_DISTRICT.get(district_code)
+    if not dname:
+        return []
+    area_words = [w for w in _unaccent(area_name).split() if len(w) > 2]
+    scored = []
+    for b in blds:
+        if b.get("district") != dname:
+            continue
+        name = b.get("name") or ""
+        nlow = _unaccent(name)
+        score = sum(1 for w in area_words if w in nlow)
+        scored.append((score, name))
+    scored.sort(key=lambda x: (-x[0], x[1]))
+    out, seen = [], set()
+    for score, name in scored:
+        if name in seen:
+            continue
+        seen.add(name)
+        out.append(name)
+        if len(out) >= limit:
+            break
+    return out
 
 
 def _guided_back_kb(extra_rows=None):
@@ -729,10 +811,6 @@ def _guided_step_content(gd):
         return (f"Diện tích bao nhiêu m² ạ? (vd: 65) {tag}",
                 _guided_back_kb(kb))
 
-    if step == "address":
-        return (f"Địa chỉ / tòa nhà ở đâu ạ? (vd: An Thượng 32) {tag}",
-                _guided_back_kb())
-
     if step == "district":
         kb = []
         for i in range(0, len(GUIDED_DISTRICTS), 2):
@@ -741,6 +819,67 @@ def _guided_step_content(gd):
                    for code, label in GUIDED_DISTRICTS[i:i + 2]]
             kb.append(row)
         return f"Quận nào ạ? {tag}", _guided_back_kb(kb)
+
+    if step == "area_loc":
+        d = _district_by_code(gd["answers"].get("district_code"))
+        areas = d["areas"] if d else []
+        kb = []
+        for i in range(0, len(areas), 2):
+            row = []
+            for j, a in enumerate(areas[i:i + 2]):
+                idx = i + j
+                row.append(InlineKeyboardButton(
+                    a["name"], callback_data=f"guided:set:area_loc:{idx}"))
+            kb.append(row)
+        dname = d["name"] if d else ""
+        return (f"Khu vực nào trong {dname} ạ? {tag}",
+                _guided_back_kb(kb))
+
+    if step == "street":
+        d = _district_by_code(gd["answers"].get("district_code"))
+        area_name = gd["answers"].get("area_loc")
+        streets = []
+        if d:
+            for a in d["areas"]:
+                if a["name"] == area_name:
+                    streets = a["streets"]
+                    break
+        kb = []
+        for i in range(0, len(streets), 2):
+            row = [InlineKeyboardButton(
+                s, callback_data=f"guided:set:street:{i + j}")
+                for j, s in enumerate(streets[i:i + 2])]
+            kb.append(row)
+        kb.append([InlineKeyboardButton("✏️ Gõ tay",
+                                        callback_data="guided:set:street:custom")])
+        kb.append([InlineKeyboardButton("Bỏ qua",
+                                        callback_data="guided:skip")])
+        return (f"Đường nào ở {area_name} ạ? {tag}",
+                _guided_back_kb(kb))
+
+    if step == "landmark":
+        dcode = gd["answers"].get("district_code")
+        area_name = gd["answers"].get("area_loc")
+        opts = _landmark_suggestions(dcode, area_name or "")
+        gd["landmark_options"] = opts
+        kb = []
+        for i, name in enumerate(opts):
+            kb.append([InlineKeyboardButton(
+                name[:40], callback_data=f"guided:set:landmark:{i}")])
+        kb.append([InlineKeyboardButton("✏️ Gõ tay",
+                                        callback_data="guided:set:landmark:custom")])
+        kb.append([InlineKeyboardButton("Bỏ qua",
+                                        callback_data="guided:skip")])
+        if opts:
+            q = f"Gần landmark nào? (tòa nhà, chợ, trường...) {tag}"
+        else:
+            q = f"Gần landmark nào không anh? {tag}"
+        return q, _guided_back_kb(kb)
+
+    if step == "building_detail":
+        kb = [[InlineKeyboardButton("Bỏ qua", callback_data="guided:skip")]]
+        return (f"Số nhà / tên tòa nhà cụ thể? (vd: số 12, tòa Mường Thanh) {tag}",
+                _guided_back_kb(kb))
 
     if step == "floor":
         kb = [[InlineKeyboardButton("Bỏ qua", callback_data="guided:skip")]]
@@ -916,8 +1055,49 @@ async def guided_set(update, ctx):
             reply_markup=_guided_back_kb())
         return
     if step == "district":
-        label = dict(GUIDED_DISTRICTS).get(value, value)
-        answers["district"] = label
+        d = _district_by_code(value)
+        if not d:
+            return
+        answers["district_code"] = value
+        answers["district"] = d["name"]
+    elif step == "area_loc":
+        d = _district_by_code(answers.get("district_code"))
+        try:
+            area = d["areas"][int(value)]
+        except (TypeError, IndexError, ValueError, KeyError):
+            return  # stale button
+        answers["area_loc"] = area["name"]
+    elif step == "street":
+        if value == "custom":
+            gd["awaiting_free"] = step
+            await q.edit_message_text(
+                "Đường nào ạ? (gõ tên đường giúp em)",
+                reply_markup=_guided_back_kb())
+            return
+        d = _district_by_code(answers.get("district_code"))
+        area_name = answers.get("area_loc")
+        streets = []
+        if d:
+            for a in d["areas"]:
+                if a["name"] == area_name:
+                    streets = a["streets"]
+                    break
+        try:
+            answers["street"] = streets[int(value)]
+        except (IndexError, ValueError):
+            return  # stale button
+    elif step == "landmark":
+        if value == "custom":
+            gd["awaiting_free"] = step
+            await q.edit_message_text(
+                "Gần landmark nào ạ? (gõ tên giúp em)",
+                reply_markup=_guided_back_kb())
+            return
+        opts = gd.get("landmark_options") or []
+        try:
+            answers["landmark"] = opts[int(value)]
+        except (IndexError, ValueError):
+            return  # stale button
     else:
         answers[step] = value
     _guided_advance(gd)
@@ -1074,9 +1254,20 @@ async def handle_guided_text(update, ctx, gd, text):
             return True
         await _guided_show(update, ctx, edit=False)
         return True
+    if awaiting in ("street", "landmark"):
+        if not t:
+            await update.message.reply_text(
+                "Anh gõ lại giúp em nhé 🤔")
+            gd["awaiting_free"] = awaiting
+            return True
+        answers[awaiting] = t
+        _guided_advance(gd)
+        await _guided_show(update, ctx, edit=False)
+        return True
 
-    if step in ("bedrooms", "bathrooms", "ptype", "district",
-                "furnishing", "pet", "amenities", "pay_schedule"):
+    if step in ("bedrooms", "bathrooms", "ptype", "district", "area_loc",
+                "street", "landmark", "furnishing", "pet", "amenities",
+                "pay_schedule"):
         await update.message.reply_text("Anh bấm nút giúp em nhé 👆")
         return True
 
@@ -1097,12 +1288,11 @@ async def handle_guided_text(update, ctx, gd, text):
                     "Diện tích bao nhiêu m² ạ? (vd: 65 — hoặc bấm Bỏ qua)")
                 return True
             answers["area"] = float(m.group(1).replace(",", "."))
-    elif step == "address":
-        if not t:
-            await update.message.reply_text(
-                "Địa chỉ / tòa nhà ở đâu ạ? (vd: An Thượng 32)")
-            return True
-        answers["address"] = t
+    elif step == "building_detail":
+        if tl in _GUIDED_SKIP_WORDS:
+            pass
+        else:
+            answers["building_detail"] = t
     elif step == "floor":
         if tl in _GUIDED_SKIP_WORDS:
             pass
@@ -1158,10 +1348,20 @@ def _guided_to_raw(a):
         parts.append(f"giá {a['price_vnd'] / 1_000_000:g}tr/tháng")
     if a.get("area"):
         parts.append(f"{a['area']:g}m2")
-    if a.get("address"):
-        parts.append(a["address"])
+    # hierarchical location: building -> landmark -> street -> area -> district
+    loc = []
+    if a.get("building_detail"):
+        loc.append(a["building_detail"])
+    if a.get("landmark"):
+        loc.append(f"gần {a['landmark']}")
+    if a.get("street"):
+        loc.append(f"đường {a['street']}")
+    if a.get("area_loc"):
+        loc.append(a["area_loc"])
     if a.get("district"):
-        parts.append(a["district"])
+        loc.append(a["district"])
+    if loc:
+        parts.append(", ".join(loc))
     if a.get("floor"):
         parts.append(f"tầng {a['floor']}")
     ptxt = _PTYPE_TEXT.get(ptype)

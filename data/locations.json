@@ -1,0 +1,434 @@
+{
+  "districts": [
+    {
+      "code": "hc",
+      "name": "Hải Châu",
+      "areas": [
+        {
+          "name": "Bạch Đằng",
+          "note": "trung tâm, ven sông Hàn",
+          "streets": [
+            "Bạch Đằng",
+            "Trần Phú",
+            "Quang Trung",
+            "Lê Duẩn",
+            "Nguyễn Chí Thanh",
+            "Lý Tự Trọng",
+            "Pasteur",
+            "Lê Lợi",
+            "Phan Châu Trinh",
+            "Hoàng Diệu",
+            "Nguyễn Thị Minh Khai",
+            "Trưng Nữ Vương"
+          ]
+        },
+        {
+          "name": "Thuận Phước",
+          "note": "gần cầu sông Hàn",
+          "streets": [
+            "Đống Đa",
+            "Vũ Văn Dũng",
+            "Yên Bái",
+            "Trần Quý Cáp",
+            "Lê Đình Dương",
+            "Nguyễn Công Trứ"
+          ]
+        },
+        {
+          "name": "Thạch Thang",
+          "note": "khu hành chính",
+          "streets": [
+            "Lê Duẩn",
+            "Hoàng Hoa Thám",
+            "Trần Quốc Toản",
+            "Nguyễn Văn Linh",
+            "Hùng Vương",
+            "Trần Bình Trọng"
+          ]
+        },
+        {
+          "name": "Thanh Bình",
+          "note": "khu dân cư lâu đời",
+          "streets": [
+            "Ông Ích Khiêm",
+            "Hải Phòng",
+            "Nguyễn Hoàng",
+            "Trần Cao Vân",
+            "Hoàng Hoa Thám",
+            "Lê Đình Lý"
+          ]
+        },
+        {
+          "name": "Hòa Cường",
+          "note": "phía nam, gần cầu Tiên Sơn",
+          "streets": [
+            "2 Tháng 9",
+            "Núi Thành",
+            "Tiểu La",
+            "Duy Tân",
+            "Trưng Nữ Vương",
+            "Nguyễn Hữu Thọ",
+            "Châu Thị Vĩnh Tế"
+          ]
+        }
+      ]
+    },
+    {
+      "code": "tk",
+      "name": "Thanh Khê",
+      "areas": [
+        {
+          "name": "Xuân Hà",
+          "note": "gần biển Nguyễn Tất Thành",
+          "streets": [
+            "Nguyễn Tất Thành",
+            "Hà Huy Tập",
+            "Điện Biên Phủ",
+            "Kinh Dương Vương",
+            "Nguyễn Xuân Nhĩ",
+            "Dũng Sĩ Thanh Khê"
+          ]
+        },
+        {
+          "name": "Thanh Khê Đông",
+          "note": "trung tâm quận",
+          "streets": [
+            "Điện Biên Phủ",
+            "Hà Huy Tập",
+            "Nguyễn Phước Nguyên",
+            "Hàm Nghi",
+            "Nguyễn Đình Tựu"
+          ]
+        },
+        {
+          "name": "Tam Thuận",
+          "note": "khu dân cư",
+          "streets": [
+            "Nguyễn Phước Nguyên",
+            "Lý Thái Tổ",
+            "Phan Thanh",
+            "Dũng Sĩ Thanh Khê",
+            "Trần Tấn Mới"
+          ]
+        },
+        {
+          "name": "Vĩnh Trung",
+          "note": "gần chợ Đầu Mối",
+          "streets": [
+            "Nguyễn Tri Phương",
+            "Lê Độ",
+            "Lê Đại Hành",
+            "Bế Văn Đàn",
+            "Nguyễn Chánh"
+          ]
+        },
+        {
+          "name": "An Khê",
+          "note": "cửa ngõ phía tây",
+          "streets": [
+            "Trường Chinh",
+            "Tôn Đức Thắng",
+            "Lê Trọng Tấn",
+            "Nguyễn Xí",
+            "Hồ Tùng Mậu"
+          ]
+        }
+      ]
+    },
+    {
+      "code": "st",
+      "name": "Sơn Trà",
+      "areas": [
+        {
+          "name": "Phước Mỹ",
+          "note": "ven biển Mỹ Khê",
+          "streets": [
+            "Võ Nguyên Giáp",
+            "Hồ Nghinh",
+            "Morrison",
+            "An Cư 1",
+            "An Cư 2",
+            "Dương Đình Nghệ",
+            "Trương Dương"
+          ]
+        },
+        {
+          "name": "Mân Thái",
+          "note": "bán đảo, gần chùa Linh Ứng",
+          "streets": [
+            "Ngô Quyền",
+            "Võ Văn Kiệt",
+            "Hồ Hán Thương",
+            "Nguyễn Phan Vinh",
+            "Trương Định",
+            "Hoàng Sa"
+          ]
+        },
+        {
+          "name": "An Hải Đông",
+          "note": "gần cầu sông Hàn",
+          "streets": [
+            "Ngô Quyền",
+            "Xô Viết Nghệ Tĩnh",
+            "Trần Hưng Đạo",
+            "Vân Đồn",
+            "Nguyễn Công Trứ"
+          ]
+        },
+        {
+          "name": "Thọ Quang",
+          "note": "cảng cá, khu dân cư biển",
+          "streets": [
+            "Yết Kiêu",
+            "Lê Tấn Trung",
+            "Vân Đồn",
+            "Ngô Quyền",
+            "Trần Thánh Tông"
+          ]
+        },
+        {
+          "name": "Nại Hiên Đông",
+          "note": "ven sông, gần cầu Thuận Phước",
+          "streets": [
+            "Bùi Dương Lịch",
+            "Trần Thánh Tông",
+            "Lê Văn Thứ",
+            "Vân Đồn",
+            "Nguyễn Phan Vinh"
+          ]
+        }
+      ]
+    },
+    {
+      "code": "nhs",
+      "name": "Ngũ Hành Sơn",
+      "areas": [
+        {
+          "name": "An Thượng",
+          "note": "khu Tây, nhiều expat",
+          "streets": [
+            "An Thượng 1",
+            "An Thượng 2",
+            "An Thượng 3",
+            "An Thượng 4",
+            "An Thượng 5",
+            "An Thượng 6",
+            "An Thượng 32",
+            "Châu Thị Vĩnh Tế",
+            "Đỗ Bá",
+            "Hoàng Kế Viêm",
+            "Phan Tứ",
+            "Nguyễn Văn Thoại"
+          ]
+        },
+        {
+          "name": "Mỹ An",
+          "note": "ven biển Mỹ Khê",
+          "streets": [
+            "Võ Nguyên Giáp",
+            "Trường Sa",
+            "Hoàng Sa",
+            "An Cư 3",
+            "An Cư 4",
+            "Morrison",
+            "Hồ Nghinh",
+            "Nguyễn Văn Thoại"
+          ]
+        },
+        {
+          "name": "Khuê Mỹ",
+          "note": "đô thị mới ven biển",
+          "streets": [
+            "Võ Nguyên Giáp",
+            "Nguyễn Duy Hiệu",
+            "Hồ Xuân Hương",
+            "Nguyễn Sáng",
+            "Mai Đăng Chơn"
+          ]
+        },
+        {
+          "name": "Hòa Hải",
+          "note": "gần Ngũ Hành Sơn, Cocobay",
+          "streets": [
+            "Trường Sa",
+            "Lê Văn Hiến",
+            "Đỗ Đăng Tuyển",
+            "Võ Chí Công",
+            "Trần Đại Nghĩa"
+          ]
+        },
+        {
+          "name": "Hòa Quý",
+          "note": "khu đô thị FPT, phía nam",
+          "streets": [
+            "Võ Chí Công",
+            "Nam Kỳ Khởi Nghĩa",
+            "Mai Đăng Chơn",
+            "Lê Văn Hiến",
+            "Trần Đại Nghĩa"
+          ]
+        }
+      ]
+    },
+    {
+      "code": "lc",
+      "name": "Liên Chiểu",
+      "areas": [
+        {
+          "name": "Hòa Khánh Bắc",
+          "note": "khu công nghiệp, ĐH Bách Khoa",
+          "streets": [
+            "Nguyễn Lương Bằng",
+            "Âu Cơ",
+            "Tôn Đức Thắng",
+            "Hoàng Thị Loan",
+            "Ngô Văn Sở"
+          ]
+        },
+        {
+          "name": "Hòa Khánh Nam",
+          "note": "gần biển Nguyễn Tất Thành",
+          "streets": [
+            "Nguyễn Tất Thành",
+            "Âu Cơ",
+            "Nguyễn Lương Bằng",
+            "Hoàng Văn Thái",
+            "Nguyễn Chánh"
+          ]
+        },
+        {
+          "name": "Hòa Minh",
+          "note": "ven biển, khu dân cư mới",
+          "streets": [
+            "Nguyễn Tất Thành",
+            "Nguyễn Sinh Sắc",
+            "Ngô Thì Nhậm",
+            "Nguyễn Đình Tứ",
+            "Trần Đình Tri"
+          ]
+        },
+        {
+          "name": "Hòa Hiệp Bắc",
+          "note": "cửa ngõ đèo Hải Vân",
+          "streets": [
+            "Nguyễn Văn Cừ",
+            "Ngô Văn Sở",
+            "Kim Sơn",
+            "Đường số 8 KCN Hòa Khánh"
+          ]
+        },
+        {
+          "name": "Hòa Hiệp Nam",
+          "note": "gần cảng Liên Chiểu",
+          "streets": [
+            "Nguyễn Văn Cừ",
+            "Trần Đình Tri",
+            "Nguyễn Phước Lan"
+          ]
+        }
+      ]
+    },
+    {
+      "code": "cl",
+      "name": "Cẩm Lệ",
+      "areas": [
+        {
+          "name": "Khuê Trung",
+          "note": "trung tâm quận",
+          "streets": [
+            "Cách Mạng Tháng Tám",
+            "Ông Ích Đường",
+            "Bắc Sơn",
+            "Thăng Long",
+            "Nguyễn Phong Sắc"
+          ]
+        },
+        {
+          "name": "Hòa Thọ Đông",
+          "note": "gần cầu Cẩm Lệ",
+          "streets": [
+            "Trường Chinh",
+            "Tôn Đức Thắng",
+            "Nguyễn Nhược Pháp",
+            "Yên Thế"
+          ]
+        },
+        {
+          "name": "Hòa Thọ Tây",
+          "note": "khu dân cư",
+          "streets": [
+            "Trường Chinh",
+            "Nguyễn Phước Lan",
+            "Tôn Đức Thắng",
+            "Lê Kim Lăng"
+          ]
+        },
+        {
+          "name": "Hòa Xuân",
+          "note": "đô thị sinh thái ven sông",
+          "streets": [
+            "Võ Chí Công",
+            "Thăng Long",
+            "Trần Nam Trung",
+            "Minh Mạng",
+            "Trần Quốc Vượng"
+          ]
+        },
+        {
+          "name": "Hòa An",
+          "note": "gần ĐH Sư phạm, KCN",
+          "streets": [
+            "Trường Chinh",
+            "Tôn Đức Thắng",
+            "Nguyễn Lương Bằng",
+            "Lê Đại Hành"
+          ]
+        }
+      ]
+    },
+    {
+      "code": "hv",
+      "name": "Hòa Vang",
+      "areas": [
+        {
+          "name": "Hòa Châu",
+          "note": "cửa ngõ phía nam TP",
+          "streets": [
+            "Quốc lộ 1A",
+            "Phạm Hùng",
+            "Nguyễn Mậu Tài",
+            "Trần Ngọc Sương"
+          ]
+        },
+        {
+          "name": "Hòa Phước",
+          "note": "ven quốc lộ, khu dân cư",
+          "streets": [
+            "Quốc lộ 1A",
+            "Phạm Hùng",
+            "Thôn Quá Giáng"
+          ]
+        },
+        {
+          "name": "Hòa Tiến",
+          "note": "khu công nghiệp Hòa Cầm",
+          "streets": [
+            "Quốc lộ 14B",
+            "Trường Sơn",
+            "ĐT 605"
+          ]
+        },
+        {
+          "name": "Bà Nà",
+          "note": "khu du lịch Bà Nà Hills",
+          "streets": [
+            "Đường Bà Nà",
+            "Hoàng Văn Thái",
+            "ĐT 602",
+            "Thôn Phú Túc"
+          ]
+        }
+      ]
+    }
+  ]
+}
