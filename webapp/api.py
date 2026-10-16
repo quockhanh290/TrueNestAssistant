@@ -127,7 +127,7 @@ def get_listings(broker_id, q=None, bedrooms=None, status=None,
                 items.append(listing_summary(row))
         return {"items": items, "total": len(items),
                 "limit": limit, "offset": 0,
-                "filter_groups": master_schema.FILTER_GROUPS}, 200
+                "filter_groups": getattr(master_schema, "FILTER_GROUPS", {})}, 200
 
     filters = {}
     if bedrooms:
@@ -187,7 +187,7 @@ def get_listings(broker_id, q=None, bedrooms=None, status=None,
     items = items[offset:offset + limit]
     return {"items": items, "total": total,
             "limit": limit, "offset": offset,
-            "filter_groups": master_schema.FILTER_GROUPS}, 200
+            "filter_groups": getattr(master_schema, "FILTER_GROUPS", {})}, 200
 
 
 def get_listing(broker_id, listing_id):
