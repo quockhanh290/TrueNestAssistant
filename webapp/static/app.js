@@ -536,6 +536,8 @@
   var dlReturn = qs.get("return");
   if (dlView === "propose" && dlReqId) {
     openPropose(dlReqId);
+  } else if (dlView === "xbroker") {
+    openXbroker();
   } else if (dlView === "intake") {
     openIntake(dlReturn);
   } else if (dlView === "listing" && dlId) {
@@ -567,6 +569,7 @@
         requestId: requestId,
         request: d.request,
         hasSlot: d.has_slot,
+        slotReleased: d.slot_released || false,
         maxListings: d.max_listings || 5,
         listings: d.listings || [],
         failedSummary: d.failed_summary || {},
@@ -660,9 +663,76 @@
     }).join("");
   }
 
+  // ---------- xbroker view (cross-broker match for missed slots) ----------
+  function openXbroker() {
+    document.getElementById("xbroker-body").innerHTML =
+      '<div class="loading">Đang tải...</div>';
+    show("view-xbroker");
+    // Trial gate: 3 free uses of xbroker_match, then Max required
+    trialGate("xbroker_match", function (trial) {
+      api("/api/xbroker").then(function (d) {
+        renderXbroker(d, trial);
+      }).catch(function () {
+        document.getElementById("xbroker-body").innerHTML =
+          '<div class="empty"><div class="big">⚠️</div>Không tải được dữ liệu.</div>';
+      });
+    });
+  }
+
+  function renderXbroker(d, trial) {
+    var reqs = d.requests || [];
+    var html = "";
+    // Trial badge
+    if (trial && trial.remaining >= 0) {
+      html += '<div class="trial-badge">🎁 Dùng thử: còn ' + trial.remaining +
+        '/3 lượt</div>';
+    }
+    html += '<div class="propose-mechanism">' +
+      "ℹ️ <b>Match liên broker</b><br>" +
+      "• Các yêu cầu đang mở mà bạn chưa phản hồi<br>" +
+      "• Chọn tin phù hợp từ kho của bạn để đề xuất<br>" +
+      "• Không cần reserve slot trước" +
+      "</div>";
+    if (!reqs.length) {
+      html += '<div class="empty"><div class="big">📭</div>' +
+        "Hiện không có yêu cầu nào cần hỗ trợ.<br>" +
+        "Theo dõi kênh broadcast để không bỏ lỡ nhé!</div>";
+    } else {
+      html += reqs.map(function (r) {
+        var spots = (r.max_responders || 3) - (r.response_count || 0);
+        return '<div class="card"><div class="card-body">' +
+          '<div class="card-title">🔍 ' + esc(r.summary) + "</div>" +
+          '<div class="card-meta">' +
+          (r.bedrooms ? esc(fmtBR(r.bedrooms)) + " · " : "") +
+          (r.budget_max ? "≤ " + esc(fmtTr(r.budget_max)) + " · " : "") +
+          (r.district ? esc(r.district) : "") +
+          "</div>" +
+          '<div class="card-meta">👥 ' + (r.response_count || 0) + "/" +
+          (r.max_responders || 3) + " đã phản hồi" +
+          (spots > 0 ? ' · <b>' + spots + " slot trống</b>" : "") +
+          "</div>" +
+          '<div class="card-actions">' +
+          '<button class="btn btn-primary" data-xb="' + esc(r.id) + '">' +
+          "🏠 Đề xuất tin</button>" +
+          "</div></div></div>";
+      }).join("");
+    }
+    document.getElementById("xbroker-body").innerHTML = html;
+    // Wire propose buttons: consume trial on click, then open propose view
+    document.getElementById("xbroker-body").addEventListener("click", function (e) {
+      var b = e.target.closest("[data-xb]");
+      if (!b) return;
+      var rid = b.getAttribute("data-xb");
+      trialUse("xbroker_match").then(function () {
+        openPropose(rid);
+      }).catch(function () {
+        showUpgradeModal("max", "xbroker_match");
+      });
+    });
+  }
+
   var intakeReturnUrl = null;
-  function openIntake(returnUrl) {
-    intakeReturnUrl = returnUrl || null;
+  function openIntake(returnUrl) {    intakeReturnUrl = returnUrl || null;
     document.getElementById("intake-body").innerHTML =
       '<div class="empty"><div class="big">📝</div>' +
       "<b>Nhập tin mới từ bot</b><br><br>" +
@@ -727,6 +797,13 @@
     if (!st.listings.length) {
       var fs = st.failedSummary || {};
       var fsKeys = Object.keys(fs);
+      // Slot released notice (Khanh 2026-10-16): broker's inventory had 0
+      // eligible listings, so their slot was freed for others.
+      if (st.slotReleased) {
+        html += '<div class="propose-warn">📢 Slot của bạn đã được giải phóng'
+          + " vì không có tin nào đạt tiêu chí.<br>"
+          + "Slot đã mở lại cho broker khác trong kênh.</div>";
+      }
       if (fsKeys.length) {
         // Hard-filtered out everything — show which criteria failed.
         html += '<div class="empty"><div class="big">😔</div>' +
