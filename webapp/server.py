@@ -126,6 +126,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._static("index.html")
         if path.startswith("/static/"):
             return self._static(path[len("/static/"):])
+        # V2 Stitch UI (Khanh 2026-10-16) — new design system
+        if path == "/v2/" or path == "/v2":
+            return self._static("v2/listings.html")
         if path == "/api/health":
             return self._json(200, {"ok": True})
 
