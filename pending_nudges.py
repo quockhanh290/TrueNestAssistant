@@ -1,0 +1,94 @@
+"""Pending-task nudges — standalone script.
+
+Reminds brokers about unfinished work (sending via the bot is wired
+separately):
+
+  6a. Viewings 24-72h past with no feedback yet.
+  6b. Clients added 2+ days ago that were never sent any listing.
+  6c. Broadcast requests with responses the broker hasn't viewed in 1+ day.
+
+Usage: python pending_nudges.py [--dry-run]
+"""
+import argparse
+import datetime
+
+import db
+
+
+def _broker_name(b):
+    return b.get("display_name") or b.get("username") or "anh"
+
+
+def section_unfeedbacked():
+    rows = []
+    for b in db.list_brokers():
+        for v in db.unfeedbacked_viewings(b["user_id"],
+                                          min_hours=24, max_hours=72):
+            rows.append((b, v))
+    if not rows:
+        print("6a. Không có buổi xem nào thiếu feedback quá 24h.")
+        return
+    print("6a. Nhắc nhập feedback (buổi xem đã qua 24h+):")
+    for b, v in rows:
+        name = _broker_name(b)
+        cname = v.get("client_name") or "khách"
+        d = datetime.datetime.fromtimestamp(v["scheduled_at"])
+        print(f"--- to user_id={b['user_id']} ({name}) ---")
+        print(f"Ngày {d.day}/{d.month} anh dẫn {cname} xem nhà mà chưa nhập"
+              f" feedback. Khách nói sao ạ?  [vw:fb:{v['id']}]")
+
+
+def section_idle_clients():
+    any_out = False
+    for b in db.list_brokers():
+        idle = db.idle_new_clients(b["user_id"], days=2)
+        if not idle:
+            continue
+        any_out = True
+        name = _broker_name(b)
+        for c in idle:
+            cname = c.get("name") or "(chưa có tên)"
+            d = datetime.datetime.fromtimestamp(c["created_at"])
+            print(f"--- to user_id={b['user_id']} ({name}) ---")
+            print(f"{cname} thêm từ ngày {d.day}/{d.month} rồi mà anh chưa"
+                  f" gửi tin nào. Gửi ngay không?"
+                  f"  [client:match:{c['id']}]")
+    if not any_out:
+        print("6b. Không có khách mới nào bị bỏ quên.")
+
+
+def section_unseen_responses():
+    any_out = False
+    for b in db.list_brokers():
+        unseen = db.unseen_match_responses(b["user_id"], min_hours=24)
+        if not unseen:
+            continue
+        any_out = True
+        name = _broker_name(b)
+        for r in unseen:
+            c = db.get_client(r["client_id"])
+            cname = (c.get("name") if c else None) or "khách"
+            d = datetime.datetime.fromtimestamp(r["latest_at"])
+            print(f"--- to user_id={b['user_id']} ({name}) ---")
+            print(f"Yêu cầu tìm nhà cho {cname} đã có {r['n_resp']} phản hồi"
+                  f" từ ngày {d.day}/{d.month} mà anh chưa xem."
+                  f" Xem ngay nhé!  [mresp:view:{r['id']}]")
+    if not any_out:
+        print("6c. Không có phản hồi broadcast nào bị bỏ quên.")
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--dry-run", action="store_true",
+                    help="print only (default behavior; sending is separate)")
+    ap.parse_args()
+    db.init_db()
+    section_unfeedbacked()
+    print()
+    section_idle_clients()
+    print()
+    section_unseen_responses()
+
+
+if __name__ == "__main__":
+    main()
