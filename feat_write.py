@@ -356,28 +356,303 @@ def generate_post(listing, lang="vi"):
     return build_vi()
 
 
+LANG_LABEL = {
+    "vi": "🇻🇳 Việt",
+    "en": "🇬🇧 Anh",
+    "ko": "🇰🇷 Hàn",
+    "zh": "🇨🇳 Trung",
+    "ru": "🇷🇺 Nga",
+}
+LANG_ORDER = ["vi", "en", "ko", "zh", "ru"]
+
+
 async def on_write_post_prompt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """User tapped ✍️ Viết bài đăng — pick a listing from inventory."""
+    """User tapped ✍️ Viết bài đăng — pick a listing that has a saved post."""
     q = update.callback_query
     await q.answer()
     uid = q.from_user.id
-    items = db.list_broker_listings(
+    items = db.list_broker_listings_with_posts(
         uid, limit=5, offset=0,
         statuses=("draft", "pending_info", "submitted", "uncertain"))
     kb = []
     for i, l in enumerate(items, start=1):
+        langs = db.get_saved_post_langs(l["id"])
+        lang_tag = f" ({'/'.join(langs)})" if langs else ""
         kb.append([InlineKeyboardButton(
-            f"{i}. {listing_line(l)}", callback_data=f"write:{l['id']}")])
+            f"{i}. {listing_line(l)}{lang_tag}",
+            callback_data=f"writeview:{l['id']}:vi")])
     kb.append([InlineKeyboardButton("⬅️ Menu", callback_data="menu:back")])
     await natural_delay(update)
     if items:
-        total = db.count_broker_listings(uid)
-        text = (f"Anh muốn viết bài đăng cho căn nào trong kho? "
-                f"Em thấy anh có {total} căn nè:")
+        text = ("Anh muốn lấy bài đăng của căn nào? "
+                "Bài tiếng Việt được tự tạo khi anh thêm căn mới:")
     else:
-        text = ("Anh chưa có căn nào trong kho. "
-                "Bấm 📝 Nhập căn cho thuê mới để thêm căn trước nhé!")
+        text = ("Anh chưa có căn nào có bài đăng. "
+                "Bài đăng tiếng Việt được tự tạo khi anh thêm căn mới "
+                "bằng 📝 Nhập căn cho thuê mới.")
     await q.edit_message_text(text, reply_markup=InlineKeyboardMarkup(kb))
+
+
+async def on_write_view(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Show a listing's saved post with actions: copy, edit, add language."""
+    q = update.callback_query
+    await q.answer()
+    # "writeview:<listing_id>:<lang>" or legacy "write:<listing_id>"
+    rest = q.data.split(":", 1)[1]
+    if q.data.startswith("writeview:"):
+        listing_id, lang = rest.rsplit(":", 1)
+    else:
+        listing_id, lang = rest, "vi"
+    uid = q.from_user.id
+    l = db.get_listing(listing_id)
+    if not l or l["broker_id"] != uid:
+        await q.edit_message_text("Tin này không còn nữa.",
+                                  reply_markup=MENU_KB)
+        return
+    langs = db.get_saved_post_langs(listing_id)
+    if not langs:
+        await q.edit_message_text(
+            "Căn này chưa có bài đăng.", reply_markup=MENU_KB)
+        return
+    if lang not in langs:
+        lang = langs[0]
+    post = db.get_saved_post(listing_id, lang)
+    pn = get_pronoun(uid)
+    # language tabs (only if more than one language saved)
+    kb = []
+    if len(langs) > 1:
+        tab_row = []
+        for lg in langs:
+            mark = "● " if lg == lang else ""
+            tab_row.append(InlineKeyboardButton(
+                f"{mark}{LANG_LABEL.get(lg, lg)}",
+                callback_data=f"writeview:{listing_id}:{lg}"))
+            if len(tab_row) == 3:
+                kb.append(tab_row)
+                tab_row = []
+        if tab_row:
+            kb.append(tab_row)
+    kb.append([InlineKeyboardButton(
+        "📋 Copy bài đăng",
+        callback_data=f"writecopy:{listing_id}:{lang}")])
+    kb.append([InlineKeyboardButton(
+        "✏️ Sửa bài đăng",
+        callback_data=f"writeedit:{listing_id}:{lang}")])
+    # only offer "add language" if some language is still missing
+    missing = [lg for lg in LANG_ORDER if lg not in langs]
+    if missing:
+        kb.append([InlineKeyboardButton(
+            "🌐 Viết thêm ngôn ngữ khác",
+            callback_data=f"writeaddlang:{listing_id}")])
+    kb.append([InlineKeyboardButton("⬅️ Chọn căn khác",
+                                    callback_data="menu:write")])
+    await natural_delay(update)
+    await q.edit_message_text(
+        f"📝 Bài đăng ({LANG_LABEL.get(lang, lang)}) — {listing_line(l)}:\n\n"
+        f"{post}",
+        reply_markup=InlineKeyboardMarkup(kb))
+
+
+async def on_write_copy(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Send the saved post as a plain message for easy copying."""
+    q = update.callback_query
+    await q.answer()
+    # "writecopy:<listing_id>:<lang>"
+    rest = q.data.split(":", 1)[1]
+    listing_id, lang = rest.rsplit(":", 1)
+    uid = q.from_user.id
+    l = db.get_listing(listing_id)
+    if not l or l["broker_id"] != uid:
+        await q.edit_message_text("Tin này không còn nữa.",
+                                  reply_markup=MENU_KB)
+        return
+    post = db.get_saved_post(listing_id, lang)
+    if not post:
+        await q.edit_message_text("Bài đăng không còn nữa.",
+                                  reply_markup=MENU_KB)
+        return
+    await q.message.reply_text(post)
+    await q.message.reply_text(
+        "Copy đoạn trên để đăng nhé!",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("⬅️ Về bài đăng",
+                                 callback_data=f"writeview:{listing_id}:{lang}")
+        ]]))
+
+
+async def on_write_edit_prompt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Ask the broker to send the edited post text."""
+    q = update.callback_query
+    await q.answer()
+    # "writeedit:<listing_id>:<lang>"
+    rest = q.data.split(":", 1)[1]
+    listing_id, lang = rest.rsplit(":", 1)
+    uid = q.from_user.id
+    l = db.get_listing(listing_id)
+    if not l or l["broker_id"] != uid:
+        await q.edit_message_text("Tin này không còn nữa.",
+                                  reply_markup=MENU_KB)
+        return
+    ctx.user_data["editing_post"] = {
+        "listing_id": listing_id,
+        "lang": lang,
+        "chat_id": q.message.chat_id,
+    }
+    await q.edit_message_text(
+        f"Gửi bản sửa của bài đăng ({LANG_LABEL.get(lang, lang)}) cho em nhé ✏️\n"
+        f"(gõ /huy để hủy)",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("❌ Hủy",
+                                 callback_data=f"writeview:{listing_id}:{lang}")
+        ]]))
+
+
+async def handle_edit_post(update, ctx, ep, text):
+    """Broker sent edited post text — save it for that language."""
+    uid = update.effective_user.id
+    listing_id = ep.get("listing_id")
+    lang = ep.get("lang", "vi")
+    chat_id = ep.get("chat_id") or update.effective_chat.id
+    ctx.user_data.pop("editing_post", None)
+    # /huy cancels
+    if text.strip() == "/huy":
+        l = db.get_listing(listing_id)
+        kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton(
+                "⬅️ Về bài đăng",
+                callback_data=f"writeview:{listing_id}:{lang}")
+        ]]) if l else MENU_KB
+        await ctx.bot.send_message(chat_id, "Đã hủy sửa bài đăng.",
+                                   reply_markup=kb)
+        return True
+    if not text.strip():
+        ctx.user_data["editing_post"] = ep  # keep waiting
+        await ctx.bot.send_message(
+            chat_id, "Anh gửi nội dung bài đăng cho em nhé.")
+        return True
+    l = db.get_listing(listing_id)
+    if not l or l["broker_id"] != uid:
+        await ctx.bot.send_message(chat_id, "Tin này không còn nữa.",
+                                   reply_markup=MENU_KB)
+        return True
+    db.save_post(listing_id, text.strip(), lang)
+    pn = get_pronoun(uid)
+    # Language sync rule: editing Vietnamese triggers auto-regeneration
+    # of other existing languages from structured listing data.
+    # (No translation API, so we regenerate from `parsed` instead of
+    # translating the edited Vietnamese text.)
+    # Editing a non-Vietnamese language only saves that language.
+    synced = []
+    if lang == "vi":
+        other_langs = [lg for lg in db.get_saved_post_langs(listing_id)
+                       if lg != "vi"]
+        for lg in other_langs:
+            try:
+                regen = generate_post(l, lg)
+            except Exception:
+                log.warning("regen %s post failed for %s", lg, listing_id,
+                            exc_info=True)
+                continue
+            if regen and regen.strip():
+                db.save_post(listing_id, regen.strip(), lg)
+                synced.append(lg)
+    if synced:
+        sync_note = (f"\nEm đã cập nhật các bản "
+                     f"{'/'.join(synced).upper()} theo nội dung mới. "
+                     f"Anh kiểm tra lại giúp em nhé.")
+    else:
+        sync_note = ""
+    await ctx.bot.send_message(
+        chat_id,
+        f"Đã lưu bản sửa ({LANG_LABEL.get(lang, lang)}) rồi {pn} ✓"
+        f"{sync_note}",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton(
+                "👀 Xem bài đăng",
+                callback_data=f"writeview:{listing_id}:{lang}")
+        ]]))
+    return True
+
+
+async def on_write_add_lang(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Show language picker for adding a new language version."""
+    q = update.callback_query
+    await q.answer()
+    # "writeaddlang:<listing_id>"
+    listing_id = q.data.split(":", 1)[1]
+    uid = q.from_user.id
+    l = db.get_listing(listing_id)
+    if not l or l["broker_id"] != uid:
+        await q.edit_message_text("Tin này không còn nữa.",
+                                  reply_markup=MENU_KB)
+        return
+    existing = set(db.get_saved_post_langs(listing_id))
+    kb = []
+    row = []
+    for lg in LANG_ORDER:
+        if lg in existing:
+            continue
+        row.append(InlineKeyboardButton(
+            LANG_LABEL.get(lg, lg),
+            callback_data=f"writegenlang:{listing_id}:{lg}"))
+        if len(row) == 2:
+            kb.append(row)
+            row = []
+    if row:
+        kb.append(row)
+    kb.append([InlineKeyboardButton(
+        "⬅️ Về bài đăng",
+        callback_data=f"writeview:{listing_id}:vi")])
+    if not existing or len(kb) == 1:  # only the back button
+        await q.edit_message_text(
+            "Căn này đã có đủ các ngôn ngữ rồi!",
+            reply_markup=InlineKeyboardMarkup(kb))
+        return
+    await natural_delay(update)
+    await q.edit_message_text(
+        "Viết thêm bài đăng tiếng nào?",
+        reply_markup=InlineKeyboardMarkup(kb))
+
+
+async def on_write_gen_lang(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Generate a post in the chosen language and save it additionally
+    (never overwrites other languages)."""
+    q = update.callback_query
+    await q.answer()
+    # "writegenlang:<listing_id>:<lang>"
+    rest = q.data.split(":", 1)[1]
+    listing_id, lang = rest.rsplit(":", 1)
+    uid = q.from_user.id
+    # ko/zh/ru are Pro features; vi/en are free
+    if lang in ("ko", "zh", "ru"):
+        import feat_premium
+        if not feat_premium.requires_tier(uid, "fb_multilang"):
+            await feat_premium.send_gate(q, "fb_multilang", uid, edit=True)
+            return
+    l = db.get_listing(listing_id)
+    if not l or l["broker_id"] != uid:
+        await q.edit_message_text("Tin này không còn nữa.",
+                                  reply_markup=MENU_KB)
+        return
+    post = generate_post(l, lang)
+    if not post or not post.strip():
+        await q.edit_message_text(
+            "Không sinh được bài đăng (thiếu thông tin).",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton(
+                    "⬅️ Về bài đăng",
+                    callback_data=f"writeview:{listing_id}:vi")
+            ]]))
+        return
+    db.save_post(listing_id, post.strip(), lang)
+    pn = get_pronoun(uid)
+    await q.edit_message_text(
+        f"Đã viết thêm bản ({LANG_LABEL.get(lang, lang)}) rồi {pn} ✓",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton(
+                "👀 Xem bài đăng",
+                callback_data=f"writeview:{listing_id}:{lang}")
+        ]]))
 
 
 async def on_write_new(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
