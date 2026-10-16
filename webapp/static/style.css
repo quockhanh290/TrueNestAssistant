@@ -237,3 +237,7 @@ body {
 .propose-warn { background: #4a2f1a; border: 1px solid #ff980055; border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; font-size: 14px; line-height: 1.5; }
 .btn-sm { padding: 8px 12px; font-size: 13px; }
 .propose-criterion { font-size: 14px; padding: 4px 0; color: var(--text); }
+/* freshness (Khanh 2026-10-16) */
+.propose-fresh { font-weight: 600; }
+.propose-fresh-tip { margin-top: 8px; padding: 8px 12px; background: #1c2b3a; border-radius: 10px; border: 1px solid #2aabee33; font-size: 13px; color: var(--muted); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.modal-warn { font-size: 13px; color: #ffab91; margin-top: 12px; line-height: 1.5; }
