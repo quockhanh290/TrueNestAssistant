@@ -177,3 +177,25 @@ body {
 }
 .toast.show { opacity: 1; }
 .loading { text-align: center; padding: 40px; color: var(--muted); }
+
+/* trial / upsell */
+.trial-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 6px;
+  font-size: 11px; font-weight: 600; margin-left: 6px; vertical-align: middle;
+  background: #3d2b1a; color: #ffb74d;
+}
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.modal {
+  background: var(--card); border-radius: 16px; padding: 24px;
+  width: 100%; max-width: 340px; text-align: center;
+}
+.modal-title { font-size: 18px; font-weight: 700; margin-bottom: 12px; }
+.modal-body { font-size: 14px; color: var(--muted); margin-bottom: 20px; line-height: 1.5; }
+.modal-body b { color: var(--text); }
+.modal .btn { width: 100%; margin-bottom: 8px; }
+.modal .btn:last-child { margin-bottom: 0; }
