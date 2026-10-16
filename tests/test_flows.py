@@ -142,9 +142,10 @@ class MockBot:
         self._outbox = outbox
 
     async def send_message(self, chat_id, text, reply_markup=None,
-                           parse_mode=None):
+                           parse_mode=None, reply_to_message_id=None):
         self._outbox.append({"kind": "send", "chat_id": chat_id,
-                             "text": text, "markup": reply_markup})
+                             "text": text, "markup": reply_markup,
+                             "reply_to": reply_to_message_id})
         chat = MockChat(chat_id)
         user = MockUser(0)
         return MockMessage(self._outbox, chat, user, text=text)
@@ -366,12 +367,16 @@ class TestForwardHandling(LinhFlowTest):
         uid = self.broker()
         await self.text(uid, "Cho thuê 2PN 12tr/tháng\n👉 @kenhbds",
                         forward_from_chat=self._fwd_chat("Kênh BĐS"))
-        buf = _buffers.get(uid)
-        self.assertIsNotNone(buf)
-        self.assertNotIn("@kenhbds", buf["texts"][0])
-        self.assertIn("2PN", buf["texts"][0])
-        self.assertEqual(buf["forward_source"], "Kênh BĐS")
-        self.assertIn("forward từ Kênh BĐS", self.last_text("reply"))
+        # forward → immediate draft (no buffer wait)
+        cfm = self.ctx(uid).user_data.get("confirming")
+        self.assertIsNotNone(cfm)
+        l = db.get_listing(cfm["listing_id"])
+        self.assertNotIn("@kenhbds", l["raw_text"])
+        self.assertIn("2PN", l["raw_text"])
+        self.assertEqual(cfm["forward_source"], "Kênh BĐS")
+        # confirmation replies to the forwarded message
+        sent = [m for m in self.outbox if m["kind"] == "send"]
+        self.assertTrue(any(m.get("reply_to") for m in sent))
 
     async def test_forwarded_photo_skips_stray_question(self):
         uid = self.broker()
@@ -380,8 +385,74 @@ class TestForwardHandling(LinhFlowTest):
         await self.photo(uid, "ff1",
                          forward_from_chat=self._fwd_chat("Kênh BĐS"))
         self.assertNotIn("stray_photo", self.ctx(uid).user_data)
-        self.assertIn(uid, _buffers)
-        self.assertIn("forward từ Kênh BĐS", self.last_text("reply"))
+        # forward → immediate draft (no buffer, no stray prompt)
+        cfm = self.ctx(uid).user_data.get("confirming")
+        self.assertIsNotNone(cfm)
+        l = db.get_listing(cfm["listing_id"])
+        self.assertIn("ff1", l["photo_file_ids"])
+
+    async def test_back_to_back_forwards_create_separate_listings(self):
+        uid = self.broker()
+        await self.text(uid, "Cho thuê 2PN 12tr/tháng An Thượng",
+                        forward_from_chat=self._fwd_chat("Kênh BĐS"))
+        await self.text(uid, "Cho thuê 3PN 18tr/tháng Sơn Trà",
+                        forward_from_chat=self._fwd_chat("Kênh BĐS"))
+        # first forward → confirming; second → queued
+        cfm = self.ctx(uid).user_data.get("confirming")
+        self.assertIsNotNone(cfm)
+        l1 = db.get_listing(cfm["listing_id"])
+        self.assertIn("2PN", l1["raw_text"])
+        q = self.ctx(uid).user_data.get("confirming_queue") or []
+        self.assertEqual(len(q), 1)
+        l2 = db.get_listing(q[0]["listing_id"])
+        self.assertIn("3PN", l2["raw_text"])
+        # each confirmation reply threads to its own forward
+        self.assertNotEqual(cfm.get("reply_to_message_id"),
+                            q[0].get("reply_to_message_id"))
+
+    async def test_forwarded_album_processes_immediately(self):
+        uid = self.broker()
+        await self.album(uid, ["a1", "a2", "a3"], caption="2PN 12tr An Thượng",
+                         forward_from_chat=self._fwd_chat("Kênh BĐS"))
+        # album flushed → immediate draft, no manual buffer
+        self.assertNotIn(uid, _buffers)
+        cfm = self.ctx(uid).user_data.get("confirming")
+        self.assertIsNotNone(cfm)
+        l = db.get_listing(cfm["listing_id"])
+        self.assertEqual(len(l["photo_file_ids"]), 3)
+
+    async def test_duplicate_forward_suggests_not_blocks(self):
+        uid = self.broker(phone="0905123456")
+        # first forward (album+caption) → draft → confirm → submit
+        await self.album(uid, ["dup1"], caption="Cho thuê 2PN 12tr An Thượng",
+                         forward_from_chat=self._fwd_chat("Kênh BĐS"))
+        cfm1 = self.ctx(uid).user_data.get("confirming")
+        self.assertIsNotNone(cfm1)
+        await self.cb(uid, f"cfm:save:{cfm1['listing_id']}")
+        l1 = db.get_listing(cfm1["listing_id"])
+        self.assertEqual(l1["status"], "submitted")
+        # second identical forward → draft
+        await self.album(uid, ["dup1"], caption="Cho thuê 2PN 12tr An Thượng",
+                         forward_from_chat=self._fwd_chat("Kênh BĐS"))
+        cfm2 = self.ctx(uid).user_data.get("confirming")
+        self.assertIsNotNone(cfm2)
+        # confirm second → duplicate suggestion shown (not auto-blocked).
+        # Note: the 60s timeout is instant in tests (sleep mocked), so the
+        # suggestion is immediately followed by auto-save as new.
+        await self.cb(uid, f"cfm:save:{cfm2['listing_id']}")
+        texts = [m["text"] for m in self.outbox if m.get("text")]
+        self.assertTrue(any("có vẻ giống" in t for t in texts),
+                        "duplicate suggestion not shown")
+        # timeout defaulted to new listing → submitted (not merged/blocked)
+        l2 = db.get_listing(cfm2["listing_id"])
+        self.assertEqual(l2["status"], "submitted")
+
+    async def test_manual_input_still_uses_buffer(self):
+        uid = self.broker()
+        await self.text(uid, "Cho thuê 2PN 12tr/tháng An Thượng")
+        buf = _buffers.get(uid)
+        self.assertIsNotNone(buf)
+        self.assertIn("2PN", buf["texts"][0])
 
     async def test_stray_photo_asks_for_recent_listing(self):
         uid = self.broker()
@@ -405,7 +476,7 @@ class TestForwardHandling(LinhFlowTest):
 class TestGuidedIntake(LinhFlowTest):
     async def _start_guided(self, uid):
         await self.cb(uid, "menu:new")
-        self.assertIn("muốn thêm tin kiểu nào", self.last_text("edit"))
+        self.assertIn("muốn nhập căn mới kiểu nào", self.last_text("edit"))
         await self.cb(uid, "guided:mode:guided")
         gd = self.ctx(uid).user_data.get("guided")
         self.assertIsNotNone(gd)
