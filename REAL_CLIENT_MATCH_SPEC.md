@@ -44,6 +44,37 @@ Hai bot giao tiếp qua backend chung, không bao giờ lộ contact chéo.
 - Queue minh bạch: mỗi người biết mình là số mấy
 
 ### 3. Submit (1 giờ)
+
+**UI chọn tin trên Telegram** (đã xác nhận làm được):
+
+Bot gửi tin nhắn với inline keyboard, mỗi lần bấm sẽ sửa lại tin nhắn cũ (không spam tin mới):
+
+```
+📋 Dựa trên yêu cầu khách, em gợi ý 5 tin của anh:
+
+[✅ 1. 2PN An Thượng, 12tr 95%]
+[✅ 2. 2PN Sơn Trà, 14tr 88%]
+[☐ 3. 2PN Mỹ Khê, 13tr 85%]
+[☐ 4. 3PN Hải Châu, 18tr 72%]
+[☐ 5. 2PN Thanh Khê, 11tr 70%]
+
+[➕ Xem thêm tin khác]
+[✅ Submit (2 tin)]  [❌ Hủy]
+
+⏰ Còn 58 phút
+```
+
+- Bấm vào từng dòng để tick ✅ / bỏ ☐ (tối đa 5 tin)
+- "Xem thêm" → hiện 5 tin tiếp theo (match % thấp dần)
+- Nút Submit hiện số tin đã chọn, cập nhật realtime
+- Mỗi nút 1 hàng riêng → dễ bấm trên điện thoại
+
+**Giới hạn nền tảng Telegram:**
+- 1 tin nhắn tối đa ~10 nút inline (5 tin + 3 action = vừa đủ)
+- Tên tin phải rút gọn (không hiện full địa chỉ dài)
+- Không có checkbox thật → dùng emoji ✅/☐
+- Không làm được: drag-drop sắp xếp, multi-column layout, hình ảnh inline trong nút
+
 - 5 người được chọn nhận DM với chi tiết + nút submit
 - Mỗi người chọn up to 5 listing từ kho của mình để đề xuất
 - **Timeout 1 giờ:** không submit → mất slot → người tiếp theo trong queue được đôn lên
