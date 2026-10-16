@@ -802,3 +802,53 @@ def find_exact_duplicate_by_hash(broker_id, content_hash, exclude_id=None,
         d["missing_fields"] = json.loads(d["missing_fields"])
         return d
     return None
+
+
+def detect_amenity_gaming(broker_id, path=None):
+    """Detect brokers who tick all amenities/highlights to game the score.
+
+    Flags when a broker's listings suspiciously share identical amenity lists
+    (copy-paste gaming) or claim an implausible number of amenities.
+
+    Returns list of warning strings for admin review. Never auto-penalizes.
+    """
+    from .core import connect
+    import json
+    conn = connect(path)
+    rows = conn.execute(
+        "SELECT id, parsed FROM tg_listings WHERE broker_id = ?"
+        " AND status != 'deleted' ORDER BY created_at DESC LIMIT 50",
+        (broker_id,),
+    ).fetchall()
+    conn.close()
+
+    warnings = []
+    if len(rows) < 3:
+        return warnings
+
+    amenity_sets = []
+    for r in rows:
+        try:
+            p = json.loads(r["parsed"] or "{}")
+        except (ValueError, TypeError):
+            continue
+        amenities = p.get("amenities") or []
+        highlights = p.get("highlights") or []
+        # Implausible: 12+ amenities on every listing
+        if len(amenities) >= 12:
+            warnings.append(
+                f"listing {r['id']}: {len(amenities)} amenities claimed "
+                f"(implausibly many)"
+            )
+        amenity_sets.append(frozenset(str(a).strip().lower() for a in amenities))
+
+    # Copy-paste: 3+ listings with IDENTICAL amenity sets
+    from collections import Counter
+    counts = Counter(amenity_sets)
+    for amen_set, n in counts.most_common(1):
+        if n >= 3 and len(amen_set) >= 5:
+            warnings.append(
+                f"suspicious: {n} listings share identical {len(amen_set)} "
+                f"amenities (likely copy-paste gaming)"
+            )
+    return warnings
