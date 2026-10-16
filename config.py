@@ -21,3 +21,7 @@ CRITICAL_FIELDS = ["price_vnd", "primary_phone", "photos"]
 # "writing" pause lives only in the FB-post generator.
 REPLY_DELAY_MIN = 0.5
 REPLY_DELAY_MAX = 1.5
+
+# Private broker group for cross-broker matching broadcasts.
+# Set to the group's chat id (e.g. -1001234567890). Empty = feature disabled.
+BROKER_GROUP_ID = os.getenv("BROKER_GROUP_ID", "")
