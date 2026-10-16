@@ -457,13 +457,16 @@ _PTYPE_SHORT = {"apartment": "Căn hộ", "house": "Nhà", "villa": "Villa",
 _FURN_SHORT = {"full": "Full", "basic": "Cơ bản", "empty": "Trống"}
 
 
-def _confirm_summary(l, pn="anh", phone_note="", forward_source=""):
+def _confirm_summary(l, pn="anh", phone_note="", forward_source="",
+                   hl_stage=False):
     """Full pre-save summary of every parsed field.
 
     Returns (text, keyboard_or_None). Unknown/empty fields are skipped.
     keyboard is None when nothing was parsed (fallback prompt instead).
     forward_source: label from get_forward_source() — shown as
     "(forward từ ...)" so the broker knows the origin was detected.
+    hl_stage: when True, show the selling-points prompt with a
+    [Bỏ qua, tiếp tục] button instead of the [Đúng rồi]/[Sửa] buttons.
     """
     p = l.get("parsed") or {}
     photos = l.get("photo_file_ids") or []
@@ -544,17 +547,34 @@ def _confirm_summary(l, pn="anh", phone_note="", forward_source=""):
         lines.append(f"📸 Ảnh: {len(photos)} ảnh")
         has = True
 
+    hl = p.get("highlights") or []
+    if hl:
+        lines.append("✨ Điểm nổi bật:")
+        for h in hl:
+            lines.append(f"• {h}")
+        has = True
+
     if not has:
         return ("Em chưa bóc được thông tin gì từ tin này 😅 "
                 f"{pn} gửi thêm giúp em nhé? (giá, số phòng ngủ, địa chỉ...)",
                 None)
-    lines += ["", f"Đúng hết chưa {pn}?"]
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("✅ Đúng rồi, lưu tin",
-                              callback_data=f"cfm:save:{l['id']}")],
-        [InlineKeyboardButton("✏️ Sửa",
-                              callback_data=f"cfm:edit:{l['id']}")],
-    ])
+    if hl_stage:
+        lines += ["",
+                  "✨ Anh có muốn thêm điểm nào để thu hút khách không?",
+                  '(vd: "view siêu đẹp", "chủ dễ tính", "khu yên tĩnh")',
+                  "Gõ thêm hoặc bấm nút bên dưới nhé 👇"]
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("➡️ Bỏ qua, tiếp tục",
+                                  callback_data=f"cfm:hl_done:{l['id']}")],
+        ])
+    else:
+        lines += ["", f"Đúng hết chưa {pn}?"]
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Đúng rồi, lưu tin",
+                                  callback_data=f"cfm:save:{l['id']}")],
+            [InlineKeyboardButton("✏️ Sửa",
+                                  callback_data=f"cfm:edit:{l['id']}")],
+        ])
     return "\n".join(lines), kb
 
 
