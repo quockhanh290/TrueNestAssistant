@@ -1215,6 +1215,14 @@ def main():
         filters.ChatType.GROUPS & filters.REPLY, feat_match.on_group_reply))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
     app.add_handler(MessageHandler(filters.PHOTO, feat_intake.on_photo))
+    # Poller: send queued webapp notifications (e.g. slot reopened alerts).
+    # Runs every 30s; cheap no-op when outbox is empty.
+    async def _outbox_poller(ctx):
+        try:
+            await feat_match.process_outbox_notifications(ctx)
+        except Exception as e:
+            log.warning("outbox poller failed: %s", e)
+    app.job_queue.run_repeating(_outbox_poller, interval=30, first=10)
     log.info("Linh is running…")
     app.run_polling()
 
