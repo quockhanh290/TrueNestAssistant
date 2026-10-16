@@ -43,6 +43,7 @@ from utils import (
     MENU_KB, STATUS_EMOJI, STATUS_LABEL, LIST_FILTERS,
     CLIENT_STATUS_EMOJI, CLIENT_STATUS_LABEL,
     completeness_score, freshness_badge, get_pronoun,
+    profile_score_text,
     rel_time, parse_listing_cb,
     _buffers, COLLECT_WINDOW,
     natural_delay, react_heart, maybe_send_hint,
@@ -186,11 +187,17 @@ async def onboard2_skip_phone(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def _onboard2_finish(update_or_q, ctx, uid, via_callback=False):
-    """Step 3: done → CTA to send first listing + show menu."""
+    """Step 3: score explainer + done → CTA to send first listing + show menu."""
     ctx.user_data.pop("onboarding2", None)
     broker = db.get_broker(uid) or {}
     pn = broker.get("pronoun") or "anh"
     text = (
+        f"💎 {pn.capitalize()} biết không? Hồ sơ của {pn} có <b>điểm uy tín</b>.\n"
+        f"Điểm càng cao → càng được ưu tiên giới thiệu "
+        f"<b>khách hàng thật</b> sau này.\n\n"
+        f"Cách tăng điểm:\n"
+        f"✅ Điền đầy đủ thông tin tin đăng\n"
+        f"✅ Cập nhật tình trạng tin thường xuyên\n\n"
         f"Xong! {pn.capitalize()} gửi tin đầu tiên cho em nhé —\n"
         "cứ gửi text + ảnh như đăng group là được 📸"
     )
@@ -200,9 +207,11 @@ async def _onboard2_finish(update_or_q, ctx, uid, via_callback=False):
         [InlineKeyboardButton("⬅️ Menu", callback_data="menu:back")],
     ])
     if via_callback:
-        await update_or_q.edit_message_text(text, reply_markup=kb)
+        await update_or_q.edit_message_text(text, reply_markup=kb,
+                                            parse_mode="HTML")
     else:
-        await update_or_q.message.reply_text(text, reply_markup=kb)
+        await update_or_q.message.reply_text(text, reply_markup=kb,
+                                             parse_mode="HTML")
 
 
 async def _handle_onboarding2(update: Update, ctx: ContextTypes.DEFAULT_TYPE,
@@ -261,6 +270,20 @@ async def show_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await natural_delay(update)
     await q.edit_message_text(
         HELP_TEXT,
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("⬅️ Menu", callback_data="menu:back")]]),
+    )
+
+
+async def show_profile(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    await natural_delay(update)
+    uid = q.from_user.id
+    pn = get_pronoun(uid)
+    await q.edit_message_text(
+        profile_score_text(uid, pn),
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("⬅️ Menu", callback_data="menu:back")]]),
@@ -762,6 +785,8 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await feat_write.on_write_generate(update, ctx)
     elif data == "menu:help":
         await show_help(update, ctx)
+    elif data == "menu:profile":
+        await show_profile(update, ctx)
     elif data == "menu:back":
         await show_menu(update, ctx)
     elif data == "premium:plans":

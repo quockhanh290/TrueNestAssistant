@@ -28,7 +28,8 @@ MENU_KB = InlineKeyboardMarkup([
      InlineKeyboardButton("💰 Hoa hồng", callback_data="menu:deals")],
     [InlineKeyboardButton("💬 Mẫu tin nhắn", callback_data="menu:templates"),
      InlineKeyboardButton("💎 Premium", callback_data="menu:premium")],
-    [InlineKeyboardButton("❓ Hướng dẫn", callback_data="menu:help")],
+    [InlineKeyboardButton("📊 Hồ sơ", callback_data="menu:profile"),
+     InlineKeyboardButton("❓ Hướng dẫn", callback_data="menu:help")],
 ])
 
 # client (khách hàng) statuses
@@ -177,6 +178,83 @@ def freshness_badge(created_at):
     if age_d <= 30:
         return "🟠", f"{int(age_d)} ngày"
     return "🔴", f"{int(age_d)} ngày"
+
+
+# Active listing statuses counted toward profile score
+PROFILE_ACTIVE_STATUSES = ("draft", "pending_info", "submitted", "uncertain")
+
+FRESHNESS_WINDOW_DAYS = 7
+
+
+def broker_profile_score(broker_id):
+    """Calculate broker profile score (0-100) from listing quality + freshness.
+
+    Score = 60% × avg_completeness + 40% × freshness_pct
+    Only active listings count. No listings → score is None ("—").
+
+    Returns dict: score, completeness, freshness, total_listings,
+                  complete_listings, fresh_listings.
+    """
+    listings = db.list_broker_listings(
+        broker_id, limit=10000, offset=0,
+        statuses=PROFILE_ACTIVE_STATUSES)
+    total = len(listings)
+    if not total:
+        return {
+            "score": None,
+            "completeness": None,
+            "freshness": None,
+            "total_listings": 0,
+            "complete_listings": 0,
+            "fresh_listings": 0,
+        }
+
+    now = time.time()
+    fresh_cutoff = now - FRESHNESS_WINDOW_DAYS * 86400
+    comp_sum = 0
+    complete_count = 0
+    fresh_count = 0
+    for l in listings:
+        comp, _ = completeness_score(l)
+        comp_sum += comp
+        if comp >= 80:
+            complete_count += 1
+        if (l.get("updated_at") or 0) >= fresh_cutoff:
+            fresh_count += 1
+
+    avg_comp = comp_sum / total
+    fresh_pct = fresh_count / total * 100
+    score = round(avg_comp * 0.6 + fresh_pct * 0.4)
+    return {
+        "score": score,
+        "completeness": round(avg_comp),
+        "freshness": round(fresh_pct),
+        "total_listings": total,
+        "complete_listings": complete_count,
+        "fresh_listings": fresh_count,
+    }
+
+
+def profile_score_text(broker_id, pronoun="anh"):
+    """Vietnamese profile card text for the broker's own score."""
+    s = broker_profile_score(broker_id)
+    pn = pronoun.capitalize()
+    if s["total_listings"] == 0:
+        return (
+            f"📊 <b>Hồ sơ của {pn.lower()}:</b>\n\n"
+            f"Điểm uy tín: — (chưa có tin nào)\n\n"
+            f"{pn} gửi tin đầu tiên để bắt đầu tích điểm nhé! 📝"
+        )
+    return (
+        f"📊 <b>Hồ sơ của {pn.lower()}:</b>\n"
+        f"Điểm uy tín: <b>{s['score']}/100</b>\n\n"
+        f"📝 Chất lượng tin: {s['completeness']}/100 "
+        f"({s['complete_listings']}/{s['total_listings']} tin đầy đủ)\n"
+        f"🔄 Độ tươi: {s['freshness']}/100 "
+        f"({s['fresh_listings']}/{s['total_listings']} tin cập nhật trong 7 ngày)\n\n"
+        f"💡 Tin đầy đủ + cập nhật thường xuyên → điểm cao\n"
+        f"   → được ưu tiên match với khách hàng thật"
+    )
 
 
 def get_pronoun(uid, broker=None):
