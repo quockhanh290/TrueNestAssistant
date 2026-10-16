@@ -36,8 +36,8 @@ FOLLOWUP_DAYS_MAX = 3
 # Max 1 follow-up per listing per 7 days
 FOLLOWUP_COOLDOWN_DAYS = 7
 
-# Only follow up on listings in these statuses (live, not rented/rejected)
-FOLLOWUP_STATUSES = ("approved", "in_review", "pending_info")
+# Only follow up on listings in these statuses (live, not rented/expired)
+FOLLOWUP_STATUSES = ("submitted", "pending_info")
 
 
 def ensure_followup_column(path=None):
