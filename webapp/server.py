@@ -163,12 +163,6 @@ class Handler(BaseHTTPRequestHandler):
 
         if path.startswith("/api/"):
             broker_id = self._auth(query)
-            # Local test fallback: accept broker_id directly (no auth)
-            if not broker_id:
-                try:
-                    broker_id = int(query.get("broker_id", "0")) or None
-                except ValueError:
-                    broker_id = None
             if not broker_id:
                 return self._json(401, {"error": "unauthorized"})
             return self._api_get(broker_id, path[len("/api/"):], query)
@@ -368,7 +362,8 @@ class Handler(BaseHTTPRequestHandler):
         return self._json(404, {"error": "not_found"})
 
     def log_message(self, fmt, *args):
-        sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
+        if sys.stderr:
+            sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
 
 
 def main():
