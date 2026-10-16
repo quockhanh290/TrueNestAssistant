@@ -517,6 +517,12 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await feat_match._handle_relay_message(update, ctx, rl, text)
         return
 
+    # 1b8b. typing extra requirements for a client (after paste confirm)?
+    er = ctx.user_data.get("client_extra_req")
+    if er:
+        await feat_clients._handle_extra_req(update, ctx, er, text)
+        return
+
     # 1b9. entering post-viewing feedback?
     vf = ctx.user_data.get("viewing_feedback")
     if vf:
@@ -737,6 +743,8 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await feat_clients.client_add_cancel(update, ctx)
     elif data.startswith("clients:addmode:"):
         await feat_clients.client_add_mode_cb(update, ctx)
+    elif data.startswith("clients:extrareq:skip:"):
+        await feat_clients.client_extrareq_skip_cb(update, ctx)
     elif data in ("clients:pasteok", "clients:pastefix", "clients:fixback"):
         await feat_clients.client_paste_confirm_cb(update, ctx)
     elif data.startswith("clients:fixval:"):
@@ -819,6 +827,18 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await feat_match.match_pick_send(update, ctx)
     elif data.startswith("mpick:cancel:"):
         await feat_match.match_pick_cancel(update, ctx)
+    elif data == "enrich:start":
+        await feat_clients.enrich_start_cb(update, ctx)
+    elif data == "enrich:later":
+        await feat_clients.enrich_later_cb(update, ctx)
+    elif data.startswith("enrich:t:"):
+        await feat_clients.enrich_toggle_cb(update, ctx)
+    elif data == "enrich:next":
+        await feat_clients.enrich_next_cb(update, ctx)
+    elif data == "enrich:skip":
+        await feat_clients.enrich_skip_cb(update, ctx)
+    elif data == "enrich:done":
+        await feat_clients.enrich_done_cb(update, ctx)
     elif data.startswith("client:match:"):
         await feat_clients.client_match(update, ctx)
     elif data.startswith("client:seturg:"):

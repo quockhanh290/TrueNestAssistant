@@ -52,6 +52,32 @@ CLIENT_EDIT_FIELDS = [
 ]
 
 
+# Highlight options for the listing-enrichment flow (after match warnings).
+# Display labels match parser.parse_highlights() output so toggling merges
+# cleanly with parsed highlights.
+ENRICH_CATEGORIES = [
+    ("👁️ View",
+     ["View biển trực diện", "Ban công view biển", "View biển",
+      "View sông", "View thành phố", "View núi"]),
+    ("🏊 Tiện ích",
+     ["Hồ bơi vô cực", "Hồ bơi", "Phòng gym", "Spa", "Sân tennis",
+      "Khu BBQ"]),
+    ("📍 Vị trí",
+     ["Sát biển", "Mặt tiền biển", "Gần biển", "Gần chợ",
+      "Gần trường học", "Gần sân bay", "Gần cầu Rồng",
+      "Vị trí trung tâm", "Gần công viên"]),
+    ("🏠 Tiện nghi",
+     ["Ban công rộng", "Sân thượng", "Có thang máy", "Chỗ đậu ô tô",
+      "An ninh 24/7"]),
+    ("✨ Tình trạng",
+     ["Mới xây", "Mới renovate", "Vừa sơn mới", "Nội thất mới 100%",
+      "Mới 100%", "Khu yên tĩnh", "Thoáng mát", "Nhiều cây xanh",
+      "Nhiều ánh sáng tự nhiên"]),
+]
+ENRICH_ALL = [opt for _, opts in ENRICH_CATEGORIES for opt in opts]
+ENRICH_QUEUE_CAP = 30  # max listings per enrichment session
+
+
 def parse_client_cb(data, action):
     """Parse client callbacks. Client ids contain a colon (cli:<hex>).
     Returns (client_id, rest_parts)."""
@@ -639,7 +665,7 @@ async def client_paste_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE
         return
 
     if data == "clients:pasteok":
-        # Save the client, then run inventory match (no auto-save before).
+        # Save the client, then ask for extra requirements before matching.
         cid = db.create_client(
             uid, name=parsed.get("name", ""), phone=parsed.get("phone", ""),
             requirements_raw=parsed.get("requirements_raw", ""),
@@ -647,8 +673,84 @@ async def client_paste_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE
             urgency=parsed.get("urgency") or "normal")
         ctx.user_data.pop("adding_client", None)
         c = db.get_client(cid)
-        await _show_match_results(q, ctx, uid, cid, c, pn, limit=8)
+        ctx.user_data["client_extra_req"] = {"client_id": cid}
+        await q.edit_message_text(
+            f"Đã lưu khách <b>{c.get('name') or 'mới'}</b> ✓\n\n"
+            f"Khách có yêu cầu đặc biệt gì thêm không ạ?\n"
+            f"(vd: “cần view biển”, “không chung chủ”, "
+            f"“có chỗ để ô tô”)",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton(
+                    "➡️ Bỏ qua, tìm luôn",
+                    callback_data=f"clients:extrareq:skip:{cid}")],
+            ]))
         return
+
+
+async def client_extrareq_skip_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """callback: clients:extrareq:skip:<client_id> — skip extra requirements."""
+    q = update.callback_query
+    await q.answer()
+    uid = q.from_user.id
+    pn = get_pronoun(uid)
+    er = ctx.user_data.pop("client_extra_req", None)
+    # client ids look like "cli:<hex>" — rejoin everything after the prefix
+    cid = ":".join(q.data.split(":")[3:])
+    if not er or er.get("client_id") != cid:
+        await q.edit_message_text("Phiên này đã hết hạn, làm lại nhé 😊",
+                                  reply_markup=MENU_KB)
+        return
+    c = db.get_client(cid)
+    if not c or c["broker_id"] != uid:
+        return
+    await _show_match_results(q, ctx, uid, cid, c, pn, limit=8)
+
+
+async def _handle_extra_req(update, ctx, er, text):
+    """Text handler for the extra-requirements step (after paste confirm).
+
+    Parses typed requirements, merges structured filters into the client,
+    then runs the inventory match with highlight keywords.
+    """
+    uid = update.effective_user.id
+    pn = get_pronoun(uid)
+    cid = er.get("client_id")
+    c = db.get_client(cid)
+    if not c or c["broker_id"] != uid:
+        ctx.user_data.pop("client_extra_req", None)
+        return
+    req = listing_parser.parse_query(text)
+    hls = listing_parser.parse_highlights(text)
+    updates = {}
+    # only fill in blanks — never overwrite what the broker confirmed
+    if req.get("bedrooms") is not None and c.get("bedrooms") is None:
+        updates["bedrooms"] = req["bedrooms"]
+    if req.get("min_price") and not c.get("budget_min"):
+        updates["budget_min"] = req["min_price"]
+    if req.get("max_price") and not c.get("budget_max"):
+        updates["budget_max"] = req["max_price"]
+    if req.get("district") and not c.get("district"):
+        updates["district"] = req["district"]
+    if req.get("property_type") and not c.get("property_type"):
+        updates["property_type"] = req["property_type"]
+    if req.get("building_name"):
+        # building isn't a client column; keep it in the raw text + keywords
+        pass
+    new_raw = ((c.get("requirements_raw") or "") + "\n+ " + text.strip()
+               ).strip()
+    updates["requirements_raw"] = new_raw
+    db.update_client(cid, **updates)
+    extra_keywords = list(hls) if hls else [text.strip()]
+    ctx.user_data.pop("client_extra_req", None)
+    c = db.get_client(cid)
+
+    async def _deliver(t, kb):
+        await update.message.reply_text(t, parse_mode="HTML",
+                                        reply_markup=kb)
+
+    await _run_match_and_show(ctx, uid, cid, c, pn, 8, extra_keywords,
+                              _deliver)
 
 
 async def client_paste_fix_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -1075,9 +1177,8 @@ def _client_to_search_filters(c):
     return f
 
 
-async def _manual_listing_picker(q, ctx, uid, client_id, c, pn):
-    """Free tier: broker manually picks listings to send (no auto-match)."""
-    import feat_premium
+def _manual_picker_content(uid, client_id, c, pn):
+    """(text, kb) for the Free-tier manual listing picker."""
     listings = db.search_listings(uid, {"status": "active"}, limit=10)
     # fall back to any non-deleted listings if no 'active'
     if not listings:
@@ -1097,50 +1198,112 @@ async def _manual_listing_picker(q, ctx, uid, client_id, c, pn):
             callback_data=f"client:send:{client_id}:{l['id']}")])
     kb.append([InlineKeyboardButton(
         "⬅️ Quay lại", callback_data=f"client:{client_id}:0:a:a")])
-    await q.edit_message_text("\n".join(lines), parse_mode="HTML",
-                              reply_markup=InlineKeyboardMarkup(kb))
+    return "\n".join(lines), InlineKeyboardMarkup(kb)
 
 
-async def _show_match_results(q, ctx, uid, client_id, c, pn, limit=8):
-    """Render inventory match results for a client.
-
-    Pro: auto-match up to `limit` listings. Free: manual picker.
-    Called after paste-confirm save and from client_match.
-    """
-    import feat_premium
-    if not feat_premium.requires_tier(uid, "auto_match"):
-        await _manual_listing_picker(q, ctx, uid, client_id, c, pn)
-        return
-    matches = db.search_listings(uid, _client_to_search_filters(c), limit=limit)
-    if not matches:
-        kb = []
-        if config.BROKER_GROUP_ID:
-            kb.append([InlineKeyboardButton(
-                "✅ Đăng lên nhóm",
-                callback_data=f"client:broadcast:{client_id}")])
-            kb.append([InlineKeyboardButton(
-                "❌ Thôi",
-                callback_data=f"client:match:{client_id}")])
+def _nomatch_content(uid, client_id, c, pn):
+    """(text, kb) when no inventory matches."""
+    kb = []
+    if config.BROKER_GROUP_ID:
         kb.append([InlineKeyboardButton(
-            "⬅️ Quay lại",
-            callback_data=f"client:{client_id}:0:a:a")])
-        text = (
-            f"Em chưa tìm thấy tin nào của {pn} phù hợp với "
-            f"<b>{c.get('name')}</b> ({_client_req_summary(c)})."
+            "✅ Đăng lên nhóm",
+            callback_data=f"client:broadcast:{client_id}")])
+        kb.append([InlineKeyboardButton(
+            "❌ Thôi",
+            callback_data=f"client:match:{client_id}")])
+    kb.append([InlineKeyboardButton(
+        "⬅️ Quay lại",
+        callback_data=f"client:{client_id}:0:a:a")])
+    text = (
+        f"Em chưa tìm thấy tin nào của {pn} phù hợp với "
+        f"<b>{c.get('name')}</b> ({_client_req_summary(c)})."
+    )
+    if config.BROKER_GROUP_ID:
+        text += (
+            f"\n\n{pn.capitalize()} có muốn đăng nhu cầu này lên nhóm"
+            f" môi giới để anh em hỗ trợ không?\n"
+            f"(Chỉ hiện nhu cầu, không lộ SĐT khách)"
         )
-        if config.BROKER_GROUP_ID:
-            text += (
-                f"\n\n{pn.capitalize()} có muốn đăng nhu cầu này lên nhóm"
-                f" môi giới để anh em hỗ trợ không?\n"
-                f"(Chỉ hiện nhu cầu, không lộ SĐT khách)"
-            )
-        else:
-            text += " Thử nới nhu cầu ra nhé?"
-        await q.edit_message_text(
-            text,
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(kb))
-        return
+    else:
+        text += " Thử nới nhu cầu ra nhé?"
+    return text, InlineKeyboardMarkup(kb)
+
+
+def _strip_acc(s):
+    return listing_parser._strip_accents(str(s or "").lower())
+
+
+def _rank_by_keywords(matches, extra_keywords):
+    """Stable re-rank: listings whose highlights contain any keyword first."""
+    if not extra_keywords:
+        return matches
+    kws = [_strip_acc(k) for k in extra_keywords if _strip_acc(k)]
+    if not kws:
+        return matches
+
+    def _score(l):
+        hls = (_strip_acc(h) for h in
+               (l.get("parsed") or {}).get("highlights") or [])
+        hls = list(hls)
+        return sum(1 for k in kws if any(k in h for h in hls))
+
+    return sorted(matches, key=_score, reverse=True)
+
+
+def _enrichment_warnings(uid, c, extra_keywords):
+    """Find search criteria that can't match well because the broker's
+    own listings lack that data.
+
+    Returns [(display_label, missing_count, total)] — max 3, only where
+    >30% of active listings are missing the data.
+    """
+    listings = db.list_broker_listings(
+        uid, limit=2000,
+        statuses=("draft", "pending_info", "submitted", "uncertain"))
+    total = len(listings)
+    if not total:
+        return []
+    warns = []
+    crits = []
+    if c.get("bedrooms") is not None:
+        crits.append(("số phòng ngủ",
+                      lambda p: p.get("bedrooms") is None))
+    if c.get("budget_min") or c.get("budget_max"):
+        crits.append(("giá thuê",
+                      lambda p: p.get("price_vnd") is None))
+    if c.get("district"):
+        crits.append(("khu vực",
+                      lambda p: not p.get("district")))
+    if c.get("property_type"):
+        crits.append(("loại hình",
+                      lambda p: not p.get("property_type")))
+    for label, is_missing in crits:
+        missing = sum(1 for l in listings
+                      if is_missing(l.get("parsed") or {}))
+        if missing / total > 0.3:
+            warns.append((label, missing, total))
+    seen = {w[0] for w in warns}
+    for kw in (extra_keywords or []):
+        kw_n = _strip_acc(kw)
+        if not kw_n or kw in seen:
+            continue
+        has = 0
+        for l in listings:
+            hls = (l.get("parsed") or {}).get("highlights") or []
+            if any(kw_n in _strip_acc(h) for h in hls):
+                has += 1
+        missing = total - has
+        if missing / total > 0.3:
+            warns.append((kw, missing, total))
+            seen.add(kw)
+    return warns[:3]
+
+
+def _match_hits_content(uid, client_id, c, pn, limit, extra_keywords):
+    """(text, kb, matches, warnings) for the Pro auto-match results."""
+    matches = db.search_listings(uid, _client_to_search_filters(c),
+                                 limit=limit)
+    matches = _rank_by_keywords(matches, extra_keywords)
     kb = []
     for i, l in enumerate(matches, start=1):
         kb.append([InlineKeyboardButton(
@@ -1153,13 +1316,269 @@ async def _show_match_results(q, ctx, uid, client_id, c, pn, limit=8):
         "⬅️ Menu", callback_data="menu:back")])
     lines = [f"Em tìm được <b>{len(matches)}</b> tin phù hợp "
              f"với <b>{c.get('name')}</b>:"]
+    if extra_keywords:
+        lines.append(f"🎯 Ưu tiên: {', '.join(extra_keywords)}")
     for i, l in enumerate(matches, start=1):
         lines.append("")
         lines.append(f"{i}. {listing_line(l)}")
     lines.append("")
     lines.append("Chọn tin để gửi cho khách nhé 👇")
+    warnings = _enrichment_warnings(uid, c, extra_keywords)
+    if warnings:
+        lines.append("")
+        lines.append(
+            f"Nhưng có <b>{len(warnings)} điểm</b> chưa match được:")
+        for label, missing, total in warnings:
+            lines.append("")
+            lines.append(
+                f'⚠️ "{label}" — {missing}/{total} tin của anh '
+                f"chưa có thông tin này.")
+        lines.append("Lần sau khi nhập tin, anh nhớ điền thêm nhé!")
+        lines.append("")
+        lines.append("💡 Càng điền đầy đủ, lần sau em match càng chuẩn!")
+    return "\n".join(lines), InlineKeyboardMarkup(kb), matches, warnings
+
+
+async def _run_match_and_show(ctx, uid, client_id, c, pn, limit=8,
+                              extra_keywords=None, deliver=None,
+                              show_enrich_prompt=True):
+    """Shared match core. deliver: async (text, kb) -> None."""
+    import feat_premium
+    if not feat_premium.requires_tier(uid, "auto_match"):
+        text, kb = _manual_picker_content(uid, client_id, c, pn)
+        await deliver(text, kb)
+        return
+    text, kb, matches, warnings = _match_hits_content(
+        uid, client_id, c, pn, limit, extra_keywords)
+    if not matches:
+        text, kb = _nomatch_content(uid, client_id, c, pn)
+        await deliver(text, kb)
+        return
+    if warnings and show_enrich_prompt:
+        text += ("\n\nAnh có muốn cập nhật hàng của mình luôn không?\n"
+                 "Để lần sau em match chuẩn hơn ạ! 💪")
+        rows = list(kb.inline_keyboard) + [
+            [InlineKeyboardButton("✅ Cập nhật ngay",
+                                  callback_data="enrich:start")],
+            [InlineKeyboardButton("⏭️ Để sau",
+                                  callback_data="enrich:later")],
+        ]
+        kb = InlineKeyboardMarkup(rows)
+        ctx.user_data["enrich_ctx"] = {
+            "client_id": client_id, "limit": limit,
+            "extra_keywords": extra_keywords or [],
+        }
+    await deliver(text, kb)
+
+
+async def _show_match_results(q, ctx, uid, client_id, c, pn, limit=8,
+                              extra_keywords=None, show_enrich_prompt=True):
+    """Render inventory match results for a client.
+
+    Pro: auto-match up to `limit` listings. Free: manual picker.
+    Called from client_match and the paste intake flow.
+    """
+
+    async def _deliver(text, kb):
+        await q.edit_message_text(text, parse_mode="HTML",
+                                  reply_markup=kb)
+
+    await _run_match_and_show(ctx, uid, client_id, c, pn, limit,
+                              extra_keywords, _deliver, show_enrich_prompt)
+
+
+def _enrich_missing(l):
+    """Highlight options from ENRICH_ALL not yet on this listing."""
+    hls = set((l.get("parsed") or {}).get("highlights") or [])
+    return [o for o in ENRICH_ALL if o not in hls]
+
+
+async def _enrich_finish(q, ctx, uid):
+    en = ctx.user_data.pop("enrich", None) or {}
+    total = len(en.get("ids") or [])
+    updated = en.get("updated", 0)
+    await q.edit_message_text(
+        f"Xong! Đã cập nhật <b>{updated}/{total}</b> tin. 🎉\n"
+        f"Lần sau em match chuẩn hơn cho anh nhé 😊",
+        parse_mode="HTML", reply_markup=MENU_KB)
+
+
+async def _render_enrich_current(q, ctx, uid):
+    """Render the current listing in the enrichment queue (toggle UI).
+
+    Auto-skips listings that became complete or were deleted.
+    """
+    en = ctx.user_data.get("enrich")
+    if not en:
+        return
+    ids = en["ids"]
+    # advance past deleted / already-complete listings
+    while en["pos"] < len(ids):
+        l = db.get_listing(ids[en["pos"]])
+        if not l or l.get("status") == "deleted":
+            en["pos"] += 1
+            continue
+        if not _enrich_missing(l):
+            en["pos"] += 1
+            continue
+        break
+    if en["pos"] >= len(ids):
+        await _enrich_finish(q, ctx, uid)
+        return
+    l = db.get_listing(ids[en["pos"]])
+    total = len(ids)
+    pos = en["pos"]
+    pending = set(en.get("pending") or [])
+    existing = (l.get("parsed") or {}).get("highlights") or []
+    missing = _enrich_missing(l)
+    lines = [f"📝 Cập nhật tin <b>{pos + 1}/{total}</b>:", "",
+             f"🏠 {listing_line(l)}"]
+    if existing:
+        lines.append(f"Đã có: ✅ {', '.join(existing)}")
+    else:
+        lines.append("Đã có: <i>(chưa có điểm nổi bật nào)</i>")
+    lines.append("Còn thiếu — chọn thêm nhé:")
+    kb = []
+    for cat, opts in ENRICH_CATEGORIES:
+        cat_missing = [o for o in opts if o in missing]
+        if not cat_missing:
+            continue
+        lines.append("")
+        lines.append(f"<b>{cat}:</b>")
+        row = []
+        for o in cat_missing:
+            idx = missing.index(o)
+            mark = "✓" if o in pending else "☐"
+            row.append(InlineKeyboardButton(
+                f"{mark} {o}", callback_data=f"enrich:t:{idx}"))
+            if len(row) == 2:
+                kb.append(row)
+                row = []
+        if row:
+            kb.append(row)
+    kb.append([InlineKeyboardButton("✅ Xong tin này →",
+                                    callback_data="enrich:next")])
+    kb.append([InlineKeyboardButton("⏭️ Bỏ qua tin này",
+                                    callback_data="enrich:skip")])
+    kb.append([InlineKeyboardButton("🏁 Xong luôn",
+                                    callback_data="enrich:done")])
     await q.edit_message_text("\n".join(lines), parse_mode="HTML",
                               reply_markup=InlineKeyboardMarkup(kb))
+
+
+async def enrich_start_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """callback: enrich:start — build the queue, show first listing."""
+    q = update.callback_query
+    await q.answer()
+    uid = q.from_user.id
+    ctx.user_data.pop("enrich_ctx", None)
+    listings = db.list_broker_listings(
+        uid, limit=2000,
+        statuses=("draft", "pending_info", "submitted", "uncertain"))
+    scored = []
+    for l in listings:
+        m = len(_enrich_missing(l))
+        if m:
+            scored.append((m, l["id"]))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    ids = [lid for _, lid in scored[:ENRICH_QUEUE_CAP]]
+    if not ids:
+        await q.edit_message_text(
+            "Tin của anh đã đầy đủ thông tin rồi! 🎉",
+            reply_markup=MENU_KB)
+        return
+    ctx.user_data["enrich"] = {"ids": ids, "pos": 0, "updated": 0,
+                               "pending": []}
+    await _render_enrich_current(q, ctx, uid)
+
+
+async def enrich_later_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """callback: enrich:later — dismiss the prompt, re-show plain results."""
+    q = update.callback_query
+    await q.answer()
+    uid = q.from_user.id
+    pn = get_pronoun(uid)
+    ectx = ctx.user_data.pop("enrich_ctx", None) or {}
+    cid = ectx.get("client_id")
+    c = db.get_client(cid) if cid else None
+    if not c or c["broker_id"] != uid:
+        await q.edit_message_text("Ok, khi nào cần thì bảo em nhé 😊",
+                                  reply_markup=MENU_KB)
+        return
+    await _show_match_results(q, ctx, uid, cid, c, pn,
+                              limit=ectx.get("limit", 8),
+                              extra_keywords=ectx.get("extra_keywords"),
+                              show_enrich_prompt=False)
+
+
+async def enrich_toggle_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """callback: enrich:t:<idx> — toggle a highlight option."""
+    q = update.callback_query
+    await q.answer()
+    uid = q.from_user.id
+    en = ctx.user_data.get("enrich")
+    if not en or en["pos"] >= len(en["ids"]):
+        return
+    try:
+        idx = int(q.data.split(":")[-1])
+    except (ValueError, IndexError):
+        return
+    l = db.get_listing(en["ids"][en["pos"]])
+    if not l or l.get("broker_id") != uid:
+        return
+    missing = _enrich_missing(l)
+    if not 0 <= idx < len(missing):
+        return
+    opt = missing[idx]
+    pending = set(en.get("pending") or [])
+    if opt in pending:
+        pending.discard(opt)
+    else:
+        pending.add(opt)
+    en["pending"] = sorted(pending)
+    await _render_enrich_current(q, ctx, uid)
+
+
+async def _enrich_advance(q, ctx, uid, save):
+    en = ctx.user_data.get("enrich")
+    if not en or en["pos"] >= len(en["ids"]):
+        return
+    lid = en["ids"][en["pos"]]
+    if save:
+        l = db.get_listing(lid)
+        if l and l.get("broker_id") == uid:
+            p = l.get("parsed") or {}
+            hls = list(p.get("highlights") or [])
+            added = [o for o in (en.get("pending") or [])
+                     if o not in hls]
+            if added:
+                p["highlights"] = hls + added
+                db.update_listing(lid, parsed=p)
+                en["updated"] = en.get("updated", 0) + 1
+    en["pos"] += 1
+    en["pending"] = []
+    await _render_enrich_current(q, ctx, uid)
+
+
+async def enrich_next_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """callback: enrich:next — save toggles, go to next listing."""
+    q = update.callback_query
+    await q.answer()
+    await _enrich_advance(q, ctx, q.from_user.id, save=True)
+
+
+async def enrich_skip_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """callback: enrich:skip — skip without saving, go to next."""
+    q = update.callback_query
+    await q.answer()
+    await _enrich_advance(q, ctx, q.from_user.id, save=False)
+
+
+async def enrich_done_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """callback: enrich:done — finish early with summary."""
+    q = update.callback_query
+    await q.answer()
+    await _enrich_finish(q, ctx, q.from_user.id)
 
 
 async def client_match(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
