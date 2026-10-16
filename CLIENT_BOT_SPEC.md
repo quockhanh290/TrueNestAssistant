@@ -105,42 +105,34 @@ Mỗi căn hiện riêng với 3 nút:
 - **Concierge:** thêm vào giỏ concierge (trả phí)
 - Khách xem hết 15 căn → dừng
 
-### Khi khách không chọn đủ (sau 15 căn)
+### Sau 15 căn
+```
+Bạn đã xem hết 15 căn. Bạn muốn?
+[🔄 Xem lại 15 căn vừa rồi] [➡️ Xem 15 căn mới] [✅ Xong]
+```
+
+- **Xem lại:** hiện lại 15 căn cũ (giữ nguyên shortlist đã chọn, cho đổi ý)
+- **Xem mới:** hiện 15 căn tiếp theo từ inventory
+- Cả 2 trường hợp đều ghi nhận lựa chọn
+
+### Sau 30 căn (2 đợt) vẫn chưa đủ
 ```
 Có vẻ bạn gặp khó khăn trong việc quyết định. 🤔
 Bạn có muốn xem lại yêu cầu của mình không?
 [Sửa yêu cầu] [Không, cảm ơn]
 ```
 
-**Nếu sửa:**
-- Cho sửa ngân sách, khu vực, số PN, tiện ích...
-- Submit lại → broadcast mới với tag `🔄 YÊU CẦU LẦN 2`
-- Báo cho broker đã submit trước đó:
-  ```
-  Proposed của anh bị từ chối.
-  Lý do: khách không thích hoặc thiếu thông tin để quyết định.
-  💡 Gợi ý: cập nhật thêm ảnh, mô tả chi tiết hơn
-     để lần sau khách dễ chọn hơn nhé.
-  ```
-- Nếu broker cũ reserve lại → cảnh báo (không cấm):
-  ```
-  ⚠️ Anh đã bị từ chối ở lần trước.
-  Hãy chọn những căn tốt nhất của anh nhé —
-  đầy đủ thông tin, ảnh đẹp, giá hợp lý.
-  ```
+**Nếu sửa:** (như cũ — broadcast lần 2, tag 🔄, báo broker cũ)
 
-**Nếu không sửa:**
+**Nếu không:**
 ```
-Rất tiếc, hiện tại mình chưa có căn nào
-đáp ứng được nhu cầu của bạn. 🙏
+Cảm ơn bạn đã dành thời gian! 🙏
 
-Bạn đã xem 30 căn mà chưa chọn được 5 căn để đi xem —
-tiếp tục sẽ chỉ làm mất thời gian của các môi giới.
-
-Trừ khi bạn muốn tăng ngân sách, mình gợi ý bạn
-quay lại sau khi có thêm tin mới nhé!
+Khi có căn mới phù hợp với yêu cầu của bạn,
+mình sẽ báo ngay nhé. Bạn cứ yên tâm!
 ```
-- Ngoại lệ: nếu budget cao → vẫn cho tiếp tục (broker sẵn sàng phục vụ khách VIP)
+- Lưu yêu cầu vào "wishlist" → có tin mới match → auto notify
+- Không làm phiền broker thêm
 
 ## Nguồn dữ liệu
 - Giá TB: tính từ inventory của broker (real-time)
