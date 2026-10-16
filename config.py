@@ -57,3 +57,8 @@ PLATFORM_FEE_RATE = float(os.getenv("PLATFORM_FEE_RATE", "0.20"))
 # (anonymous = 5k chars/day).
 TRANSLATION_ENABLED = os.getenv("TRANSLATION_ENABLED", "1") == "1"
 TRANSLATION_EMAIL = os.getenv("TRANSLATION_EMAIL", "sapnhami@gmail.com")
+
+# Telegram WebApp for listing management. Telegram requires HTTPS for the
+# public URL; localhost is fine for local dev/testing.
+WEBAPP_URL = os.getenv("WEBAPP_URL", "http://localhost:8080")
+WEBAPP_PORT = int(os.getenv("WEBAPP_PORT", "8080"))
