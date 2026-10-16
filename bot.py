@@ -626,6 +626,12 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await feat_clients.show_clients(update, ctx)
     elif data == "menu:premium":
         await feat_premium.cmd_premium(update, ctx)
+    elif data == "menu:match":
+        await feat_match.match_requests_list(update, ctx)
+    elif data == "menu:deals":
+        await feat_deals.cmd_commission(update, ctx)
+    elif data == "menu:templates":
+        await feat_templates.tpl_list_cb(update, ctx)
     elif data == "stray:yes":
         await feat_intake.stray_confirm_yes(update, ctx)
     elif data == "stray:new":
