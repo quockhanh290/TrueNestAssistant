@@ -6,6 +6,7 @@ Tables:
   tg_events    — status-change log for availability tracking
 """
 import json
+import secrets
 import sqlite3
 import time
 import uuid
@@ -234,6 +235,38 @@ CREATE TABLE IF NOT EXISTS trial_usage (
     updated_at REAL NOT NULL,
     PRIMARY KEY (broker_id, feature)
 );
+
+-- shareable listing pages: broker creates a public link (/s/<token>) to
+-- send curated listings to a client via any channel (Zalo/SMS/...).
+-- 30-day expiry; view_count + share_bookings track engagement.
+CREATE TABLE IF NOT EXISTS share_pages (
+    token       TEXT PRIMARY KEY,
+    broker_id   INTEGER NOT NULL REFERENCES brokers(user_id),
+    client_id   TEXT,
+    listing_ids TEXT NOT NULL DEFAULT '[]',
+    title       TEXT NOT NULL DEFAULT '',
+    created_at  REAL NOT NULL,
+    expires_at  REAL NOT NULL,
+    view_count  INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_sharepages_broker ON share_pages(broker_id);
+
+-- viewing requests submitted from a public share page (no auth).
+-- Surfaced to the broker via GET /api/shares.
+CREATE TABLE IF NOT EXISTS share_bookings (
+    id             TEXT PRIMARY KEY,
+    token          TEXT NOT NULL REFERENCES share_pages(token),
+    broker_id      INTEGER NOT NULL REFERENCES brokers(user_id),
+    listing_id     TEXT,
+    name           TEXT NOT NULL DEFAULT '',
+    phone          TEXT NOT NULL DEFAULT '',
+    preferred_date TEXT NOT NULL DEFAULT '',
+    note           TEXT NOT NULL DEFAULT '',
+    status         TEXT NOT NULL DEFAULT 'new',
+    created_at     REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sharebookings_token ON share_bookings(token);
+CREATE INDEX IF NOT EXISTS idx_sharebookings_broker ON share_bookings(broker_id);
 """
 
 
@@ -259,6 +292,7 @@ def init_db(path=None):
     _migrate_listings_photo_urls(conn)
     _migrate_listings_photo_hashes(conn)
     _migrate_trial_usage(conn)
+    _migrate_share_pages(conn)
     conn.commit()
     conn.close()
 
@@ -506,6 +540,51 @@ def _migrate_trial_usage(conn):
             PRIMARY KEY (broker_id, feature)
         )
     """)
+
+
+def _migrate_share_pages(conn):
+    """Create share_pages + share_bookings for public listing share links.
+
+    Idempotent: CREATE TABLE IF NOT EXISTS.
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS share_pages (
+            token       TEXT PRIMARY KEY,
+            broker_id   INTEGER NOT NULL REFERENCES brokers(user_id),
+            client_id   TEXT,
+            listing_ids TEXT NOT NULL DEFAULT '[]',
+            title       TEXT NOT NULL DEFAULT '',
+            created_at  REAL NOT NULL,
+            expires_at  REAL NOT NULL,
+            view_count  INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sharepages_broker"
+        " ON share_pages(broker_id)"
+    )
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS share_bookings (
+            id             TEXT PRIMARY KEY,
+            token          TEXT NOT NULL REFERENCES share_pages(token),
+            broker_id      INTEGER NOT NULL REFERENCES brokers(user_id),
+            listing_id     TEXT,
+            name           TEXT NOT NULL DEFAULT '',
+            phone          TEXT NOT NULL DEFAULT '',
+            preferred_date TEXT NOT NULL DEFAULT '',
+            note           TEXT NOT NULL DEFAULT '',
+            status         TEXT NOT NULL DEFAULT 'new',
+            created_at     REAL NOT NULL
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sharebookings_token"
+        " ON share_bookings(token)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sharebookings_broker"
+        " ON share_bookings(broker_id)"
+    )
 
 
 def _now():
@@ -876,6 +955,133 @@ def requires_enterprise_tier(broker_id, path=None):
         return False
     return active_listing_count(broker_id, path=path) > \
         ENTERPRISE_LISTING_THRESHOLD
+
+
+# ---------------------------------------------------------------- share pages
+
+SHARE_TOKEN_BYTES = 9       # secrets.token_urlsafe(9) -> 12 chars
+SHARE_TTL_DAYS = 30
+
+
+def _gen_share_token(conn):
+    """Unique 12-char URL-safe token (retries on collision)."""
+    for _ in range(10):
+        token = secrets.token_urlsafe(SHARE_TOKEN_BYTES)
+        row = conn.execute(
+            "SELECT 1 FROM share_pages WHERE token = ?", (token,)
+        ).fetchone()
+        if not row:
+            return token
+    raise RuntimeError("could not generate unique share token")
+
+
+def create_share_page(broker_id, listing_ids, title="", client_id=None,
+                      path=None, ttl_days=SHARE_TTL_DAYS):
+    """Create a public share page. Returns the token."""
+    now = _now()
+    conn = connect(path)
+    try:
+        token = _gen_share_token(conn)
+        conn.execute(
+            "INSERT INTO share_pages (token, broker_id, client_id,"
+            " listing_ids, title, created_at, expires_at, view_count)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, 0)",
+            (token, broker_id, client_id,
+             json.dumps(list(listing_ids or []), ensure_ascii=False),
+             title or "", now, now + ttl_days * 86400),
+        )
+        conn.commit()
+        return token
+    finally:
+        conn.close()
+
+
+def get_share_page(token, path=None, bump_view=True):
+    """Public share page by token. None if missing/expired.
+
+    bump_view increments view_count (page render path only).
+    """
+    conn = connect(path)
+    try:
+        row = conn.execute(
+            "SELECT * FROM share_pages WHERE token = ?", (token,)
+        ).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        if d["expires_at"] and d["expires_at"] < _now():
+            return None
+        if bump_view:
+            conn.execute(
+                "UPDATE share_pages SET view_count = view_count + 1"
+                " WHERE token = ?",
+                (token,),
+            )
+            conn.commit()
+            d["view_count"] = (d["view_count"] or 0) + 1
+        d["listing_ids"] = json.loads(d["listing_ids"] or "[]")
+        return d
+    finally:
+        conn.close()
+
+
+def list_share_pages(broker_id, path=None):
+    """Broker's share pages, newest first."""
+    conn = connect(path)
+    try:
+        rows = conn.execute(
+            "SELECT * FROM share_pages WHERE broker_id = ?"
+            " ORDER BY created_at DESC",
+            (broker_id,),
+        ).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["listing_ids"] = json.loads(d["listing_ids"] or "[]")
+            out.append(d)
+        return out
+    finally:
+        conn.close()
+
+
+def create_share_booking(token, broker_id, name, phone, listing_id=None,
+                         preferred_date="", note="", path=None):
+    """Viewing request from a public share page. Returns booking id."""
+    conn = connect(path)
+    try:
+        bid = "sb:" + uuid.uuid4().hex[:12]
+        conn.execute(
+            "INSERT INTO share_bookings (id, token, broker_id, listing_id,"
+            " name, phone, preferred_date, note, status, created_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'new', ?)",
+            (bid, token, broker_id, listing_id, name or "", phone or "",
+             preferred_date or "", note or "", _now()),
+        )
+        conn.commit()
+        return bid
+    finally:
+        conn.close()
+
+
+def list_share_bookings(token=None, broker_id=None, path=None):
+    """Bookings for a share page and/or broker, newest first."""
+    conn = connect(path)
+    try:
+        conds, vals = [], []
+        if token:
+            conds.append("token = ?")
+            vals.append(token)
+        if broker_id is not None:
+            conds.append("broker_id = ?")
+            vals.append(broker_id)
+        where = ("WHERE " + " AND ".join(conds)) if conds else ""
+        rows = conn.execute(
+            f"SELECT * FROM share_bookings {where} ORDER BY created_at DESC",
+            vals,
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
 
 
 def active_listing_count(broker_id, path=None):
