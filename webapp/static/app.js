@@ -102,15 +102,23 @@
       var badge = i.status === "rented"
         ? '<span class="badge rented">ĐÃ THUÊ</span>'
         : (i.has_post ? "" : '<span class="badge">MỚI</span>');
+      var q = i.quality_score || 0;
+      var qcls = q >= 80 ? "q-high" : (q >= 50 ? "q-mid" : "q-low");
+      var score = '<span class="qscore ' + qcls + '" title="AI chấm điểm theo schema chuẩn">🤖 ' + q + "đ</span>";
       var meta = [i.bedroom_label];
       if (i.bathrooms) meta.push(i.bathrooms + " WC");
       if (i.area_m2) meta.push(i.area_m2 + "m²");
       if (i.photo_count) meta.push("📸 " + i.photo_count);
+      // Show first R2 photo if available, else emoji placeholder.
+      var img = (i.photo_urls && i.photo_urls.length)
+        ? '<img class="card-photo" src="' + esc(i.photo_urls[0]) +
+          '" alt="" loading="lazy" onerror="this.outerHTML=\'<div class=&quot;card-img&quot;>🏢</div>\'">'
+        : '<div class="card-img">🏢</div>';
       return (
         '<div class="card" data-id="' + esc(i.id) + '">' +
-        '<div class="card-img">🏢</div>' +
+        img +
         '<div class="card-body">' +
-        '<div class="card-title">' + esc(i.title) + badge + "</div>" +
+        '<div class="card-title">' + esc(i.title) + badge + score + "</div>" +
         '<div class="card-meta">' + esc(meta.join(" · ")) + "</div>" +
         '<div class="card-price">' + esc(i.price) + "/tháng</div>" +
         '<div class="card-actions">' +
@@ -193,10 +201,38 @@
       ["📸 Ảnh", d.photo_count + " ảnh"],
       ["📊 Trạng thái", statusLabel(d.status)],
     ];
-    var html =
-      '<div class="detail-img">🏢</div><div class="detail-body">' +
+    var html;
+    // Photo gallery: R2 URLs if available, else placeholder.
+    if (d.photo_urls && d.photo_urls.length) {
+      html = '<div class="gallery">' + d.photo_urls.map(function (u, ix) {
+        return '<img class="gallery-img" src="' + esc(u) + '" alt="" loading="lazy"' +
+          (ix > 0 ? ' style="display:none"' : "") + '>';
+      }).join("") + "</div>";
+      if (d.photo_urls.length > 1) {
+        html += '<div class="gallery-nav">' +
+          '<button class="btn" id="g-prev">‹</button>' +
+          '<span id="g-count">1/' + d.photo_urls.length + "</span>" +
+          '<button class="btn" id="g-next">›</button></div>';
+      }
+      html += '<div class="detail-body">';
+    } else {
+      html = '<div class="detail-img">🏢</div><div class="detail-body">';
+    }
+    html +=
       '<div class="detail-title">' + esc(d.title) + "</div>" +
-      '<div class="detail-price">' + esc(d.price) + "/tháng</div>" +
+      '<div class="detail-price">' + esc(d.price) + "/tháng</div>";
+    // quality score
+    var qs = d.quality_score || 0;
+    var qcls = qs >= 80 ? "q-high" : (qs >= 50 ? "q-mid" : "q-low");
+    var qcol = qs >= 80 ? "var(--green)" : (qs >= 50 ? "#ffab00" : "var(--red)");
+    html += '<div class="section-title">🤖 AI chấm điểm <span class="qscore ' + qcls + '">' + qs + "đ</span></div>" +
+      '<div class="qbar"><div style="width:' + qs + '%;background:' + qcol + '"></div></div>';
+    if (d.quality_missing && d.quality_missing.length) {
+      html += '<div class="q-missing">Thiếu: <b>' + esc(d.quality_missing.join(", ")) + "</b></div>";
+    } else {
+      html += '<div class="q-missing">✅ Đầy đủ thông tin</div>';
+    }
+    html += '<div class="section-title" style="margin-top:12px">Thông số</div>' +
       rows.map(function (r) {
         return '<div class="spec"><span class="k">' + r[0] +
           '</span><span class="v">' + fmtVal(r[1]) + "</span></div>";
@@ -220,6 +256,23 @@
     if (dr) dr.onclick = function () { changeStatus("rented"); };
     var du = document.getElementById("d-unrent");
     if (du) du.onclick = function () { changeStatus("submitted"); };
+    // gallery swipe buttons
+    var gp = document.getElementById("g-prev");
+    var gn = document.getElementById("g-next");
+    if (gp && gn) {
+      var imgs = document.querySelectorAll(".gallery-img");
+      var idx = 0;
+      var gc = document.getElementById("g-count");
+      var showIx = function (n) {
+        idx = (n + imgs.length) % imgs.length;
+        imgs.forEach(function (im, k) {
+          im.style.display = k === idx ? "" : "none";
+        });
+        if (gc) gc.textContent = (idx + 1) + "/" + imgs.length;
+      };
+      gp.onclick = function () { showIx(idx - 1); };
+      gn.onclick = function () { showIx(idx + 1); };
+    }
   }
 
   function statusLabel(s) {
