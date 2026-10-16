@@ -389,7 +389,19 @@ async def _try_final_submit(update_or_q, ctx, uid, listing_id, chat_id, pn,
     if await _maybe_write_post_finish(chat_id, uid, listing_id, ctx):
         await _promote_next_confirming(ctx, chat_id, uid)
         return True
-    await _say("Xong! Em đã lưu tin rồi nhé ✓", MENU_KB)
+    # Batch import flow: track saved IDs, offer to continue or finish.
+    # "Xong" shows summary + web app deep link filtered to this batch.
+    from utils import webapp_url  # lazy: avoid cycle
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+    batch = ctx.user_data.setdefault("batch_import", [])
+    if listing_id not in batch:
+        batch.append(listing_id)
+    title = listing_line(l).split("\n")[0] if listing_line else listing_id
+    batch_kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("➕ Nhập tiếp", callback_data="batch:more")],
+        [InlineKeyboardButton("✅ Xong", callback_data="batch:done")],
+    ])
+    await _say(f"Đã lưu ✅ ({title})\n\nNhập tiếp căn nữa không?", batch_kb)
     # proactive tip: 1st and 5th listing milestones (exact count only).
     # Sent as a new message via bot (not _say, which would edit).
     try:
@@ -444,6 +456,45 @@ async def _finalize_after_confirm(update_or_q, ctx, uid, listing_id, chat_id,
         await _try_final_submit(update_or_q, ctx, uid, listing_id, chat_id,
                                 pn, via_callback,
                                 reply_to_message_id=reply_to)
+
+
+async def batch_more_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Broker wants to import another listing — clear state, ready for next."""
+    q = update.callback_query
+    await q.answer()
+    # Clear any in-progress intake state but keep the batch_import list.
+    for key in ("confirming", "awaiting", "guided", "dup_check"):
+        ctx.user_data.pop(key, None)
+    await q.edit_message_text(
+        "Ok! Anh forward hoặc paste tin tiếp theo nhé 📋",
+        reply_markup=None,
+    )
+
+
+async def batch_done_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Broker finished batch import — show summary + web app deep link."""
+    q = update.callback_query
+    await q.answer()
+    from utils import webapp_url  # lazy: avoid cycle
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+    batch = ctx.user_data.pop("batch_import", [])
+    n = len(batch)
+    if n == 0:
+        await q.edit_message_text("Xong! Hẹn gặp lại anh nhé 👋",
+                                  reply_markup=MENU_KB)
+        return
+    if n == 1:
+        text = "Xong! Đã nhập 1 căn ✅"
+    else:
+        text = f"Xong! Đã nhập {n} căn ✅"
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton(
+            "📱 Xem trong web app",
+            web_app=WebAppInfo(url=webapp_url(
+                view="batch", ids=",".join(batch))))],
+        [InlineKeyboardButton("⬅️ Menu", callback_data="menu:back")],
+    ])
+    await q.edit_message_text(text, reply_markup=kb)
 
 
 async def confirm_save_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
