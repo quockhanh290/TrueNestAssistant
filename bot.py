@@ -32,6 +32,7 @@ log = logging.getLogger("linh")
 MENU_KB = InlineKeyboardMarkup([
     [InlineKeyboardButton("📝 Gửi tin mới", callback_data="menu:new")],
     [InlineKeyboardButton("📋 Tin của tôi", callback_data="menu:list:0")],
+    [InlineKeyboardButton("✍️ Viết tin FB", callback_data="menu:write")],
     [InlineKeyboardButton("❓ Hướng dẫn", callback_data="menu:help")],
 ])
 
@@ -102,6 +103,8 @@ async def show_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "📝 <b>Gửi tin mới:</b> bấm nút rồi gửi text + ảnh của tin. "
         "Gửi xong em tự đọc và tóm tắt lại, thiếu gì em hỏi thêm.\n\n"
         "📋 <b>Tin của tôi:</b> xem lại các tin đã gửi, đánh dấu đã cho thuê.\n\n"
+        "✍️ <b>Viết tin FB:</b> em viết giúp anh tin đăng Facebook "
+        "tiếng Việt / tiếng Anh từ tin đã có.\n\n"
         "Mẹo: cứ gửi như anh đăng group là được, không cần theo mẫu gì cả.",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([[
@@ -173,6 +176,8 @@ async def _process_buffer(uid, buf, ctx):
     else:
         db.update_listing(listing_id, status="in_review")
         db.set_listing_status(listing_id, "in_review", changed_by="bot")
+        if await _maybe_write_post_finish(chat_id, uid, listing_id, ctx):
+            return
         await asyncio.sleep(1)
         await ctx.bot.send_message(
             chat_id,
@@ -297,6 +302,8 @@ async def _handle_answer(update, ctx, awaiting, text):
     else:
         ctx.user_data.pop("awaiting", None)
         db.set_listing_status(listing_id, "in_review", changed_by="bot")
+        if await _maybe_write_post_finish(chat_id, uid, listing_id, ctx):
+            return
         await asyncio.sleep(1)
         await update.message.reply_text(
             "Xong! Tin đang chờ duyệt ✓ Em báo khi xong nhé.",
@@ -392,6 +399,258 @@ async def delete_listing(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                                       callback_data=f"menu:list:{page}")]]))
 
 
+# ---------------------------------------------------------------- write FB post
+
+# user_ids currently in "write post" mode: after intake completes,
+# go to language selection instead of the normal "done" message.
+_write_post_pending = set()
+
+PTYPE_VI = {"apartment": "căn hộ", "house": "nhà", "villa": "villa",
+            "room": "phòng", "studio": "studio"}
+PTYPE_EN = {"apartment": "apartment", "house": "house", "villa": "villa",
+            "room": "room", "studio": "studio"}
+FURN_VI = {"full": "Full", "basic": "Cơ bản", "empty": "Trống"}
+FURN_EN = {"full": "Fully furnished", "basic": "Basic furnishing",
+           "empty": "Unfurnished"}
+
+
+def generate_post(listing, lang="vi"):
+    """Build a Facebook-ready post from a listing dict.
+
+    lang: 'vi' | 'en' | 'both'. Only includes fields that have values.
+    """
+    p = listing["parsed"]
+
+    br = p.get("bedrooms")
+    if br == 0.0:
+        br_vi, br_en = "studio", "studio"
+    elif br:
+        br_vi, br_en = f"{int(br)}PN", f"{int(br)}BR"
+    else:
+        br_vi, br_en = "", ""
+
+    ptype = p.get("property_type") or ""
+    ptype_vi = PTYPE_VI.get(ptype, "căn hộ")
+    ptype_en = PTYPE_EN.get(ptype, "apartment")
+
+    loc = p.get("building_name") or p.get("district") or ""
+    street = p.get("street") or ""
+    district = p.get("district") or ""
+    if street:
+        address = street + (f", {district}" if district else "")
+    else:
+        address = loc
+
+    price = p.get("price_vnd")
+    price_vi = f"{fmt_price(price)}/tháng" if price else ""
+    price_en = f"{fmt_price(price)} VND/month" if price else ""
+
+    ba = p.get("bathrooms")
+    area = p.get("area_m2")
+    furn = p.get("furnishing")
+    pet = p.get("pet_friendly")
+    phone = p.get("primary_phone") or ""
+
+    def build_vi():
+        title_br = f" {br_vi}" if br_vi else ""
+        lines = [f"🏠 CHO THUÊ {ptype_vi.upper()}{title_br}"
+                 + (f" - {loc}" if loc else "")]
+        lines.append("")
+        if address:
+            lines.append(f"📍 Địa chỉ: {address}")
+        if price_vi:
+            lines.append(f"💰 Giá: {price_vi}")
+        specs = []
+        if br_vi:
+            specs.append(f"🛏️ {br_vi}")
+        if ba:
+            specs.append(f"🛁 {int(ba)} WC")
+        if area:
+            specs.append(f"📐 {area:g}m²")
+        if specs:
+            lines.append(" | ".join(specs))
+        if furn and furn in FURN_VI:
+            lines.append(f"🛋️ Nội thất: {FURN_VI[furn]}")
+        if pet is True:
+            lines.append("🐾 Cho nuôi pet")
+        elif pet is False:
+            lines.append("🐾 Không nuôi pet")
+        lines.append("")
+        if phone:
+            lines.append(f"📞 Liên hệ: {phone} (Zalo/Call)")
+        return "\n".join(lines).rstrip()
+
+    def build_en():
+        title_br = f" {br_en}" if br_en else ""
+        lines = [f"🏠 FOR RENT{title_br} {ptype_en.upper()}"
+                 + (f" - {loc}" if loc else "")]
+        lines.append("")
+        if address:
+            lines.append(f"📍 Location: {address}")
+        if price_en:
+            lines.append(f"💰 Price: {price_en}")
+        specs = []
+        if br_en:
+            specs.append(f"🛏️ {br_en}")
+        if ba:
+            specs.append(f"🛁 {int(ba)} BA")
+        if area:
+            specs.append(f"📐 {area:g}sqm")
+        if specs:
+            lines.append(" | ".join(specs))
+        if furn and furn in FURN_EN:
+            lines.append(f"🛋️ Furnishing: {FURN_EN[furn]}")
+        if pet is True:
+            lines.append("🐾 Pet-friendly")
+        elif pet is False:
+            lines.append("🐾 No pets")
+        lines.append("")
+        if phone:
+            lines.append(f"📞 Contact: {phone} (Zalo/Call)")
+        return "\n".join(lines).rstrip()
+
+    if lang == "en":
+        return build_en()
+    if lang == "both":
+        return build_vi() + "\n\n---\n\n" + build_en()
+    return build_vi()
+
+
+async def on_write_post_prompt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """User tapped ✍️ Viết tin FB — pick a listing or enter a new one."""
+    q = update.callback_query
+    await q.answer()
+    uid = q.from_user.id
+    items = db.list_broker_listings(uid, limit=5, offset=0)
+    kb = []
+    for i, l in enumerate(items, start=1):
+        kb.append([InlineKeyboardButton(
+            f"{i}. {listing_line(l)}", callback_data=f"write:{l['id']}")])
+    kb.append([InlineKeyboardButton("➕ Tin mới (nhập tay)",
+                                    callback_data="write:new")])
+    kb.append([InlineKeyboardButton("⬅️ Menu", callback_data="menu:back")])
+    await natural_delay(update)
+    if items:
+        total = db.count_broker_listings(uid)
+        text = (f"Anh muốn viết tin cho căn nào? "
+                f"Em thấy anh có {total} tin gần đây nè:")
+    else:
+        text = ("Anh chưa có tin nào trong hệ thống. "
+                "Anh gửi thông tin căn hộ cho em nhé — "
+                "giá, địa chỉ, số PN... gửi thoải mái như đăng group là được!")
+    await q.edit_message_text(text, reply_markup=InlineKeyboardMarkup(kb))
+
+
+async def on_write_new(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """User chose ➕ Tin mới — intake, then jump to language selection."""
+    q = update.callback_query
+    await q.answer()
+    uid = q.from_user.id
+    if db.count_recent_listings(uid, hours=1) >= config.RATE_LIMIT_PER_HOUR:
+        await q.edit_message_text(
+            f"Anh gửi nhiều quá rồi 😅 Tối đa {config.RATE_LIMIT_PER_HOUR} tin/giờ thôi ạ.",
+            reply_markup=MENU_KB,
+        )
+        return
+    _write_post_pending.add(uid)
+    _buffers[uid] = {"texts": [], "photos": [],
+                     "deadline": time.time() + COLLECT_WINDOW,
+                     "chat_id": q.message.chat_id}
+    await natural_delay(update)
+    await q.edit_message_text(
+        "Ok anh, anh gửi thông tin căn hộ cho em — text + ảnh, "
+        "em chờ 30 giây rồi viết tin luôn 📥"
+    )
+    asyncio.create_task(_flush_after(uid, ctx))
+
+
+async def on_write_lang(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Show language selection for the chosen listing."""
+    q = update.callback_query
+    await q.answer()
+    _, listing_id = q.data.split(":")
+    l = db.get_listing(listing_id)
+    if not l:
+        await q.edit_message_text("Tin này không còn nữa.", reply_markup=MENU_KB)
+        return
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🇻🇳 Tiếng Việt",
+                              callback_data=f"writelang:{listing_id}:vi")],
+        [InlineKeyboardButton("🇬🇧 Tiếng Anh",
+                              callback_data=f"writelang:{listing_id}:en")],
+        [InlineKeyboardButton("🇻🇳+🇬🇧 Cả hai",
+                              callback_data=f"writelang:{listing_id}:both")],
+        [InlineKeyboardButton("⬅️ Chọn căn khác",
+                              callback_data="menu:write")],
+    ])
+    await natural_delay(update)
+    await q.edit_message_text(
+        f"Căn {listing_line(l)} này viết tiếng Việt hay tiếng Anh anh? "
+        "Hay cả hai cho chắc? 😊",
+        parse_mode="HTML", reply_markup=kb)
+
+
+async def on_write_generate(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Generate the FB post and send it as a copyable message."""
+    q = update.callback_query
+    await q.answer()
+    _, listing_id, lang = q.data.split(":")
+    l = db.get_listing(listing_id)
+    if not l:
+        await q.edit_message_text("Tin này không còn nữa.", reply_markup=MENU_KB)
+        return
+    post = generate_post(l, lang)
+    # feel like Linh is actually sitting down and writing it
+    await q.message.reply_text("Để em viết nhé... ✍️")
+    for _ in range(2):
+        try:
+            await q.message.chat.send_action("typing")
+        except Exception:
+            pass
+        await asyncio.sleep(random.uniform(1.5, 2.5))
+    # send the post itself as a plain message (easy to copy)
+    await q.message.reply_text(post)
+    await asyncio.sleep(1)
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔄 Viết lại",
+                              callback_data=f"writelang:{listing_id}:{lang}")],
+        [InlineKeyboardButton("📝 Gửi tin khác", callback_data="menu:write")],
+    ])
+    await q.message.reply_text(
+        "Xong rồi anh! Copy đoạn trên để đăng FB nhé. "
+        "Thấy chỗ nào chưa ưng thì bảo em sửa.",
+        reply_markup=kb)
+
+
+async def _maybe_write_post_finish(chat_id, uid, listing_id, ctx):
+    """After intake: if user is in write-post mode, go to language
+    selection instead of the normal 'done' message. Returns True if
+    handled."""
+    if uid not in _write_post_pending:
+        return False
+    _write_post_pending.discard(uid)
+    l = db.get_listing(listing_id)
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🇻🇳 Tiếng Việt",
+                              callback_data=f"writelang:{listing_id}:vi")],
+        [InlineKeyboardButton("🇬🇧 Tiếng Anh",
+                              callback_data=f"writelang:{listing_id}:en")],
+        [InlineKeyboardButton("🇻🇳+🇬🇧 Cả hai",
+                              callback_data=f"writelang:{listing_id}:both")],
+    ])
+    await asyncio.sleep(1)
+    if l:
+        await ctx.bot.send_message(
+            chat_id,
+            f"Nhận tin xong! Căn {listing_line(l)} này viết tiếng Việt "
+            "hay tiếng Anh anh? Hay cả hai cho chắc? 😊",
+            reply_markup=kb)
+    else:
+        await ctx.bot.send_message(chat_id, "Có lỗi rồi, anh thử lại nhé.",
+                                   reply_markup=MENU_KB)
+    return True
+
+
 # ---------------------------------------------------------------- router
 
 async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -400,6 +659,14 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await on_new_listing_prompt(update, ctx)
     elif data.startswith("menu:list:"):
         await show_my_listings(update, ctx)
+    elif data == "menu:write":
+        await on_write_post_prompt(update, ctx)
+    elif data == "write:new":
+        await on_write_new(update, ctx)
+    elif data.startswith("write:"):
+        await on_write_lang(update, ctx)
+    elif data.startswith("writelang:"):
+        await on_write_generate(update, ctx)
     elif data == "menu:help":
         await show_help(update, ctx)
     elif data == "menu:back":
