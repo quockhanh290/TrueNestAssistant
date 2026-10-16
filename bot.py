@@ -38,6 +38,7 @@ import feat_refresh
 import feat_stale
 import feat_deals
 import feat_evening
+import feat_payment
 import feat_premium
 import feat_sendclient
 from utils import (
@@ -57,9 +58,9 @@ log = logging.getLogger("linh")
 
 HELP_TEXT = (
     "📖 <b>HƯỚNG DẪN SỬ DỤNG</b>\n\n"
-    "📝 <b>Gửi tin mới:</b>\n"
-    "- Gửi text mô tả + ảnh trực tiếp cho em (như đăng group FB)\n"
-    "- Có thể gửi ảnh kèm caption, hoặc text riêng + ảnh riêng\n"
+    "📝 <b>Nhập căn cho thuê mới:</b>\n"
+    "- Thêm căn mới vào kho tin của anh\n"
+    "- 2 cách: viết từ đầu (em hỏi từng bước) hoặc nhập từ tin có sẵn (forward/paste bài FB)\n"
     "- Em sẽ tóm tắt lại để anh xác nhận, thiếu gì em hỏi thêm (tối đa 2 câu)\n\n"
     "📋 <b>Tin của tôi:</b>\n"
     "- Xem tất cả tin của anh\n"
@@ -72,8 +73,9 @@ HELP_TEXT = (
     "- Theo dõi trạng thái: mới → đang xem → đã cọc → đã thuê\n"
     "- ⏰ Em tự nhắc khi 3+ ngày chưa liên lạc với khách\n"
     "- 💎 Gói Pro: em tự gợi ý tin phù hợp cho từng khách\n\n"
-    "✍️ <b>Viết tin FB:</b>\n"
-    "- Em viết bài đăng FB từ tin của anh\n"
+    "✍️ <b>Viết bài đăng từ căn đã có:</b>\n"
+    "- Chọn 1 căn trong kho tin của anh\n"
+    "- Em viết bài đăng FB hoàn chỉnh từ thông tin căn đó\n"
     "- Free: Việt, Anh\n"
     "- 💎 Gói Pro: thêm Hàn, Trung, Nga\n\n"
     "📅 <b>Lịch xem nhà</b> 💎:\n"
@@ -586,6 +588,15 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await _handle_contact_edit(update, ctx, ec, text)
         return
 
+    # 0b2. forwarded text → always a NEW listing import, bypasses all
+    # state routing (confirming/awaiting/guided). Each forward = 1 listing.
+    # Processed immediately, no 5s wait.
+    fwd_here = get_forward_source(update.message)
+    if fwd_here:
+        await feat_intake.handle_forward_text(
+            update, ctx, uid, text, fwd_here)
+        return
+
     # 0c. confirming a draft summary? typed text = correction (or "đúng rồi")
     confirming = ctx.user_data.get("confirming")
     if confirming:
@@ -682,18 +693,15 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await feat_listings._handle_photo_delete_answer(update, ctx, pd, text)
         return
 
-    # 2. part of an active collection buffer?
+    # 2. part of an active collection buffer? (manual input only;
+    # forwards are handled at 0b2 and never reach the buffer)
     buf = _buffers.get(uid)
     if buf:
-        fwd_here = get_forward_source(update.message)
-        buf["texts"].append(strip_forward_noise(text) if fwd_here else text)
+        buf["texts"].append(text)
         buf["deadline"] = time.time() + COLLECT_WINDOW
-        # remember forward origin for the confirmation summary
-        if not buf.get("forward_source") and fwd_here:
-            buf["forward_source"] = fwd_here
         return
 
-    # 3. natural-language listing query? (not a new listing) — Pro feature
+    # 4. natural-language listing query? (not a new listing) — Pro feature
     if listing_parser.looks_like_query(text):
         if not feat_premium.requires_tier(uid, "natural_query"):
             await natural_delay(update)
@@ -702,7 +710,7 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await feat_listings._handle_query(update, ctx, uid, text)
         return
 
-    # 4. otherwise treat as a fresh listing
+    # 5. otherwise treat as a fresh listing
     # spam/relevance check first
     is_rel, reason = listing_parser.is_rental_relevant(text)
     if not is_rel:
@@ -915,6 +923,14 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await feat_deals.deal_pick_listing(update, ctx)
     elif data.startswith("cms:"):
         await feat_deals.cms_nav(update, ctx)
+    elif data == "pay:receipt_yes":
+        await feat_payment.receipt_yes_cb(update, ctx)
+    elif data == "pay:receipt_no":
+        await feat_payment.receipt_no_cb(update, ctx)
+    elif data.startswith("pay:confirm:"):
+        await feat_payment.pay_confirm_cb(update, ctx)
+    elif data.startswith("pay:reject:"):
+        await feat_payment.pay_reject_cb(update, ctx)
     elif data.startswith("clients:list:"):
         await feat_clients.show_clients(update, ctx)
     elif data == "clients:new":
