@@ -56,12 +56,12 @@ async def on_new_listing_prompt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.user_data.pop("guided", None)
     await natural_delay(update)
     await q.edit_message_text(
-        "Anh đã có tin viết sẵn chưa ạ?",
+        "Anh muốn thêm tin kiểu nào ạ?",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("✅ Rồi, em gửi luôn",
-                                  callback_data="guided:mode:free")],
-            [InlineKeyboardButton("❌ Chưa, em giúp em viết",
+            [InlineKeyboardButton("✍️ Viết từ đầu (em hỏi từng bước)",
                                   callback_data="guided:mode:guided")],
+            [InlineKeyboardButton("📋 Nhập từ tin có sẵn (paste bài FB)",
+                                  callback_data="guided:mode:free")],
         ]),
     )
 
@@ -1227,8 +1227,10 @@ async def guided_mode_free(update, ctx):
                      "deadline": time.time() + COLLECT_WINDOW,
                      "chat_id": q.message.chat_id}
     await q.edit_message_text(
-        "Ok anh, anh gửi tin đi ạ — text + ảnh, gửi nhiều tin nhắn cũng được 📥\n"
-        "Em nhận text rồi thì bảo đang đợi ảnh, và ngược lại nhé.")
+        "Anh paste bài đăng FB có sẵn vào đây nhé 📋\n"
+        "(hoặc forward tin nhắn, gửi text + ảnh)\n\n"
+        "Em sẽ tự bóc tách thông tin: giá, diện tích, địa chỉ, tiện ích...\n"
+        "Thiếu gì em hỏi thêm, đủ rồi em lưu luôn 📥")
     asyncio.create_task(_flush_after(uid, ctx))
 
 
@@ -1474,12 +1476,12 @@ async def guided_back(update, ctx):
     if gd["step"] == 0:
         ctx.user_data.pop("guided", None)
         await q.edit_message_text(
-            "Anh đã có tin viết sẵn chưa ạ?",
+            "Anh muốn thêm tin kiểu nào ạ?",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("✅ Rồi, em gửi luôn",
-                                      callback_data="guided:mode:free")],
-                [InlineKeyboardButton("❌ Chưa, em giúp em viết",
+                [InlineKeyboardButton("✍️ Viết từ đầu (em hỏi từng bước)",
                                       callback_data="guided:mode:guided")],
+                [InlineKeyboardButton("📋 Nhập từ tin có sẵn (paste bài FB)",
+                                      callback_data="guided:mode:free")],
             ]))
         return
     gd["step"] -= 1
