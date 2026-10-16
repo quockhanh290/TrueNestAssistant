@@ -37,6 +37,7 @@ import feat_refresh
 import feat_deals
 import feat_evening
 import feat_premium
+import feat_sendclient
 from utils import (
     MENU_KB, STATUS_EMOJI, STATUS_LABEL, LIST_FILTERS,
     CLIENT_STATUS_EMOJI, CLIENT_STATUS_LABEL,
@@ -521,6 +522,12 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await feat_viewings._handle_viewing_feedback(update, ctx, vf, text)
         return
 
+    # 1b9b. entering viewing datetime after client chose a listing?
+    s2c = ctx.user_data.get("send2client")
+    if s2c and s2c.get("awaiting_dt"):
+        if await feat_sendclient.handle_s2c_datetime(update, ctx, s2c, text):
+            return
+
     # 1b10. guided listing intake? (False during photo step -> buffer routing)
     gd = ctx.user_data.get("guided")
     if gd:
@@ -720,6 +727,31 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await feat_clients.client_delete_prompt(update, ctx)
     elif data.startswith("client:send:"):
         await feat_clients.client_send_listing(update, ctx)
+    elif data.startswith("send2client:"):
+        if not feat_premium.requires_tier(update.callback_query.from_user.id,
+                                          "send2client"):
+            await update.callback_query.answer()
+            await feat_premium.send_gate(update.callback_query, "send2client",
+                                         update.callback_query.from_user.id,
+                                         edit=True)
+            return
+        act, payload = feat_sendclient._parse_s2c_cb(data)
+        if act == "start":
+            await feat_sendclient.s2c_start(update, ctx)
+        elif act == "toggle":
+            await feat_sendclient.s2c_toggle(update, ctx)
+        elif act == "done":
+            await feat_sendclient.s2c_done(update, ctx)
+        elif act == "copy":
+            await feat_sendclient.s2c_copy(update, ctx)
+        elif act == "sent":
+            await feat_sendclient.s2c_sent(update, ctx)
+        elif act == "followup":
+            await feat_sendclient.s2c_followup(update, ctx)
+        elif act == "chose":
+            await feat_sendclient.s2c_chose(update, ctx)
+        elif act == "nochoice":
+            await feat_sendclient.s2c_nochoice(update, ctx)
     elif data.startswith("client:broadcast:"):
         if not feat_premium.requires_tier(update.callback_query.from_user.id,
                                           "broadcast"):
