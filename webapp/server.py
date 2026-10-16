@@ -169,6 +169,9 @@ class Handler(BaseHTTPRequestHandler):
                 if token and action == "book":
                     data, code = share.handle_booking(token, self._body())
                     return self._json(code, data)
+                if token and action == "report":
+                    data, code = share.handle_report(token, self._body())
+                    return self._json(code, data)
             return self._json(404, {"error": "not_found"})
         if not path.startswith("/api/"):
             return self._json(404, {"error": "not_found"})
@@ -229,6 +232,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(code, data)
         if parts[0] == "shares" and len(parts) == 1:
             data, code = api.list_shares(broker_id)
+            return self._json(code, data)
+        if parts[0] == "admin" and len(parts) == 2 and parts[1] == "reports":
+            data, code = api.admin_list_reports(broker_id)
             return self._json(code, data)
         if parts[0] == "propose" and len(parts) == 2:
             data, code = api.get_propose(broker_id, parts[1])
