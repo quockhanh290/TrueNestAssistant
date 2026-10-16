@@ -17,6 +17,7 @@ MAX_MISSING_QUESTIONS = 2
 # Critical fields — bot asks if missing (max 2)
 CRITICAL_FIELDS = ["price_vnd", "primary_phone", "photos"]
 
-# Response delay to feel natural (seconds)
-REPLY_DELAY_MIN = 2
-REPLY_DELAY_MAX = 5
+# Response delay to feel natural (seconds) — kept short; the longer
+# "writing" pause lives only in the FB-post generator.
+REPLY_DELAY_MIN = 0.5
+REPLY_DELAY_MAX = 1.5
