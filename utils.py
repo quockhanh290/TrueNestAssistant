@@ -103,14 +103,14 @@ FREE_CLIENT_STATUSES = ("new", "viewing", "rented", "cancelled")
 STATUS_EMOJI = {
     "draft": "📝", "pending_info": "⏳", "submitted": "✅",
     "rented": "🔴", "negotiating": "🤝", "deposited": "💰",
-    "expired": "📦",
+    "expired": "📦", "uncertain": "❓",
 }
 
 # listing list filters for "📋 Tin của tôi"
 
 LIST_FILTERS = {
     "all": {"label": "Tất cả", "statuses": None},          # None = all except deleted
-    "active": {"label": "Đang trống", "statuses": ("draft", "pending_info", "submitted")},
+    "active": {"label": "Đang trống", "statuses": ("draft", "pending_info", "submitted", "uncertain")},
     "inactive": {"label": "Không còn trống",
                  "statuses": ("rented", "negotiating", "deposited")},
 }
@@ -120,7 +120,7 @@ LIST_FILTERS = {
 STATUS_LABEL = {
     "draft": "nháp", "pending_info": "thiếu info", "submitted": "đang trống",
     "rented": "đã cho thuê", "negotiating": "đang đàm phán", "deposited": "đã cọc",
-    "expired": "hết hạn", "deleted": "đã xoá",
+    "expired": "hết hạn", "deleted": "đã xoá", "uncertain": "ko chắc",
 }
 
 # completeness scoring — weights sum to 100. Only uses the listing's own
@@ -505,6 +505,8 @@ def listing_line(l):
     st_emoji = STATUS_EMOJI.get(l["status"], "•")
     st_label = STATUS_LABEL.get(l["status"], l["status"])
     bits.append(f"{st_emoji} {st_label}")
+    if l.get("status") == "uncertain":
+        bits.append("⚠️ cần xác nhận")
 
     return f"{line1}\n{' | '.join(bits)}"
 
