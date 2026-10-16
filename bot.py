@@ -31,6 +31,7 @@ import feat_listings
 import feat_write
 import feat_clients
 import feat_match
+import feat_metrics
 import feat_viewings
 import feat_templates
 import feat_refresh
@@ -1104,6 +1105,7 @@ def main():
     app.add_handler(CommandHandler("premium", feat_premium.cmd_premium))
     app.add_handler(CommandHandler("approve", feat_premium.cmd_approve))
     app.add_handler(CommandHandler("matchstats", feat_match.cmd_matchstats))
+    app.add_handler(CommandHandler("metrics", feat_metrics.cmd_metrics))
     app.add_handler(CommandHandler("skip", feat_listings.cmd_skip_photo_delete))
     app.add_handler(CommandHandler("huy", feat_listings.cmd_cancel_addphoto))
     app.add_handler(CallbackQueryHandler(on_callback))
