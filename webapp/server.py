@@ -164,7 +164,7 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith("/api/"):
             broker_id = self._auth(query)
             if not broker_id:
-                return self._json(401, {"error": "unauthorized"})
+                return self._json(401, {"error": "unauthorized", "debug_query_keys": list(query.keys()), "debug_tg_uid": repr(query.get("tg_user_id", "MISSING"))})
             return self._api_get(broker_id, path[len("/api/"):], query)
 
         return self._json(404, {"error": "not_found"})
