@@ -7,7 +7,7 @@ web app use this schema — no field should exist outside it.
 # Field: (type, required, weight_in_quality_score, vietnamese_label)
 #
 # QUALITY WEIGHTS — MUST SUM TO EXACTLY 100 (rebalanced 2026-10-16, v4)
-# Amenities: per-item scoring (+2 each, max 8). Property-type detail fields added.
+# Per-item scoring: amenities +0.5 each (max 8), highlights +0.5 each (max 6).
 # ┌─────────────────┬────────┐
 # │ price_vnd       │  8     │ Giá thuê
 # │ primary_phone   │  5     │ SĐT liên hệ
@@ -17,12 +17,12 @@ web app use this schema — no field should exist outside it.
 # │ property_type   │  5     │ Loại hình
 # │ district        │  6     │ Khu vực
 # │ street          │  6     │ Địa chỉ chi tiết (số nhà + tên đường)
-# │ area_m2         │  6     │ Diện tích sàn
+# │ area_m2         │  9     │ Diện tích (nhà/căn hộ)
 # │ furnishing      │  4     │ Nội thất
 # │ description     │  4     │ Mô tả (>50 ký tự)
 # │ deposit_months  │  2     │ Đặt cọc
-# │ amenities       │  8     │ Tiện ích (+2 mỗi cái, tối đa 8)
-# │ highlights      │  6     │ Điểm nổi bật
+# │ amenities       │  8     │ Tiện ích (+0.5 mỗi cái, tối đa 8)
+# │ highlights      │  6     │ Điểm nổi bật (+0.5 mỗi cái, tối đa 6)
 # │ building_name   │  4     │ Tên tòa nhà/dự án (căn hộ)
 # │ floor_number    │  2     │ Số tầng (căn hộ)
 # │ balcony_direction│ 2     │ Hướng ban công (căn hộ)
@@ -31,7 +31,6 @@ web app use this schema — no field should exist outside it.
 # │ management_fee  │  2     │ Phí quản lý (căn hộ)
 # │ alley_info      │  3     │ Hẻm/mặt tiền + độ rộng (nhà)
 # │ house_floors    │  2     │ Số tầng của nhà (nhà)
-# │ land_area       │  3     │ Diện tích đất (villa/nhà)
 # ├─────────────────┼────────┤
 # │ TOTAL           │ 100    │
 # └─────────────────┴────────┘
@@ -39,9 +38,9 @@ web app use this schema — no field should exist outside it.
 #
 # ADDRESS DETAIL BY PROPERTY TYPE (Khanh 2026-10-16):
 # - Nhà riêng/villa/nhà phố: số nhà + tên đường, hẻm/mặt tiền + độ rộng,
-#   số tầng của nhà, diện tích đất
+#   số tầng của nhà, diện tích nhà
 # - Căn hộ/chung cư: tên dự án/tòa nhà + số tầng + số căn,
-#   hướng ban công, view, phí quản lý
+#   hướng ban công, view, phí quản lý, diện tích căn hộ
 # Exact address is HIDDEN from clients (share page shows district only).
 MASTER_SCHEMA = {
     # Critical — listing is unusable without these
@@ -54,7 +53,7 @@ MASTER_SCHEMA = {
     "property_type":  ("string",  False,  5, "Loại hình"),
     "district":       ("string",  False,  6, "Khu vực"),
     "street":         ("string",  False,  6, "Địa chỉ chi tiết"),
-    "area_m2":        ("number",  False,  6, "Diện tích sàn"),
+    "area_m2":        ("number",  False,  9, "Diện tích (nhà/căn hộ)"),
     "furnishing":     ("string",  False,  4, "Nội thất"),
     "description":    ("string",  False,  4, "Mô tả chi tiết"),
     "deposit_months": ("number",  False,  2, "Đặt cọc (tháng)"),
@@ -71,14 +70,14 @@ MASTER_SCHEMA = {
     # Address detail — house/villa
     "alley_info":     ("string",  False,  3, "Hẻm/mặt tiền + độ rộng"),
     "house_floors":   ("number",  False,  2, "Số tầng của nhà"),
-    "land_area":      ("number",  False,  3, "Diện tích đất (m²)"),
     # Nice to have (informational, not scored)
     "pet_friendly":   ("boolean", False,  0, "Chính sách pet"),
     "available_from": ("string",  False,  0, "Ngày trống"),
 }
 
-# Amenity scoring: +2 per amenity, capped at the field weight (8)
-AMENITY_POINT_PER_ITEM = 2
+# Per-item scoring: amenities +0.5 each (max 8), highlights +0.5 each (max 6)
+AMENITY_POINT_PER_ITEM = 0.5
+HIGHLIGHT_POINT_PER_ITEM = 0.5
 
 # Property types for address-detail scoring
 HOUSE_TYPES = {"house", "villa", "townhouse", "nhà riêng", "biệt thự", "nhà phố"}
@@ -94,7 +93,6 @@ def get_detail_fields_for_type(property_type):
             ("street", "Số nhà + tên đường cụ thể", 6),
             ("alley_info", "Hẻm hay mặt tiền? Rộng bao nhiêu mét?", 3),
             ("house_floors", "Nhà mấy tầng?", 2),
-            ("land_area", "Diện tích đất (m²)", 3),
         ]
     elif pt in APARTMENT_TYPES:
         return [
@@ -114,12 +112,22 @@ def get_detail_fields_for_type(property_type):
         ]
 
 
-def _amenity_score(amenities, max_points):
-    """Per-item amenity scoring: +AMENITY_POINT_PER_ITEM each, capped at max_points."""
-    items = amenities if isinstance(amenities, list) else []
+def _per_item_score(items, per_item, max_points):
+    """Per-item scoring: +per_item each, capped at max_points."""
+    lst = items if isinstance(items, list) else []
     # Count non-empty unique items
-    unique = {str(a).strip().lower() for a in items if str(a).strip()}
-    return min(len(unique) * AMENITY_POINT_PER_ITEM, max_points)
+    unique = {str(a).strip().lower() for a in lst if str(a).strip()}
+    return min(len(unique) * per_item, max_points)
+
+
+def _amenity_score(amenities, max_points):
+    """Amenity scoring: +AMENITY_POINT_PER_ITEM each, capped at max_points."""
+    return _per_item_score(amenities, AMENITY_POINT_PER_ITEM, max_points)
+
+
+def _highlight_score(highlights, max_points):
+    """Highlight scoring: +HIGHLIGHT_POINT_PER_ITEM each, capped at max_points."""
+    return _per_item_score(highlights, HIGHLIGHT_POINT_PER_ITEM, max_points)
 
 
 # Mapping from DB `parsed` keys to schema keys (handles legacy aliases)
@@ -149,6 +157,9 @@ def _field_score(p, field, ftype, weight, photo_count):
     if field == "amenities":
         pts = _amenity_score(p.get(field), weight)
         return pts, pts >= weight
+    if field == "highlights":
+        pts = _highlight_score(p.get(field), weight)
+        return pts, pts >= weight
     if field == "description":
         ok = len(str(p.get(field) or "")) > 50
         return (weight if ok else 0), ok
@@ -170,8 +181,10 @@ def quality_score(parsed, photo_count=0):
         pts, ok = _field_score(p, field, ftype, weight, photo_count)
         score += pts
         if not ok:
-            if field == "amenities" and pts > 0:
-                missing.append(f"{label} (+{pts}đ, thêm để đủ {weight}đ)")
+            if field in ("amenities", "highlights") and pts > 0:
+                # Format: strip trailing .0 for clean display
+                pts_str = f"{pts:g}"
+                missing.append(f"{label} (+{pts_str}đ, thêm để đủ {weight}đ)")
             else:
                 missing.append(label)
     return min(score, 100), missing
