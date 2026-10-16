@@ -92,6 +92,21 @@ def _listing_card(lst, idx):
           <button type="submit">Gửi yêu cầu →</button>
           <div class="form-msg" id="msg-{idx}"></div>
         </form>
+        <button class="report-btn" onclick="openReport({idx}, '{_esc(lst['id'])}')">🚩 Báo tin sai</button>
+        <div class="report-modal" id="report-{idx}" style="display:none">
+          <div class="report-box">
+            <h3>Tin này có vấn đề gì?</h3>
+            <label><input type="radio" name="rr-{idx}" value="rented"> Đã cho thuê rồi</label>
+            <label><input type="radio" name="rr-{idx}" value="price_wrong"> Giá không đúng</label>
+            <label><input type="radio" name="rr-{idx}" value="photo_wrong"> Ảnh không đúng thực tế</label>
+            <label><input type="radio" name="rr-{idx}" value="address_wrong"> Địa chỉ sai</label>
+            <div class="report-actions">
+              <button onclick="submitReport(event, {idx}, '{_esc(lst['id'])}')">Gửi báo cáo</button>
+              <button onclick="closeReport({idx})" class="cancel">Hủy</button>
+            </div>
+            <div class="form-msg" id="rmsg-{idx}"></div>
+          </div>
+        </div>
       </div>
     </article>"""
 
@@ -153,6 +168,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .form-msg{font-size:13px;margin-top:6px;min-height:18px}
 .form-msg.ok{color:#0d9488}
 .form-msg.err{color:#dc2626}
+.report-btn{width:100%;margin-top:8px;padding:8px;border:1px solid var(--line);border-radius:8px;background:transparent;color:var(--muted);font-size:13px;cursor:pointer}
+.report-modal{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px}
+.report-box{background:#fff;border-radius:16px;padding:20px;max-width:360px;width:100%}
+.report-box h3{font-size:16px;margin-bottom:12px}
+.report-box label{display:block;padding:10px 0;font-size:14px;border-bottom:1px solid var(--line);cursor:pointer}
+.report-box label input{margin-right:8px}
+.report-actions{display:flex;gap:8px;margin-top:16px}
+.report-actions button{flex:1;padding:11px;border:none;border-radius:8px;background:var(--accent);color:#fff;font-size:14px;font-weight:700;cursor:pointer}
+.report-actions button.cancel{background:#f1f3f5;color:var(--text)}
 .footer{text-align:center;color:var(--muted);font-size:12px;padding:24px 20px}
 .footer b{color:var(--text)}
 .error-wrap{max-width:520px;margin:0 auto;padding:60px 24px;text-align:center}
@@ -181,6 +205,27 @@ function submitBooking(e,i,listingId){
   .then(function(r){
     if(r.s===200){msg.className='form-msg ok';msg.textContent='✅ Đã gửi! Môi giới sẽ liên hệ lại sớm.';f.querySelector('button').disabled=true;}
     else{msg.className='form-msg err';msg.textContent='⚠️ '+(r.j.error_vi||'Gửi thất bại, thử lại sau.');}
+  }).catch(function(){msg.className='form-msg err';msg.textContent='⚠️ Lỗi mạng, thử lại sau.';});
+  return false;
+}
+function openReport(i,listingId){
+  document.getElementById('report-'+i).style.display='block';
+}
+function closeReport(i){
+  document.getElementById('report-'+i).style.display='none';
+}
+function submitReport(e,i,listingId){
+  e.preventDefault();
+  var sel=document.querySelector('input[name="rr-'+i+'"]:checked');
+  var msg=document.getElementById('rmsg-'+i);
+  if(!sel){msg.className='form-msg err';msg.textContent='Vui lòng chọn lý do.';return false;}
+  msg.className='form-msg';msg.textContent='Đang gửi...';
+  fetch('report',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({listing_id:listingId,reason:sel.value})})
+  .then(function(r){return r.json().then(function(j){return {s:r.status,j:j};});})
+  .then(function(r){
+    if(r.s===200){msg.className='form-msg ok';msg.textContent='✅ Cảm ơn! Chúng tôi sẽ kiểm tra lại tin này.';closeReport(i);}
+    else{msg.className='form-msg err';msg.textContent='⚠️ '+(r.j.error_vi||'Gửi thất bại.');}
   }).catch(function(){msg.className='form-msg err';msg.textContent='⚠️ Lỗi mạng, thử lại sau.';});
   return false;
 }
@@ -284,3 +329,40 @@ def handle_booking(token, data):
     except Exception:
         pass
     return {"ok": True, "booking_id": bid}, 200
+
+
+def handle_report(token, data):
+    """POST /s/<token>/report — client reports incorrect listing.
+
+    Body: {listing_id, reason}. Auto-checks against recent refresh claims;
+    if the broker claimed 'available' within 7 days but client says rented,
+    triggers the false-refresh penalty pipeline.
+    """
+    page = db.get_share_page(token, bump_view=False)
+    if not page:
+        return {"error": "invalid_token",
+                "error_vi": "Trang này đã hết hạn."}, 404
+    listing_id = (data.get("listing_id") or "").strip()
+    reason = (data.get("reason") or "").strip()
+    if not listing_id or listing_id not in (page["listing_ids"] or []):
+        return {"error": "invalid_listing",
+                "error_vi": "Tin không hợp lệ."}, 400
+    rid = db.create_listing_report(token, listing_id, page["broker_id"],
+                                   reason)
+    if not rid:
+        return {"error": "invalid_reason",
+                "error_vi": "Lý do không hợp lệ."}, 400
+    # Auto-match: rented report + recent 'available' refresh claim
+    # -> probable false refresh -> penalize (Khanh 2026-10-16)
+    if reason == "rented":
+        claim = db.check_report_against_refresh(listing_id)
+        if claim:
+            try:
+                db.queue_notification(
+                    "false_refresh_suspect", None,
+                    {"listing_id": listing_id,
+                     "report_id": rid,
+                     "broker_id": page["broker_id"]})
+            except Exception:
+                pass
+    return {"ok": True, "report_id": rid}, 200
