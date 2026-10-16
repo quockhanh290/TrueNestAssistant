@@ -440,8 +440,10 @@
   };
 
   // ---------- edit view ----------
-  function openEdit(id) {
+  var editReturnTo = null;  // {view: "propose", requestId} or null
+  function openEdit(id, returnTo) {
     currentId = id;
+    editReturnTo = returnTo || null;
     api("/api/listing/" + id).then(function (d) {
       document.getElementById("f-price").value =
         d.price_vnd ? (d.price_vnd / 1000000) : "";
@@ -462,7 +464,13 @@
     }).catch(function () { toast("Không tải được thông tin"); });
   }
   document.getElementById("edit-back").onclick = function () {
-    show("view-detail");
+    if (editReturnTo && editReturnTo.view === "propose") {
+      var rid = editReturnTo.requestId;
+      editReturnTo = null;
+      openPropose(rid);
+    } else {
+      show("view-detail");
+    }
   };
   document.getElementById("edit-save").onclick = function () {
     var priceTr = parseFloat(document.getElementById("f-price").value);
@@ -492,7 +500,13 @@
       method: "PUT", body: { fields: fields },
     }).then(function () {
       toast("Đã lưu ✅");
-      openDetail(currentId, "info");
+      if (editReturnTo && editReturnTo.view === "propose") {
+        var rid = editReturnTo.requestId;
+        editReturnTo = null;
+        openPropose(rid);  // refresh propose view with updated scores
+      } else {
+        openDetail(currentId, "info");
+      }
       loadListings();
     }).catch(function () { toast("Lỗi lưu"); })
     .finally(function () {
@@ -559,6 +573,7 @@
         selected: {},
         submitted: false,
         expanded: {},
+        qExpanded: {},
         showAll: false,
       };
       // pre-select already submitted
@@ -694,11 +709,20 @@
     }
 
     var cd = proposeCountdown();
-    var html = '<div class="propose-head">' +
+    var html = '<div class="propose-mechanism">' +
+      '<div class="propose-mech-title">ℹ️ Cơ chế đề xuất</div>' +
+      '<div class="propose-mech-body">' +
+      "• Ai cũng có quyền reserve — 5 người nhanh nhất được chọn<br>" +
+      "• Spot đóng 1 giờ sau broadcast<br>" +
+      "• Khách chọn dựa trên: chất lượng tin (điểm AI) + độ đầy đủ thông tin<br>" +
+      "• Tin càng đầy đủ → càng dễ được khách chọn" +
+      "</div></div>" +
+      '<div class="propose-head">' +
       '<div class="propose-req">Cần: ' + esc(req.summary || req.requirements_raw || "—") + "</div>" +
       (cd ? '<div class="propose-timer' + (cd.urgent ? " urgent" : "") +
        '" id="propose-timer">' + esc(cd.text) + "</div>" : "") +
-      "</div>";
+      "</div>" +
+      '<div class="propose-sort">Sắp xếp theo: điểm match × điểm chất lượng</div>';
 
     if (!st.listings.length) {
       var fs = st.failedSummary || {};
@@ -729,6 +753,7 @@
     html += visible.map(function (l) {
       var sel = st.selected[l.id];
       var exp = st.expanded[l.id];
+      var qExp = st.qExpanded[l.id];
       var img = (l.photo_urls && l.photo_urls.length)
         ? '<img class="propose-img" src="' + esc(l.photo_urls[0]) +
           '" loading="lazy" onerror="this.outerHTML=\'<div class=&quot;propose-img-ph&quot;>🏢</div>\'">'
@@ -743,6 +768,24 @@
         '<div class="propose-meta">' + esc(l.price) + "/tháng</div>" +
         '<div class="propose-scores">🎯 Match ' + (l.match_score || 0) +
         "% · 🤖 " + q + "đ</div>";
+      // Quality improvement suggestions (Khanh 2026-10-16)
+      if (q < 80 && l.quality_missing && l.quality_missing.length) {
+        if (qExp) {
+          card += '<div class="propose-qtip">' +
+            '<div class="propose-qtip-title">💡 Để tăng khả năng được chọn:</div>' +
+            l.quality_missing.map(function (m) {
+              return '<div class="propose-qtip-item">• ' + esc(m.label) +
+                " (+" + m.weight + "đ)</div>";
+            }).join("") +
+            '<div class="propose-qtip-potential">→ Có thể đạt ' +
+            (l.potential_score || q) + "đ (hiện tại " + q + "đ)</div>" +
+            '<button class="btn btn-sm propose-qfix" data-id="' + esc(l.id) +
+            '">✏️ Bổ sung ngay</button>' +
+            '<div class="propose-expand propose-q-toggle">▴ Ẩn gợi ý</div></div>';
+        } else {
+          card += '<div class="propose-expand propose-q-toggle">💡 Cách tăng điểm</div>';
+        }
+      }
       if (exp) {
         card += '<div class="propose-detail">' +
           (l.photo_count ? "📸 " + l.photo_count + " ảnh<br>" : "") +
@@ -775,6 +818,18 @@
     body.querySelectorAll(".propose-card").forEach(function (card) {
       card.onclick = function (e) {
         var id = card.getAttribute("data-id");
+        // quality tip toggle
+        if (e.target.classList.contains("propose-q-toggle")) {
+          st.qExpanded[id] = !st.qExpanded[id];
+          renderPropose();
+          return;
+        }
+        // "Bổ sung ngay" — stop propagation, open edit with return
+        if (e.target.classList.contains("propose-qfix")) {
+          e.stopPropagation();
+          openEdit(id, { view: "propose", requestId: st.requestId });
+          return;
+        }
         // toggle expand on "xem chi tiết" click, else toggle select
         if (e.target.classList.contains("propose-expand")) {
           st.expanded[id] = !st.expanded[id];
@@ -788,6 +843,7 @@
             }
             st.selected[id] = true;
           }
+          st.warnedLowQ = false;  // re-check on selection change
         }
         renderPropose();
       };
@@ -795,7 +851,45 @@
     var more = document.getElementById("propose-more");
     if (more) more.onclick = function () { st.showAll = true; renderPropose(); };
     var sub = document.getElementById("propose-submit");
-    if (sub) sub.onclick = function () { submitPropose(false); };
+    if (sub) sub.onclick = function () { proposePreSubmitCheck(); };
+  }
+
+  function proposePreSubmitCheck() {
+    var st = proposeState;
+    var lowQ = Object.keys(st.selected).filter(function (id) {
+      var l = st.listings.find(function (x) { return x.id === id; });
+      return l && (l.quality_score || 0) < 50;
+    });
+    if (lowQ.length && !st.warnedLowQ) {
+      st.warnedLowQ = true;
+      var body = document.getElementById("propose-body");
+      var warn = document.createElement("div");
+      warn.className = "propose-warn";
+      warn.id = "propose-lowq-warn";
+      warn.innerHTML =
+        "⚠️ " + lowQ.length + " tin bạn chọn có điểm dưới 50đ<br>" +
+        "Tin điểm thấp khó được khách chọn.<br>" +
+        '<div style="display:flex;gap:8px;margin-top:10px">' +
+        '<button class="btn" id="propose-improve">💡 Cải thiện trước</button>' +
+        '<button class="btn btn-primary" id="propose-sendanyway">Vẫn gửi</button>' +
+        "</div>";
+      body.insertBefore(warn, body.firstChild);
+      warn.scrollIntoView({ behavior: "smooth", block: "start" });
+      document.getElementById("propose-improve").onclick = function () {
+        warn.remove();
+        // expand quality tips for low-score selected listings
+        lowQ.forEach(function (id) { st.qExpanded[id] = true; });
+        renderPropose();
+        // re-add the warning state so it doesn't re-trigger
+        st.warnedLowQ = true;
+      };
+      document.getElementById("propose-sendanyway").onclick = function () {
+        warn.remove();
+        submitPropose(false);
+      };
+      return;
+    }
+    submitPropose(false);
   }
 
   function submitPropose(isAuto) {
