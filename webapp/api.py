@@ -294,8 +294,17 @@ def use_trial(broker_id, feature):
         return {"feature": feature, "used": db.get_trial_usage(broker_id, feature),
                 "remaining": -1, "limit": db.TRIAL_LIMITS[feature]}, 200
     used = db.increment_trial_usage(broker_id, feature)
+    left = db.TRIAL_LIMITS[feature] - used
+    # Proactive: warn when 1 trial left (Khanh 2026-10-16)
+    if left == 1:
+        try:
+            db.queue_notification(
+                "trial_expiring", None,
+                {"broker_id": broker_id, "feature": feature, "remaining": 1})
+        except Exception:
+            pass
     return {"feature": feature, "used": used,
-            "remaining": db.TRIAL_LIMITS[feature] - used,
+            "remaining": left,
             "limit": db.TRIAL_LIMITS[feature]}, 200
 
 
