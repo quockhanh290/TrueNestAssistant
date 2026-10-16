@@ -136,8 +136,10 @@ Bảng mới: `commission_disputes` hoặc dùng chung cơ chế.
 **Dòng tiền:**
 | | Số tiền | Ghi chú |
 |---|---|---|
-| Phí concierge | 250-300K | Khách → broker làm job |
-| Hoa hồng deal (nếu chốt) | 20% cho platform | Broker trả như bình thường |
+| Phí concierge | 250-300K/tin | Khách trả |
+| Platform cắt | 50K/tin | Từ phí concierge |
+| Hoa hồng deal (nếu chốt) | 20% cho platform | Broker trả |
+| Còn lại | 2 broker tự chia | Nếu broker tự manage được contact thì lấy hết |
 
 **Chống gian lận (giống match thường):**
 - Khách confirm đã chốt 1 trong các căn concierge
