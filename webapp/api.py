@@ -400,10 +400,16 @@ def get_propose(broker_id, request_id):
             ms = 0
         p = master_schema.normalize_parsed(r.get("parsed") or {})
         photo_count = len(r.get("photo_file_ids") or [])
-        qs, _ = master_schema.quality_score(p, photo_count)
+        qs, missing_detailed, potential = master_schema.quality_breakdown(
+            p, photo_count)
         item = listing_summary(r)
         item["match_score"] = round(ms, 1)
         item["quality_score"] = qs
+        # Detailed quality info for improvement suggestions (Khanh 2026-10-16)
+        item["quality_missing"] = [
+            {"label": label, "weight": w} for label, w in missing_detailed
+        ]
+        item["potential_score"] = potential
         scored.append(item)
     scored.sort(key=lambda x: x["match_score"], reverse=True)
 
