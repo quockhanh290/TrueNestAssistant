@@ -71,7 +71,10 @@ def _listing_card(lst, idx):
     insight = market.get_market_insight(p, exclude_id=lst.get("id"))
     badge = _insight_badge(insight)
 
-    addr_bits = [p.get("street"), p.get("district")]
+    # Privacy: never show exact street address to clients.
+    # Broker's detailed address is for internal dedup/matching only.
+    # Clients see district + building name until they choose the broker.
+    addr_bits = [p.get("building_name"), p.get("district")]
     addr = ", ".join(a for a in addr_bits if a)
 
     return f"""
