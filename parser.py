@@ -261,6 +261,105 @@ def parse_deposit_lease(text):
     return out
 
 
+# ---------------------------------------------------------------- highlights
+
+import unicodedata as _uc
+
+
+def _strip_accents(text):
+    """Remove Vietnamese diacritics for robust matching (biển -> bien)."""
+    nfkd = _uc.normalize("NFD", text)
+    stripped = "".join(c for c in nfkd if not _uc.combining(c))
+    return stripped.replace("đ", "d").replace("Đ", "D")
+
+
+# (regex on accent-stripped lowercase text, display label) — ordered
+# most-specific first within each group. Label may contain {0} for the
+# first capture group (e.g. minutes).
+_HIGHLIGHT_PATTERNS = [
+    # ---- views
+    (r"view\s*bien\s*truc\s*dien|view\s*truc\s*dien\s*bien",
+     "View biển trực diện"),
+    (r"ban\s*cong\s*view\s*bien", "Ban công view biển"),
+    (r"view\s*bien", "View biển"),
+    (r"view\s*song", "View sông"),
+    (r"view\s*thanh\s*pho|view\s*tp", "View thành phố"),
+    (r"view\s*nui", "View núi"),
+    # ---- proximity
+    (r"(?:cach|gan)\s*bien\s*(\d+)\s*(?:phut|p)\b",
+     "Cách biển {0} phút đi bộ"),
+    (r"sat\s*bien", "Sát biển"),
+    (r"mat\s*tien\s*bien", "Mặt tiền biển"),
+    (r"gan\s*bien", "Gần biển"),
+    (r"gan\s*cho", "Gần chợ"),
+    (r"gan\s*truong", "Gần trường học"),
+    (r"gan\s*san\s*bay", "Gần sân bay"),
+    (r"gan\s*cau\s*rong", "Gần cầu Rồng"),
+    (r"trung\s*tam", "Vị trí trung tâm"),
+    # ---- amenities
+    (r"ho\s*boi\s*vo\s*cuc", "Hồ bơi vô cực"),
+    (r"ho\s*boi", "Hồ bơi"),
+    (r"phong\s*gym|\bgym\b", "Phòng gym"),
+    (r"\bspa\b", "Spa"),
+    (r"san\s*tennis", "Sân tennis"),
+    (r"\bb[bq]q\b|tiec\s*nuong", "Khu BBQ"),
+    (r"cong\s*vien", "Gần công viên"),
+    # ---- condition
+    (r"moi\s*xay", "Mới xây"),
+    (r"moi\s*renovate|vua\s*renovate|moi\s*sua", "Mới renovate"),
+    (r"vua\s*son|moi\s*son", "Vừa sơn mới"),
+    (r"noi\s*that\s*moi\s*100\s*%?", "Nội thất mới 100%"),
+    (r"moi\s*100\s*%", "Mới 100%"),
+    # ---- features
+    (r"ban\s*cong\s*rong", "Ban công rộng"),
+    (r"san\s*thuong", "Sân thượng"),
+    (r"thang\s*may", "Có thang máy"),
+    (r"cho\s*dau\s*(?:o\s*to|xe\s*hoi)", "Chỗ đậu ô tô"),
+    (r"an\s*ninh\s*24\s*/\s*7|bao\s*ve\s*24\s*/\s*24", "An ninh 24/7"),
+    # ---- vibe
+    (r"yen\s*tinh", "Khu yên tĩnh"),
+    (r"thoang\s*mat", "Thoáng mát"),
+    (r"nhieu\s*cay\s*xanh", "Nhiều cây xanh"),
+    (r"anh\s*sang\s*tu\s*nhien|nhieu\s*anh\s*sang",
+     "Nhiều ánh sáng tự nhiên"),
+    (r"thoang\s*dang", "Thoáng đãng"),
+]
+
+
+def parse_highlights(text):
+    """Extract selling-point highlights from listing text.
+
+    Returns a list of short display strings, ordered by appearance.
+    Overlapping matches are deduped (keeps the longest).
+    """
+    t = _strip_accents(_norm(text))
+    found = []  # (position, label)
+    for pattern, label in _HIGHLIGHT_PATTERNS:
+        for m in re.finditer(pattern, t):
+            if "{0}" in label and m.groups():
+                disp = label.format(m.group(1))
+            else:
+                disp = label
+            found.append((m.start(), disp))
+    found.sort(key=lambda x: x[0])
+    labels = []
+    for _, lab in found:
+        if lab in labels:
+            continue
+        lab_low = lab.lower()
+        # drop any existing label that is a substring of this longer one
+        labels = [o for o in labels
+                  if not (o != lab and o.lower() in lab_low)]
+        # skip if this label is a substring of an existing longer one
+        if any(lab != o and lab_low in o.lower() for o in labels):
+            continue
+        labels.append(lab)
+    # "Cách biển X phút" supersedes plain "Gần biển"
+    if any(l.startswith("Cách biển") for l in labels):
+        labels = [l for l in labels if l != "Gần biển"]
+    return labels
+
+
 # ---------------------------------------------------------------- main
 
 def parse_listing(text, photo_count=0):
@@ -325,6 +424,11 @@ def parse_listing(text, photo_count=0):
 
     for k, (v, c) in parse_deposit_lease(text).items():
         set_field(k, v, c)
+
+    hl = parse_highlights(text)
+    if hl:
+        fields["highlights"] = hl
+        conf["highlights"] = "medium"
 
     if photo_count:
         fields["photo_count"] = photo_count
