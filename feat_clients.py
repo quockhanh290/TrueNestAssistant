@@ -609,6 +609,21 @@ async def _finish_add_client(update_or_msg, ctx, uid, addc, urgency, pn):
             if hasattr(update_or_msg, "edit_message_text")
             else update_or_msg.reply_text)
     await send(text, parse_mode="HTML", reply_markup=kb)
+    # proactive tip: 1st client milestone (exact count only)
+    try:
+        import hints as _hints  # lazy: avoid cycle
+        n = db.count_clients(uid)
+        tip = _hints.tip_after_client(n)
+        if tip:
+            chat_id = (update_or_msg.message.chat_id
+                       if hasattr(update_or_msg, "message")
+                       else update_or_msg.chat_id)
+            if ctx.bot:
+                await ctx.bot.send_message(
+                    chat_id=chat_id, text=tip,
+                    reply_markup=MENU_KB, parse_mode="HTML")
+    except Exception:
+        pass
 
 
 async def client_add_urgency_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
