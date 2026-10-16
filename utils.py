@@ -241,6 +241,15 @@ def broker_profile_score(broker_id):
     avg_comp = comp_sum / total
     fresh_pct = fresh_count / total * 100
     score = round(avg_comp * 0.6 + fresh_pct * 0.4)
+    # Reputation penalty (Khanh 2026-10-16): -10 points per false refresh
+    # claim (listing reported "available" but actually rented).
+    false_reports = 0
+    try:
+        brow = db.get_broker(broker_id)
+        false_reports = (brow.get("false_refresh_reports") or 0) if brow else 0
+    except Exception:
+        pass
+    score = max(0, score - false_reports * 10)
     return {
         "score": score,
         "completeness": round(avg_comp),
@@ -248,6 +257,7 @@ def broker_profile_score(broker_id):
         "total_listings": total,
         "complete_listings": complete_count,
         "fresh_listings": fresh_count,
+        "false_refresh_reports": false_reports,
     }
 
 
@@ -261,13 +271,20 @@ def profile_score_text(broker_id, pronoun="anh"):
             f"Điểm uy tín: — (chưa có tin nào)\n\n"
             f"{pn} gửi tin đầu tiên để bắt đầu tích điểm nhé! 📝"
         )
+    warn = ""
+    if s.get("false_refresh_reports"):
+        warn = (
+            f"\n⚠️ Báo sai trạng thái: {s['false_refresh_reports']} lần "
+            f"(-{s['false_refresh_reports'] * 10}đ uy tín)"
+        )
     return (
         f"📊 <b>Hồ sơ của {pn.lower()}:</b>\n"
         f"Điểm uy tín: <b>{s['score']}/100</b>\n\n"
         f"📝 Chất lượng tin: {s['completeness']}/100 "
         f"({s['complete_listings']}/{s['total_listings']} tin đầy đủ)\n"
         f"🔄 Độ tươi: {s['freshness']}/100 "
-        f"({s['fresh_listings']}/{s['total_listings']} tin cập nhật trong 7 ngày)\n\n"
+        f"({s['fresh_listings']}/{s['total_listings']} tin cập nhật trong 7 ngày)"
+        f"{warn}\n\n"
         f"💡 Tin đầy đủ + cập nhật thường xuyên → điểm cao\n"
         f"   → được ưu tiên match với khách hàng thật"
     )
