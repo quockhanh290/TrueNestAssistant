@@ -285,6 +285,7 @@ def init_db(path=None):
     _migrate_listings_saved_post(conn)
     _migrate_listings_photo_urls(conn)
     _migrate_listings_photo_hashes(conn)
+    _migrate_listings_photo_phashes(conn)
     _migrate_trial_usage(conn)
     _migrate_share_pages(conn)
     _migrate_outbox(conn)
@@ -293,6 +294,7 @@ def init_db(path=None):
     _migrate_refresh_reputation(conn)
     _migrate_refresh_log(conn)
     _migrate_listing_reports(conn)
+    _migrate_referrals(conn)
     conn.commit()
     conn.close()
 
@@ -528,6 +530,21 @@ def _migrate_listings_photo_hashes(conn):
         )
 
 
+def _migrate_listings_photo_phashes(conn):
+    """Add photo_phashes to tg_listings.
+
+    JSON object mapping R2 URL -> 16-char hex pHash (DCT-based), used
+    alongside photo_hashes (dHash) for image duplicate detection. NULL
+    hashes (PIL missing at upload time) are simply not stored.
+    """
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(tg_listings)")}
+    if "photo_phashes" not in cols:
+        conn.execute(
+            "ALTER TABLE tg_listings ADD COLUMN photo_phashes"
+            " TEXT NOT NULL DEFAULT '{}'"
+        )
+
+
 def _migrate_trial_usage(conn):
     """Create trial_usage table for per-feature free-trial tracking.
 
@@ -712,6 +729,44 @@ def _migrate_listing_reports(conn):
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_reports_listing"
         " ON listing_reports(listing_id)"
+    )
+
+
+def _migrate_referrals(conn):
+    """Broker invite/referral system (Khanh 2026-10-16).
+
+    3 qualified invitees = 1 month Pro free, max 3 months stacked.
+    """
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS referrals (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            inviter_id     INTEGER NOT NULL,
+            invitee_id     INTEGER NOT NULL,
+            created_at     REAL NOT NULL,
+            qualified_at   REAL,
+            reward_claimed INTEGER NOT NULL DEFAULT 0,
+            fraud_flag     INTEGER NOT NULL DEFAULT 0,
+            fraud_reason   TEXT,
+            UNIQUE(invitee_id)
+        )"""
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_referrals_inviter"
+        " ON referrals(inviter_id)"
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS referral_rewards (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            broker_id  INTEGER NOT NULL,
+            months     INTEGER NOT NULL DEFAULT 1,
+            granted_at REAL NOT NULL,
+            expires_at REAL NOT NULL,
+            reason     TEXT
+        )"""
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_referral_rewards_broker"
+        " ON referral_rewards(broker_id, expires_at)"
     )
 
 
