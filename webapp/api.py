@@ -263,3 +263,53 @@ def put_post(broker_id, listing_id, lang, text):
     db.save_post(listing_id, text or "", lang=lang)
     return {"lang": lang,
             "langs": db.get_saved_post_langs(listing_id)}, 200
+
+
+# ---------------------------------------------------------------- trials
+
+def get_trial(broker_id, feature):
+    """GET /api/trial/<feature> — trial status for a paywalled feature."""
+    if feature not in db.TRIAL_FEATURES:
+        return {"error": "unknown_feature"}, 404
+    allowed, remaining = db.check_trial(broker_id, feature)
+    return {
+        "feature": feature,
+        "allowed": allowed,
+        "remaining": remaining,  # -1 = unlimited (tier covers it)
+        "limit": db.TRIAL_LIMITS[feature],
+        "required_tier": db.TRIAL_TIER[feature],
+    }, 200
+
+
+def use_trial(broker_id, feature):
+    """POST /api/trial/<feature>/use — consume one trial use."""
+    if feature not in db.TRIAL_FEATURES:
+        return {"error": "unknown_feature"}, 404
+    allowed, remaining = db.check_trial(broker_id, feature)
+    if not allowed:
+        return {"error": "trial_exhausted",
+                "required_tier": db.TRIAL_TIER[feature]}, 402
+    if remaining == -1:
+        # Tier covers it — no trial consumed.
+        return {"feature": feature, "used": db.get_trial_usage(broker_id, feature),
+                "remaining": -1, "limit": db.TRIAL_LIMITS[feature]}, 200
+    used = db.increment_trial_usage(broker_id, feature)
+    return {"feature": feature, "used": used,
+            "remaining": db.TRIAL_LIMITS[feature] - used,
+            "limit": db.TRIAL_LIMITS[feature]}, 200
+
+
+def require_trial(broker_id, feature):
+    """Gate helper for paywalled endpoints.
+
+    Returns None when the broker may proceed (tier covers it or trial
+    available — the caller should then call use_trial after success).
+    Returns (error_dict, 402) when trials are exhausted.
+    """
+    if feature not in db.TRIAL_FEATURES:
+        return {"error": "unknown_feature"}, 404
+    allowed, _ = db.check_trial(broker_id, feature)
+    if not allowed:
+        return {"error": "trial_exhausted",
+                "required_tier": db.TRIAL_TIER[feature]}, 402
+    return None
