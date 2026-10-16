@@ -30,6 +30,7 @@ FEATURE_TIER = {
     "commission": "pro",         # theo dõi hoa hồng
     "refresh": "pro",            # gợi ý cập nhật tin cũ
     "followup": "free",          # nhắc follow-up (free theo quyết định)
+    "send2client": "pro",        # gửi tin cho khách → theo dõi → chốt lịch
     "broadcast": "max",          # match liên broker
     "analytics": "max",          # thống kê chi tiết
 }
@@ -41,6 +42,7 @@ FEATURE_NAME_VI = {
     "viewings": "Lịch xem nhà",
     "templates": "Mẫu tin nhắn",
     "commission": "Theo dõi hoa hồng",
+    "send2client": "Gửi tin cho khách & theo dõi",
     "refresh": "Gợi ý cập nhật tin cũ",
     "broadcast": "Match liên broker",
     "analytics": "Thống kê chi tiết",

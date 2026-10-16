@@ -31,14 +31,74 @@ MENU_KB = InlineKeyboardMarkup([
 # client (khách hàng) statuses
 
 CLIENT_STATUS_EMOJI = {
-    "new": "🆕", "viewing": "👀", "negotiating": "🤝",
-    "deposited": "💰", "rented": "✅", "cancelled": "❌",
+    "new": "🆕", "sent": "📤", "pending_viewing": "⏳",
+    "scheduled": "📅", "viewed": "👀", "negotiating": "🤝",
+    "deposited": "💰", "contracted": "📝", "rented": "✅",
+    "cancelled": "❌",
+    # legacy (kept for old rows)
+    "viewing": "👀",
 }
 
 CLIENT_STATUS_LABEL = {
-    "new": "mới", "viewing": "đang xem", "negotiating": "đàm phán",
-    "deposited": "đã cọc", "rented": "đã thuê", "cancelled": "hủy",
+    "new": "Mới", "sent": "Đã gửi tin", "pending_viewing": "Chờ chốt xem",
+    "scheduled": "Đã chốt xem", "viewed": "Đã xem", "negotiating": "Đàm phán",
+    "deposited": "Đã cọc", "contracted": "Đã kí HĐ", "rented": "Hoàn thành",
+    "cancelled": "Hủy",
+    # legacy
+    "viewing": "đang xem",
 }
+
+# Ordered pipeline for the visual progress bar in client detail
+CLIENT_PIPELINE = [
+    "new", "sent", "pending_viewing", "scheduled", "viewed",
+    "negotiating", "deposited", "contracted", "rented",
+]
+
+
+def client_pipeline_bar(status, full=True):
+    """Visual pipeline with current status highlighted.
+
+    full=True (Pro): 10-step pipeline.
+    full=False (Free): simplified Mới → Đang xem → Hoàn thành.
+    Returns None when the status is Pro-only and full=False (caller then
+    shows just the status label).
+    """
+    if status == "cancelled":
+        return "❌ Đã hủy"
+    if not full:
+        basic = ["new", "viewing", "viewed", "rented"]
+        if status not in basic:
+            return None
+        steps = ["new", "viewing", "rented"]
+        labels = {"new": "Mới", "viewing": "Đang xem", "rented": "Hoàn thành"}
+        disp = "viewing" if status == "viewed" else status
+        cur_idx = steps.index(disp)
+        bits = []
+        for i, st in enumerate(steps):
+            if i < cur_idx:
+                bits.append(f"✅ {labels[st]}")
+            elif i == cur_idx:
+                bits.append(f"👉 <b>{labels[st]}</b>")
+            else:
+                bits.append(labels[st])
+        return " → ".join(bits)
+    # map legacy "viewing" to the new "viewed" step for display
+    disp = "viewed" if status == "viewing" else status
+    bits = []
+    cur_idx = CLIENT_PIPELINE.index(disp) if disp in CLIENT_PIPELINE else 0
+    for i, st in enumerate(CLIENT_PIPELINE):
+        label = CLIENT_STATUS_LABEL[st]
+        if i < cur_idx:
+            bits.append(f"✅ {label}")
+        elif i == cur_idx:
+            bits.append(f"👉 <b>{label}</b>")
+        else:
+            bits.append(label)
+    return " → ".join(bits)
+
+
+# statuses visible to Free tier (basic); the rest are Pro-only
+FREE_CLIENT_STATUSES = ("new", "viewing", "rented", "cancelled")
 
 STATUS_EMOJI = {
     "draft": "📝", "pending_info": "⏳", "submitted": "✅",
