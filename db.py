@@ -70,7 +70,8 @@ CREATE TABLE IF NOT EXISTS clients (
     notes           TEXT NOT NULL DEFAULT '',
     viewed_listings TEXT NOT NULL DEFAULT '[]',
     created_at      REAL NOT NULL,
-    updated_at      REAL NOT NULL
+    updated_at      REAL NOT NULL,
+    last_contact_at REAL
 );
 CREATE INDEX IF NOT EXISTS idx_clients_broker ON clients(broker_id);
 CREATE INDEX IF NOT EXISTS idx_clients_status ON clients(status);
@@ -81,9 +82,11 @@ CREATE TABLE IF NOT EXISTS viewings (
     client_id   TEXT,
     client_name TEXT NOT NULL DEFAULT '',
     listing_id  TEXT,
+    listing_ids TEXT NOT NULL DEFAULT '[]',
     scheduled_at REAL NOT NULL,
     status      TEXT NOT NULL DEFAULT 'scheduled',
     notes       TEXT NOT NULL DEFAULT '',
+    feedback    TEXT NOT NULL DEFAULT '',
     created_at  REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_viewings_broker ON viewings(broker_id);
@@ -121,6 +124,7 @@ CREATE TABLE IF NOT EXISTS match_requests (
     status              TEXT NOT NULL DEFAULT 'open',
     closed_reason       TEXT,
     group_message_id    INTEGER,
+    responses_seen_at   REAL,
     created_at          REAL NOT NULL,
     updated_at          REAL NOT NULL
 );
@@ -142,6 +146,29 @@ CREATE TABLE IF NOT EXISTS match_responses (
 CREATE INDEX IF NOT EXISTS idx_mresp_request ON match_responses(request_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_mresp_unique
     ON match_responses(request_id, responder_broker_id);
+
+CREATE TABLE IF NOT EXISTS pending_checklist (
+    id        TEXT PRIMARY KEY,
+    broker_id INTEGER NOT NULL REFERENCES brokers(user_id),
+    kind      TEXT NOT NULL,
+    ref_id    TEXT NOT NULL,
+    label     TEXT NOT NULL DEFAULT '',
+    created_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_pcl_broker ON pending_checklist(broker_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pcl_unique
+    ON pending_checklist(broker_id, kind, ref_id);
+
+CREATE TABLE IF NOT EXISTS premium_requests (
+    id             TEXT PRIMARY KEY,
+    broker_id      INTEGER NOT NULL REFERENCES brokers(user_id),
+    tier_requested TEXT NOT NULL DEFAULT 'pro',
+    status         TEXT NOT NULL DEFAULT 'pending',
+    created_at     REAL NOT NULL,
+    decided_at     REAL
+);
+CREATE INDEX IF NOT EXISTS idx_premreq_broker ON premium_requests(broker_id);
+CREATE INDEX IF NOT EXISTS idx_premreq_status ON premium_requests(status);
 """
 
 
@@ -156,6 +183,7 @@ def init_db(path=None):
     conn.executescript(SCHEMA)
     _migrate_brokers(conn)
     _migrate_clients(conn)
+    _migrate_viewings(conn)
     _migrate_match_requests(conn)
     _migrate_match_responses(conn)
     conn.commit()
@@ -163,30 +191,59 @@ def init_db(path=None):
 
 
 def _migrate_clients(conn):
-    """Add urgency column to clients on pre-existing DBs (no data loss)."""
+    """Add urgency + last_contact_at columns to clients (no data loss)."""
     cols = {r["name"] for r in conn.execute("PRAGMA table_info(clients)")}
     if "urgency" not in cols:
         conn.execute(
             "ALTER TABLE clients ADD COLUMN urgency TEXT NOT NULL DEFAULT 'normal'"
         )
+    if "last_contact_at" not in cols:
+        conn.execute("ALTER TABLE clients ADD COLUMN last_contact_at REAL")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_clients_urgency ON clients(urgency)"
     )
 
 
+def _migrate_viewings(conn):
+    """Add listing_ids + feedback to viewings on pre-existing DBs."""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(viewings)")}
+    if "listing_ids" not in cols:
+        conn.execute(
+            "ALTER TABLE viewings ADD COLUMN listing_ids"
+            " TEXT NOT NULL DEFAULT '[]'"
+        )
+    if "feedback" not in cols:
+        conn.execute(
+            "ALTER TABLE viewings ADD COLUMN feedback TEXT NOT NULL DEFAULT ''"
+        )
+
+
 def _migrate_brokers(conn):
-    """Add contact columns to brokers on pre-existing DBs (no data loss)."""
+    """Add contact + tier columns to brokers on pre-existing DBs (no data loss)."""
     cols = {r["name"] for r in conn.execute("PRAGMA table_info(brokers)")}
     for col in ("name", "zalo", "facebook", "pronoun"):
         if col not in cols:
             conn.execute(f"ALTER TABLE brokers ADD COLUMN {col} TEXT")
+    if "tier" not in cols:
+        conn.execute(
+            "ALTER TABLE brokers ADD COLUMN tier TEXT NOT NULL DEFAULT 'free'"
+        )
+    if "tier_expires_at" not in cols:
+        conn.execute("ALTER TABLE brokers ADD COLUMN tier_expires_at REAL")
+    if "listing_limit" not in cols:
+        conn.execute(
+            "ALTER TABLE brokers ADD COLUMN listing_limit INTEGER NOT NULL"
+            " DEFAULT 20"
+        )
 
 
 def _migrate_match_requests(conn):
-    """Add closed_reason to match_requests on pre-existing DBs (no data loss)."""
+    """Add closed_reason + responses_seen_at to match_requests (no data loss)."""
     cols = {r["name"] for r in conn.execute("PRAGMA table_info(match_requests)")}
     if "closed_reason" not in cols:
         conn.execute("ALTER TABLE match_requests ADD COLUMN closed_reason TEXT")
+    if "responses_seen_at" not in cols:
+        conn.execute("ALTER TABLE match_requests ADD COLUMN responses_seen_at REAL")
 
 
 def _migrate_match_responses(conn):
@@ -233,7 +290,8 @@ def get_or_create_broker(user_id, username=None, display_name=None, path=None):
 
 def update_broker(user_id, path=None, **fields):
     allowed = {"username", "display_name", "name", "pronoun", "phone", "zalo",
-               "facebook", "status", "listings_count", "approved_count"}
+               "facebook", "status", "listings_count", "approved_count",
+               "tier", "tier_expires_at", "listing_limit"}
     sets = ", ".join(f"{k} = ?" for k in fields if k in allowed)
     if not sets:
         return
@@ -252,6 +310,129 @@ def get_broker(user_id, path=None):
     ).fetchone()
     conn.close()
     return dict(row) if row else None
+
+
+# ---------------------------------------------------------------- tiers
+
+TIER_ORDER = {"free": 0, "pro": 1, "max": 2}
+
+
+def get_tier(broker_id, path=None):
+    """Broker's current tier, auto-downgrading to free if expired."""
+    b = get_broker(broker_id, path=path)
+    if not b:
+        return "free"
+    tier = b.get("tier") or "free"
+    if tier != "free":
+        exp = b.get("tier_expires_at")
+        if exp and exp < _now():
+            # expired — downgrade silently
+            update_broker(broker_id, path=path, tier="free",
+                          tier_expires_at=None)
+            return "free"
+    return tier if tier in TIER_ORDER else "free"
+
+
+def set_tier(broker_id, tier, days=30, path=None):
+    """Activate a tier for `days` (use days=0 for no expiry)."""
+    if tier not in TIER_ORDER:
+        raise ValueError(f"unknown tier: {tier}")
+    exp = _now() + days * 86400 if days else None
+    limit = config.FREE_LISTING_LIMIT if tier == "free" else 0  # 0 = unlimited
+    update_broker(broker_id, path=path, tier=tier,
+                  tier_expires_at=exp, listing_limit=limit)
+
+
+def tier_allows(broker_id, min_tier, path=None):
+    """True if the broker's tier is at least min_tier ('pro' or 'max')."""
+    return TIER_ORDER.get(get_tier(broker_id, path=path), 0) >= \
+        TIER_ORDER.get(min_tier, 99)
+
+
+def is_premium(broker_id, path=None):
+    """True if broker has an active paid tier."""
+    return tier_allows(broker_id, "pro", path=path)
+
+
+def active_listing_count(broker_id, path=None):
+    """Count of non-deleted, non-draft listings (what the free limit applies to)."""
+    return count_broker_listings(
+        broker_id, statuses=("submitted", "pending_info", "negotiating",
+                             "deposited", "rented", "active"),
+        path=path)
+
+
+def check_listing_limit(broker_id, path=None):
+    """(ok, count, limit) — free tier capped, paid tiers unlimited."""
+    tier = get_tier(broker_id, path=path)
+    if tier != "free":
+        return True, active_listing_count(broker_id, path=path), 0
+    limit = (get_broker(broker_id, path=path) or {}).get("listing_limit") \
+        or config.FREE_LISTING_LIMIT
+    count = active_listing_count(broker_id, path=path)
+    return count < limit, count, limit
+
+
+# ---------------------------------------------------------------- premium requests
+
+def create_premium_request(broker_id, tier_requested="pro", path=None):
+    rid = f"pr:{uuid.uuid4().hex[:12]}"
+    conn = connect(path)
+    conn.execute(
+        "INSERT INTO premium_requests (id, broker_id, tier_requested, status,"
+        " created_at) VALUES (?, ?, ?, 'pending', ?)",
+        (rid, broker_id, tier_requested, _now()),
+    )
+    conn.commit()
+    conn.close()
+    return rid
+
+
+def get_pending_premium_request(broker_id, path=None):
+    conn = connect(path)
+    row = conn.execute(
+        "SELECT * FROM premium_requests WHERE broker_id = ? AND status = 'pending'"
+        " ORDER BY created_at DESC LIMIT 1",
+        (broker_id,),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def list_pending_premium_requests(path=None):
+    conn = connect(path)
+    rows = conn.execute(
+        "SELECT * FROM premium_requests WHERE status = 'pending'"
+        " ORDER BY created_at ASC"
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def decide_premium_request(request_id, approve, path=None):
+    """Approve or reject a premium request. Returns the request dict."""
+    conn = connect(path)
+    row = conn.execute(
+        "SELECT * FROM premium_requests WHERE id = ?", (request_id,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        return None
+    req = dict(row)
+    if req["status"] != "pending":
+        conn.close()
+        return req
+    status = "approved" if approve else "rejected"
+    conn.execute(
+        "UPDATE premium_requests SET status = ?, decided_at = ? WHERE id = ?",
+        (status, _now(), request_id),
+    )
+    conn.commit()
+    conn.close()
+    if approve:
+        set_tier(req["broker_id"], req["tier_requested"], days=30, path=path)
+    req["status"] = status
+    return req
 
 
 def get_broker_phone(broker_id, path=None):
@@ -709,16 +890,29 @@ def create_client(broker_id, name="", phone="", requirements_raw="",
     conn.execute(
         "INSERT INTO clients (id, broker_id, name, phone, budget_min,"
         " budget_max, bedrooms, district, property_type, requirements_raw,"
-        " status, urgency, notes, viewed_listings, created_at, updated_at)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, '', '[]', ?, ?)",
+        " status, urgency, notes, viewed_listings, created_at, updated_at,"
+        " last_contact_at)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, '', '[]', ?, ?, ?)",
         (client_id, broker_id, name, phone,
          r.get("min_price"), r.get("max_price"), r.get("bedrooms"),
          r.get("district"), r.get("property_type"), requirements_raw,
-         urgency, now, now),
+         urgency, now, now, now),
     )
     conn.commit()
     conn.close()
     return client_id
+
+
+def touch_contact(client_id, path=None):
+    """Mark now as the last time the broker contacted this client."""
+    conn = connect(path)
+    cur = conn.execute(
+        "UPDATE clients SET last_contact_at = ?, updated_at = ? WHERE id = ?",
+        (_now(), _now(), client_id),
+    )
+    conn.commit()
+    conn.close()
+    return cur.rowcount > 0
 
 
 def get_client(client_id, path=None):
@@ -780,6 +974,56 @@ def count_clients(broker_id, status=None, urgency=None, path=None):
     return n
 
 
+def stale_clients(broker_id, days=3, limit=20, path=None):
+    """Clients not contacted for `days`+ days (uses last_contact_at,
+    falling back to created_at), excluding closed ones."""
+    cutoff = _now() - days * 86400
+    conn = connect(path)
+    rows = conn.execute(
+        "SELECT * FROM clients WHERE broker_id = ?"
+        " AND status NOT IN ('rented', 'cancelled')"
+        " AND COALESCE(last_contact_at, created_at) < ?"
+        " ORDER BY COALESCE(last_contact_at, created_at) ASC LIMIT ?",
+        (broker_id, cutoff, limit),
+    ).fetchall()
+    conn.close()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["viewed_listings"] = json.loads(d["viewed_listings"])
+        out.append(d)
+    return out
+
+
+def idle_new_clients(broker_id, days=2, limit=20, path=None):
+    """Clients added `days`+ days ago that were never sent any listing."""
+    cutoff = _now() - days * 86400
+    conn = connect(path)
+    rows = conn.execute(
+        "SELECT * FROM clients WHERE broker_id = ?"
+        " AND status NOT IN ('rented', 'cancelled')"
+        " AND created_at < ?"
+        " AND (viewed_listings IS NULL OR viewed_listings = '[]')"
+        " ORDER BY created_at ASC LIMIT ?",
+        (broker_id, cutoff, limit),
+    ).fetchall()
+    conn.close()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["viewed_listings"] = json.loads(d["viewed_listings"])
+        out.append(d)
+    return out
+
+
+def list_brokers(path=None):
+    """All brokers — for cron scripts that fan out per broker."""
+    conn = connect(path)
+    rows = conn.execute("SELECT * FROM brokers").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
 def update_client(client_id, path=None, **fields):
     """Update client fields. requirements=parse_query dict refreshes the
     requirement columns + requirements_raw."""
@@ -829,8 +1073,9 @@ def add_note(client_id, note, path=None):
     entry = f"[{ts}] {note.strip()}"
     notes = (row["notes"] + "\n" + entry).strip() if row["notes"] else entry
     conn.execute(
-        "UPDATE clients SET notes = ?, updated_at = ? WHERE id = ?",
-        (notes, _now(), client_id),
+        "UPDATE clients SET notes = ?, updated_at = ?, last_contact_at = ?"
+        " WHERE id = ?",
+        (notes, _now(), _now(), client_id),
     )
     conn.commit()
     conn.close()
@@ -849,11 +1094,12 @@ def link_listing(client_id, listing_id, path=None):
     seen = json.loads(row["viewed_listings"])
     if listing_id not in seen:
         seen.append(listing_id)
-        conn.execute(
-            "UPDATE clients SET viewed_listings = ?, updated_at = ? WHERE id = ?",
-            (json.dumps(seen, ensure_ascii=False), _now(), client_id),
-        )
-        conn.commit()
+    conn.execute(
+        "UPDATE clients SET viewed_listings = ?, updated_at = ?,"
+        " last_contact_at = ? WHERE id = ?",
+        (json.dumps(seen, ensure_ascii=False), _now(), _now(), client_id),
+    )
+    conn.commit()
     conn.close()
     return True
 
@@ -872,20 +1118,37 @@ VIEWING_STATUSES = ("scheduled", "done", "cancelled")
 
 
 def create_viewing(broker_id, client_id=None, client_name="", listing_id=None,
-                   scheduled_at=None, notes="", path=None):
+                   listing_ids=None, scheduled_at=None, notes="", path=None):
+    """Create a viewing. listing_ids (list) is the multi-listing field;
+    listing_id is kept for backward compatibility (first of the list)."""
     viewing_id = "vw:" + uuid.uuid4().hex[:12]
     now = _now()
+    ids = list(listing_ids) if listing_ids else []
+    if listing_id and listing_id not in ids:
+        ids.insert(0, listing_id)
     conn = connect(path)
     conn.execute(
         "INSERT INTO viewings (id, broker_id, client_id, client_name,"
-        " listing_id, scheduled_at, status, notes, created_at)"
-        " VALUES (?, ?, ?, ?, ?, ?, 'scheduled', ?, ?)",
-        (viewing_id, broker_id, client_id, client_name, listing_id,
-         scheduled_at or now, notes, now),
+        " listing_id, listing_ids, scheduled_at, status, notes, feedback,"
+        " created_at)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, '', ?)",
+        (viewing_id, broker_id, client_id, client_name, ids[0] if ids else None,
+         json.dumps(ids, ensure_ascii=False), scheduled_at or now, notes, now),
     )
     conn.commit()
     conn.close()
     return viewing_id
+
+
+def _parse_viewing_row(row):
+    d = dict(row)
+    try:
+        d["listing_ids"] = json.loads(d.get("listing_ids") or "[]")
+    except (ValueError, TypeError):
+        d["listing_ids"] = []
+    if not d["listing_ids"] and d.get("listing_id"):
+        d["listing_ids"] = [d["listing_id"]]
+    return d
 
 
 def get_viewing(viewing_id, path=None):
@@ -894,7 +1157,7 @@ def get_viewing(viewing_id, path=None):
         "SELECT * FROM viewings WHERE id = ?", (viewing_id,)
     ).fetchone()
     conn.close()
-    return dict(row) if row else None
+    return _parse_viewing_row(row) if row else None
 
 
 def list_viewings(broker_id, upcoming_only=True, limit=20, path=None):
@@ -913,12 +1176,15 @@ def list_viewings(broker_id, upcoming_only=True, limit=20, path=None):
             (broker_id, limit),
         ).fetchall()
     conn.close()
-    return [dict(r) for r in rows]
+    return [_parse_viewing_row(r) for r in rows]
 
 
 def update_viewing(viewing_id, path=None, **fields):
-    allowed = {"client_id", "client_name", "listing_id", "scheduled_at",
-               "status", "notes"}
+    allowed = {"client_id", "client_name", "listing_id", "listing_ids",
+               "scheduled_at", "status", "notes", "feedback"}
+    if "listing_ids" in fields and isinstance(fields["listing_ids"], list):
+        fields["listing_ids"] = json.dumps(fields["listing_ids"],
+                                           ensure_ascii=False)
     sets = ", ".join(f"{k} = ?" for k in fields if k in allowed)
     if not sets:
         return False
@@ -952,6 +1218,89 @@ def due_viewings(within_seconds=3600, path=None):
         " AND v.scheduled_at > ? AND v.scheduled_at <= ?"
         " ORDER BY v.scheduled_at ASC",
         (now, now + within_seconds),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def due_feedback_viewings(hours_after=0, hours_before=24, path=None):
+    """Viewings that ended hours_after..hours_before ago, still scheduled
+    and without feedback — prompt the broker for post-viewing feedback."""
+    now = _now()
+    conn = connect(path)
+    rows = conn.execute(
+        "SELECT v.*, b.username, b.display_name, b.pronoun FROM viewings v"
+        " JOIN brokers b ON b.user_id = v.broker_id"
+        " WHERE v.status = 'scheduled'"
+        " AND v.scheduled_at <= ? AND v.scheduled_at > ?"
+        " AND (v.feedback IS NULL OR v.feedback = '')"
+        " ORDER BY v.scheduled_at DESC",
+        (now - hours_after * 3600, now - hours_before * 3600),
+    ).fetchall()
+    conn.close()
+    return [_parse_viewing_row(r) for r in rows]
+
+
+def unfeedbacked_viewings(broker_id, min_hours=24, max_hours=72, path=None):
+    """Past viewings (min..max hours ago) still missing feedback — nag list."""
+    now = _now()
+    conn = connect(path)
+    rows = conn.execute(
+        "SELECT * FROM viewings WHERE broker_id = ? AND status = 'scheduled'"
+        " AND scheduled_at <= ? AND scheduled_at > ?"
+        " AND (feedback IS NULL OR feedback = '')"
+        " ORDER BY scheduled_at DESC",
+        (broker_id, now - min_hours * 3600, now - max_hours * 3600),
+    ).fetchall()
+    conn.close()
+    return [_parse_viewing_row(r) for r in rows]
+
+
+def client_viewings(client_id, path=None):
+    """All viewings for a client that actually have listings attached,
+    newest first. Used for the follow-up reminder display."""
+    conn = connect(path)
+    rows = conn.execute(
+        "SELECT * FROM viewings WHERE client_id = ?"
+        " AND (listing_ids IS NOT NULL AND listing_ids != '[]'"
+        " OR listing_id IS NOT NULL)"
+        " ORDER BY scheduled_at DESC",
+        (client_id,),
+    ).fetchall()
+    conn.close()
+    return [_parse_viewing_row(r) for r in rows]
+
+
+def viewings_between(broker_id, start_ts, end_ts, path=None):
+    """Viewings scheduled within [start_ts, end_ts) — for daily summary."""
+    conn = connect(path)
+    rows = conn.execute(
+        "SELECT * FROM viewings WHERE broker_id = ?"
+        " AND scheduled_at >= ? AND scheduled_at < ?"
+        " ORDER BY scheduled_at ASC",
+        (broker_id, start_ts, end_ts),
+    ).fetchall()
+    conn.close()
+    return [_parse_viewing_row(r) for r in rows]
+
+
+def count_listings_created(broker_id, start_ts, end_ts, path=None):
+    conn = connect(path)
+    n = conn.execute(
+        "SELECT COUNT(*) c FROM tg_listings WHERE broker_id = ?"
+        " AND status != 'draft' AND created_at >= ? AND created_at < ?",
+        (broker_id, start_ts, end_ts),
+    ).fetchone()["c"]
+    conn.close()
+    return n
+
+
+def deals_closed_between(broker_id, start_ts, end_ts, path=None):
+    conn = connect(path)
+    rows = conn.execute(
+        "SELECT * FROM deals WHERE broker_id = ?"
+        " AND closed_at >= ? AND closed_at < ? ORDER BY closed_at DESC",
+        (broker_id, start_ts, end_ts),
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
@@ -1380,6 +1729,39 @@ def list_responses(request_id, path=None):
     return [dict(r) for r in rows]
 
 
+def mark_responses_seen(request_id, path=None):
+    """Broker opened the response list — stop the 'unseen' nag."""
+    conn = connect(path)
+    cur = conn.execute(
+        "UPDATE match_requests SET responses_seen_at = ?, updated_at = ?"
+        " WHERE id = ?",
+        (_now(), _now(), request_id),
+    )
+    conn.commit()
+    conn.close()
+    return cur.rowcount > 0
+
+
+def unseen_match_responses(broker_id, min_hours=24, path=None):
+    """Broadcast requests with responses the broker hasn't looked at for
+    min_hours+ hours. Returns [{request, response_count, latest_at}]."""
+    cutoff = _now() - min_hours * 3600
+    conn = connect(path)
+    rows = conn.execute(
+        "SELECT mr.*, COUNT(msp.id) AS n_resp, MAX(msp.created_at) AS latest_at"
+        " FROM match_requests mr"
+        " JOIN match_responses msp ON msp.request_id = mr.id"
+        " WHERE mr.broker_id = ? AND mr.status IN ('open', 'matched')"
+        " GROUP BY mr.id"
+        " HAVING n_resp > 0 AND MAX(msp.created_at) < ?"
+        " AND (mr.responses_seen_at IS NULL"
+        " OR mr.responses_seen_at < MAX(msp.created_at))",
+        (broker_id, cutoff),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
 def log_relay_message(request_id, responder_broker_id, sender_id, text,
                       path=None):
     """Append one relayed message to the response thread's log."""
@@ -1406,6 +1788,69 @@ def log_relay_message(request_id, responder_broker_id, sender_id, text,
     conn.commit()
     conn.close()
     return True
+
+
+# ---------------------------------------------------------------- checklist
+# Evening "do it now or tomorrow" items. kind: feedback | refresh | call.
+
+def add_checklist_item(broker_id, kind, ref_id, label="", path=None):
+    """Idempotent — same (broker, kind, ref) is only stored once."""
+    item_id = "ck:" + uuid.uuid4().hex[:12]
+    conn = connect(path)
+    conn.execute(
+        "INSERT OR IGNORE INTO pending_checklist"
+        " (id, broker_id, kind, ref_id, label, created_at)"
+        " VALUES (?, ?, ?, ?, ?, ?)",
+        (item_id, broker_id, kind, ref_id, label, _now()),
+    )
+    conn.commit()
+    conn.close()
+    return item_id
+
+
+def list_checklist(broker_id, path=None):
+    conn = connect(path)
+    rows = conn.execute(
+        "SELECT * FROM pending_checklist WHERE broker_id = ?"
+        " ORDER BY created_at ASC",
+        (broker_id,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def clear_checklist_item(broker_id, kind, ref_id, path=None):
+    conn = connect(path)
+    cur = conn.execute(
+        "DELETE FROM pending_checklist"
+        " WHERE broker_id = ? AND kind = ? AND ref_id = ?",
+        (broker_id, kind, ref_id),
+    )
+    conn.commit()
+    conn.close()
+    return cur.rowcount > 0
+
+
+def clear_checklist(broker_id, path=None):
+    conn = connect(path)
+    cur = conn.execute(
+        "DELETE FROM pending_checklist WHERE broker_id = ?", (broker_id,)
+    )
+    conn.commit()
+    conn.close()
+    return cur.rowcount
+
+
+def clear_old_checklist(days=2, path=None):
+    """Purge checklist items older than `days` — stale nags."""
+    cutoff = _now() - days * 86400
+    conn = connect(path)
+    cur = conn.execute(
+        "DELETE FROM pending_checklist WHERE created_at < ?", (cutoff,)
+    )
+    conn.commit()
+    conn.close()
+    return cur.rowcount
 
 
 if __name__ == "__main__":

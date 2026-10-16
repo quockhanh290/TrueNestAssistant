@@ -1,5 +1,7 @@
 """Viewing schedule + reminders."""
 import asyncio
+import datetime
+import json
 import logging
 import random
 import time
@@ -68,7 +70,7 @@ def _parse_vw_cb(data):
 
 
 async def vw_from_client(update, ctx):
-    """Start scheduling from a client: pick one of broker's listings."""
+    """Start scheduling from a client: pick date first, listings later."""
     q = update.callback_query
     await q.answer()
     uid = q.from_user.id
@@ -80,24 +82,28 @@ async def vw_from_client(update, ctx):
                                   reply_markup=MENU_KB)
         return
     ctx.user_data["scheduling"] = {"client_id": client_id,
-                                   "client_name": c.get("name") or ""}
-    listings = db.search_listings(uid, {"status": "active"}, limit=10)
-    if not listings:
-        await q.edit_message_text(
-            f"{pn.capitalize()} chưa có tin đang trống nào để dẫn khách xem.",
-            reply_markup=MENU_KB)
-        return
-    kb = [[InlineKeyboardButton(
-        f"{i}. {listing_line(l).splitlines()[0]}",
-        callback_data=f"vw:l:{l['id']}")] for i, l in enumerate(listings, 1)]
+                                   "client_name": c.get("name") or "",
+                                   "listing_ids": []}
+    await _send_date_picker(q, ctx)
+
+
+async def _send_date_picker(q, ctx):
+    kb, row = [], []
+    for ymd, label in _next_days(7):
+        row.append(InlineKeyboardButton(label,
+                                        callback_data=f"vw:date:{ymd}"))
+        if len(row) == 3:
+            kb.append(row)
+            row = []
+    if row:
+        kb.append(row)
     kb.append([InlineKeyboardButton("❌ Hủy", callback_data="vw:no")])
-    await q.edit_message_text(
-        f"Đặt lịch cho <b>{c.get('name')}</b> — chọn tin:",
-        parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
+    await q.edit_message_text("Chọn ngày xem:",
+                              reply_markup=InlineKeyboardMarkup(kb))
 
 
 async def vw_from_listing(update, ctx):
-    """Start scheduling from a listing: pick one of broker's clients."""
+    """Start scheduling from a listing: listing pre-selected, pick a client."""
     q = update.callback_query
     await q.answer()
     uid = q.from_user.id
@@ -108,7 +114,7 @@ async def vw_from_listing(update, ctx):
         await q.edit_message_text("Tin này không còn nữa.",
                                   reply_markup=MENU_KB)
         return
-    ctx.user_data["scheduling"] = {"listing_id": listing_id}
+    ctx.user_data["scheduling"] = {"listing_ids": [listing_id]}
     clients = db.list_clients(uid, limit=10)
     if not clients:
         await q.edit_message_text(
@@ -125,15 +131,13 @@ async def vw_from_listing(update, ctx):
 
 
 async def vw_pick(update, ctx):
-    """One side chosen (listing or client) — show the date picker."""
+    """Client chosen — show the date picker."""
     q = update.callback_query
     await q.answer()
     uid = q.from_user.id
     act, payload = _parse_vw_cb(q.data)
     sched = ctx.user_data.get("scheduling") or {}
-    if act == "l":
-        sched["listing_id"] = payload
-    elif act == "cc":
+    if act == "cc":
         c = db.get_client(payload)
         if not c or c["broker_id"] != uid:
             await q.edit_message_text("Khách này không còn nữa.",
@@ -141,19 +145,9 @@ async def vw_pick(update, ctx):
             return
         sched["client_id"] = payload
         sched["client_name"] = c.get("name") or ""
+        sched.setdefault("listing_ids", [])
     ctx.user_data["scheduling"] = sched
-    kb, row = [], []
-    for ymd, label in _next_days(7):
-        row.append(InlineKeyboardButton(label,
-                                        callback_data=f"vw:date:{ymd}"))
-        if len(row) == 3:
-            kb.append(row)
-            row = []
-    if row:
-        kb.append(row)
-    kb.append([InlineKeyboardButton("❌ Hủy", callback_data="vw:no")])
-    await q.edit_message_text("Chọn ngày xem:",
-                              reply_markup=InlineKeyboardMarkup(kb))
+    await _send_date_picker(q, ctx)
 
 
 async def vw_pick_date(update, ctx):
@@ -203,26 +197,127 @@ async def vw_pick_time(update, ctx):
                                   reply_markup=MENU_KB)
         return
     sched["time"] = hhmm
+    sched.setdefault("listing_ids", [])
     ctx.user_data["scheduling"] = sched
+    await _send_listing_picker(q, ctx, uid, sched)
+
+
+def _picker_candidates(uid, sched):
+    """Client's viewed listings first, else broker's active listings."""
+    cands = []
+    client_id = sched.get("client_id")
+    if client_id:
+        c = db.get_client(client_id)
+        for lid in (c.get("viewed_listings") or []):
+            l = db.get_listing(lid)
+            if l and l.get("broker_id") == uid:
+                cands.append(l)
+    if not cands:
+        cands = db.search_listings(uid, {"status": "active"}, limit=12)
+    # keep pre-selected ones even if not in candidates
+    seen = {l["id"] for l in cands}
+    for lid in sched.get("listing_ids", []):
+        if lid not in seen:
+            l = db.get_listing(lid)
+            if l and l.get("broker_id") == uid:
+                cands.insert(0, l)
+                seen.add(lid)
+    return cands
+
+
+async def _send_listing_picker(q, ctx, uid, sched):
+    cands = _picker_candidates(uid, sched)
+    sched["candidates"] = [l["id"] for l in cands]
+    ctx.user_data["scheduling"] = sched
+    sel = set(sched.get("listing_ids", []))
+    if not cands:
+        pn = get_pronoun(uid)
+        await q.edit_message_text(
+            f"{pn.capitalize()} chưa có tin đang trống nào để dẫn khách xem.",
+            reply_markup=MENU_KB)
+        return
+    lines = [f"Chọn căn sẽ dẫn xem (tích 1-3 căn, đã chọn {len(sel)}/3):"]
+    kb = []
+    for i, l in enumerate(cands, 1):
+        mark = "✅" if l["id"] in sel else "⬜"
+        lines.append(f"{mark} {i}. {listing_line(l).splitlines()[0]}")
+        kb.append([InlineKeyboardButton(
+            f"{mark} Căn {i}",
+            callback_data=f"vw:lpick:toggle:{l['id']}")])
+    kb.append([InlineKeyboardButton("✅ Xong, tiếp tục",
+                                    callback_data="vw:lpick:done")])
+    kb.append([InlineKeyboardButton("❌ Hủy", callback_data="vw:no")])
+    cname = sched.get("client_name") or "khách"
+    await q.edit_message_text(
+        f"Đặt lịch cho <b>{cname}</b> — {lines[0]}\n" + "\n".join(lines[1:]),
+        parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
+
+
+async def vw_lpick_toggle(update, ctx, listing_id):
+    q = update.callback_query
+    await q.answer()
+    uid = q.from_user.id
+    sched = ctx.user_data.get("scheduling")
+    if not sched:
+        await q.edit_message_text("Phiên đặt lịch hết hạn, anh làm lại giúp em nhé.",
+                                  reply_markup=MENU_KB)
+        return
+    sel = sched.get("listing_ids", [])
+    if listing_id in sel:
+        sel.remove(listing_id)
+    elif len(sel) < 3:
+        sel.append(listing_id)
+    else:
+        await q.answer("Tối đa 3 căn thôi ạ!", show_alert=True)
+        return
+    sched["listing_ids"] = sel
+    ctx.user_data["scheduling"] = sched
+    await _send_listing_picker(q, ctx, uid, sched)
+
+
+async def vw_lpick_done(update, ctx):
+    q = update.callback_query
+    await q.answer()
+    uid = q.from_user.id
+    sched = ctx.user_data.get("scheduling")
+    if not sched or not sched.get("listing_ids"):
+        await q.answer("Anh tích ít nhất 1 căn nhé!", show_alert=True)
+        return
     cname = sched.get("client_name")
     if not cname and sched.get("client_id"):
         c = db.get_client(sched["client_id"])
         cname = (c or {}).get("name") or "?"
-    l = db.get_listing(sched.get("listing_id")) if sched.get("listing_id") else None
-    dt = datetime.datetime.strptime(sched["date"] + hhmm, "%Y%m%d%H%M")
+    dt = datetime.datetime.strptime(sched["date"] + sched["time"],
+                                    "%Y%m%d%H%M")
     when = (f"{VN_WD_FULL[dt.weekday()]}, {dt.day}/{dt.month} "
             f"lúc {dt.strftime('%H:%M')}")
-    ltxt = listing_line(l).splitlines()[0] if l else "?"
+    lines = [f"📅 <b>Xác nhận lịch xem:</b>", f"👤 Khách: {cname}",
+             f"🕙 Thời gian: {when}", "🏠 Các căn:"]
+    for i, lid in enumerate(sched["listing_ids"], 1):
+        l = db.get_listing(lid)
+        brief = listing_line(l).splitlines()[0] if l else "?"
+        lines.append(f"  {i}. {brief}")
     await q.edit_message_text(
-        f"📅 <b>Xác nhận lịch xem:</b>\n\n"
-        f"👤 Khách: {cname}\n"
-        f"🏠 Tin: {ltxt}\n"
-        f"🕙 Thời gian: {when}",
+        "\n".join(lines),
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("✅ Xác nhận", callback_data="vw:ok")],
+            [InlineKeyboardButton("⬅️ Chọn lại căn",
+                                  callback_data="vw:lpick:back")],
             [InlineKeyboardButton("❌ Hủy", callback_data="vw:no")],
         ]))
+
+
+async def vw_lpick_back(update, ctx):
+    q = update.callback_query
+    await q.answer()
+    uid = q.from_user.id
+    sched = ctx.user_data.get("scheduling")
+    if not sched:
+        await q.edit_message_text("Phiên đặt lịch hết hạn, anh làm lại giúp em nhé.",
+                                  reply_markup=MENU_KB)
+        return
+    await _send_listing_picker(q, ctx, uid, sched)
 
 
 async def vw_confirm(update, ctx):
@@ -232,18 +327,21 @@ async def vw_confirm(update, ctx):
     pn = get_pronoun(uid)
     sched = ctx.user_data.pop("scheduling", None)
     if (not sched or not sched.get("date") or not sched.get("time")
-            or not sched.get("listing_id")):
+            or not sched.get("listing_ids")):
         await q.edit_message_text("Phiên đặt lịch hết hạn, anh làm lại giúp em nhé.",
                                   reply_markup=MENU_KB)
         return
     dt = datetime.datetime.strptime(sched["date"] + sched["time"],
                                     "%Y%m%d%H%M")
-    db.create_viewing(uid, client_id=sched.get("client_id"),
-                      client_name=sched.get("client_name") or "",
-                      listing_id=sched["listing_id"],
-                      scheduled_at=dt.timestamp())
+    vid = db.create_viewing(uid, client_id=sched.get("client_id"),
+                            client_name=sched.get("client_name") or "",
+                            listing_ids=sched["listing_ids"],
+                            scheduled_at=dt.timestamp())
+    if sched.get("client_id"):
+        db.touch_contact(sched["client_id"])
+    n = len(sched["listing_ids"])
     await q.edit_message_text(
-        f"Đã đặt lịch ✓ Em sẽ nhắc {pn} trước 1 tiếng nhé!",
+        f"Đã đặt lịch xem {n} căn ✓ Em sẽ nhắc {pn} trước 1 tiếng nhé!",
         reply_markup=MENU_KB)
 
 
@@ -256,6 +354,10 @@ async def vw_cancel(update, ctx):
 
 async def cmd_viewings(update, ctx):
     uid = update.effective_user.id
+    import feat_premium
+    if not feat_premium.requires_tier(uid, "viewings"):
+        await feat_premium.send_gate(update, "viewings", uid)
+        return
     text, kb = _viewings_list(uid)
     await update.message.reply_text(text, parse_mode="HTML", reply_markup=kb)
 
@@ -271,20 +373,34 @@ def _viewings_list(uid):
     """(text, InlineKeyboardMarkup) for upcoming viewings."""
     pn = get_pronoun(uid)
     items = db.list_viewings(uid)
-    if not items:
+    # past viewings still missing feedback -> offer the feedback button
+    pending_fb = [v for v in db.unfeedbacked_viewings(uid, min_hours=1,
+                                                      max_hours=72)]
+    if not items and not pending_fb:
         return (f"{pn.capitalize()} chưa có lịch xem nào sắp tới.",
                 MENU_KB)
-    lines = ["<b>📅 Lịch xem sắp tới:</b>"]
+    lines = []
     kb = []
-    for v in items:
-        l = db.get_listing(v["listing_id"]) if v.get("listing_id") else None
-        ltxt = listing_line(l).splitlines()[0] if l else "?"
-        cname = v.get("client_name") or "?"
-        lines.append(f"\n🕙 {_fmt_sched(v['scheduled_at'])}\n"
-                     f"👤 {cname}\n{ltxt}")
-        kb.append([InlineKeyboardButton(
-            f"❌ Hủy lịch {_fmt_sched(v['scheduled_at'])}",
-            callback_data=f"vw:del:{v['id']}")])
+    if items:
+        lines.append("<b>📅 Lịch xem sắp tới:</b>")
+        for v in items:
+            lids = v.get("listing_ids") or []
+            cname = v.get("client_name") or "?"
+            lines.append(f"\n🕙 {_fmt_sched(v['scheduled_at'])}\n👤 {cname}")
+            for lid in lids:
+                l = db.get_listing(lid)
+                brief = listing_line(l).splitlines()[0] if l else "?"
+                lines.append(f"  • {brief}")
+            kb.append([InlineKeyboardButton(
+                "❌ Hủy lịch", callback_data=f"vw:del:{v['id']}")])
+    if pending_fb:
+        lines.append("\n<b>💬 Chưa có feedback:</b>")
+        for v in pending_fb:
+            cname = v.get("client_name") or "?"
+            lines.append(f"\n{_fmt_sched(v['scheduled_at'])} — 👤 {cname}")
+            kb.append([InlineKeyboardButton(
+                f"💬 Nhập feedback ({cname})",
+                callback_data=f"vw:fb:{v['id']}")])
     kb.append([InlineKeyboardButton("⬅️ Menu", callback_data="menu:back")])
     return "\n".join(lines), InlineKeyboardMarkup(kb)
 
@@ -298,6 +414,95 @@ async def vw_delete(update, ctx):
     if v and v["broker_id"] == uid:
         db.delete_viewing(vid)
     await q.edit_message_text("Đã hủy lịch xem ạ.", reply_markup=MENU_KB)
+
+
+# ------------------------------------------------- post-viewing feedback
+
+def _feedback_brief(vid_listing_id):
+    l = db.get_listing(vid_listing_id)
+    return listing_line(l).splitlines()[0] if l else "?"
+
+
+async def vw_feedback_start(update, ctx):
+    """Start per-listing feedback for a past viewing. callback vw:fb:{vid}."""
+    q = update.callback_query
+    await q.answer()
+    uid = q.from_user.id
+    _, vid = _parse_vw_cb(q.data)
+    await _begin_feedback(q, ctx, uid, vid)
+
+
+async def _begin_feedback(q, ctx, uid, vid):
+    """Core of vw_feedback_start — reusable from the evening checklist."""
+    v = db.get_viewing(vid)
+    if not v or v["broker_id"] != uid:
+        await q.edit_message_text("Lịch xem này không còn nữa.",
+                                  reply_markup=MENU_KB)
+        return
+    lids = v.get("listing_ids") or []
+    if not lids:
+        await q.edit_message_text("Lịch xem này không gắn căn nào.",
+                                  reply_markup=MENU_KB)
+        return
+    ctx.user_data["viewing_feedback"] = {
+        "viewing_id": vid, "listing_ids": lids, "idx": 0, "fb": {},
+    }
+    cname = v.get("client_name") or "khách"
+    n = len(lids)
+    await q.edit_message_text(
+        f"Hôm qua {get_pronoun(uid)} dẫn <b>{cname}</b> xem {n} căn."
+        f" Cho em xin feedback từng căn nhé.\n\n"
+        f"Căn 1/{n}: {_feedback_brief(lids[0])}\n"
+        f"Khách nói sao ạ? (gõ “bỏ qua” nếu không có ý kiến)",
+        parse_mode="HTML")
+
+
+async def _handle_viewing_feedback(update, ctx, vf, text):
+    """Multi-step: one free-text feedback per listing in the viewing."""
+    uid = update.effective_user.id
+    pn = get_pronoun(uid)
+    t = text.strip()
+    if t.lower() in ("hủy", "huy", "cancel"):
+        ctx.user_data.pop("viewing_feedback", None)
+        await update.message.reply_text("Ok, để sau nhập cũng được ạ 😊",
+                                        reply_markup=MENU_KB)
+        return
+    lids = vf["listing_ids"]
+    idx = vf["idx"]
+    if t.lower() not in ("bỏ qua", "bo qua", "skip", ""):
+        vf["fb"][lids[idx]] = t
+    idx += 1
+    vf["idx"] = idx
+    if idx < len(lids):
+        n = len(lids)
+        await update.message.reply_text(
+            f"Đã lưu ✓\n\nCăn {idx + 1}/{n}: {_feedback_brief(lids[idx])}\n"
+            f"Khách nói sao ạ? (gõ “bỏ qua” nếu không có ý kiến)")
+        return
+    # done — persist
+    ctx.user_data.pop("viewing_feedback", None)
+    db.update_viewing(vf["viewing_id"],
+                      feedback=json.dumps(vf["fb"], ensure_ascii=False),
+                      status="done")
+    v = db.get_viewing(vf["viewing_id"])
+    if v and v.get("client_id"):
+        db.touch_contact(v["client_id"])
+    cname = (v.get("client_name") if v else None) or "khách"
+    await update.message.reply_text(
+        f"Cảm ơn {pn}! Em đã lưu feedback buổi xem với {cname} ✓",
+        reply_markup=MENU_KB)
+
+
+def parse_feedback_map(v):
+    """feedback column -> {listing_id: text}. Handles legacy plain text."""
+    raw = (v.get("feedback") or "").strip()
+    if not raw:
+        return {}
+    try:
+        d = json.loads(raw)
+        return d if isinstance(d, dict) else {}
+    except (ValueError, TypeError):
+        return {"_all": raw}
 
 
 # ================================================================ templates

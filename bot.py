@@ -35,6 +35,8 @@ import feat_viewings
 import feat_templates
 import feat_refresh
 import feat_deals
+import feat_evening
+import feat_premium
 from utils import (
     MENU_KB, STATUS_EMOJI, STATUS_LABEL, LIST_FILTERS,
     CLIENT_STATUS_EMOJI, CLIENT_STATUS_LABEL,
@@ -500,6 +502,12 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await feat_match._handle_relay_message(update, ctx, rl, text)
         return
 
+    # 1b9. entering post-viewing feedback?
+    vf = ctx.user_data.get("viewing_feedback")
+    if vf:
+        await feat_viewings._handle_viewing_feedback(update, ctx, vf, text)
+        return
+
     # 1c. adding photos to a listing? text is not expected here
     if ctx.user_data.get("adding_photos"):
         await update.message.reply_text(
@@ -519,8 +527,12 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         buf["deadline"] = time.time() + COLLECT_WINDOW
         return
 
-    # 3. natural-language listing query? (not a new listing)
+    # 3. natural-language listing query? (not a new listing) — Pro feature
     if listing_parser.looks_like_query(text):
+        if not feat_premium.requires_tier(uid, "natural_query"):
+            await natural_delay(update)
+            await feat_premium.send_gate(update, "natural_query", uid)
+            return
         await feat_listings._handle_query(update, ctx, uid, text)
         return
 
@@ -560,12 +572,25 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await show_help(update, ctx)
     elif data == "menu:back":
         await show_menu(update, ctx)
+    elif data == "premium:plans":
+        await feat_premium.premium_plans_cb(update, ctx)
+    elif data.startswith("premium:want:"):
+        await feat_premium.premium_want_cb(update, ctx)
+    elif data == "premium:paid":
+        await feat_premium.premium_paid_cb(update, ctx)
     elif data == "menu:clients":
         await feat_clients.show_clients(update, ctx)
     elif data == "menu:viewings":
-        await feat_viewings.cmd_viewings_cb(update, ctx)
+        if not feat_premium.requires_tier(update.callback_query.from_user.id,
+                                          "viewings"):
+            await update.callback_query.answer()
+            await feat_premium.send_gate(update.callback_query, "viewings",
+                                         update.callback_query.from_user.id,
+                                         edit=True)
+        else:
+            await feat_viewings.cmd_viewings_cb(update, ctx)
     elif data.startswith("vw:"):
-        act, _ = _parse_vw_cb(data)
+        act, payload = _parse_vw_cb(data)
         if act == "ok":
             await feat_viewings.vw_confirm(update, ctx)
         elif act == "no":
@@ -580,8 +605,18 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await feat_viewings.vw_from_client(update, ctx)
         elif act == "lc":
             await feat_viewings.vw_from_listing(update, ctx)
-        elif act in ("l", "cc"):
+        elif act == "cc":
             await feat_viewings.vw_pick(update, ctx)
+        elif act == "lpick":
+            sub, _, rest = payload.partition(":")
+            if sub == "toggle":
+                await feat_viewings.vw_lpick_toggle(update, ctx, rest)
+            elif sub == "done":
+                await feat_viewings.vw_lpick_done(update, ctx)
+            elif sub == "back":
+                await feat_viewings.vw_lpick_back(update, ctx)
+        elif act == "fb":
+            await feat_viewings.vw_feedback_start(update, ctx)
     elif data.startswith("tpl:"):
         act, _ = _parse_tpl_cb(data)
         if act == "list":
@@ -593,7 +628,14 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         elif act == "del":
             await feat_templates.tpl_delete(update, ctx)
     elif data.startswith("rf:"):
-        await feat_refresh.rf_action(update, ctx)
+        if not feat_premium.requires_tier(update.callback_query.from_user.id,
+                                          "refresh"):
+            await update.callback_query.answer()
+            await feat_premium.send_gate(update.callback_query, "refresh",
+                                         update.callback_query.from_user.id,
+                                         edit=True)
+        else:
+            await feat_refresh.rf_action(update, ctx)
     elif data.startswith("deal:"):
         rest = data[len("deal:"):]
         if rest == "new":
@@ -621,13 +663,30 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("client:send:"):
         await feat_clients.client_send_listing(update, ctx)
     elif data.startswith("client:broadcast:"):
-        await feat_match.match_broadcast_send(update, ctx)
+        if not feat_premium.requires_tier(update.callback_query.from_user.id,
+                                          "broadcast"):
+            await update.callback_query.answer()
+            await feat_premium.send_gate(update.callback_query, "broadcast",
+                                         update.callback_query.from_user.id,
+                                         edit=True)
+        else:
+            await feat_match.match_broadcast_send(update, ctx)
     elif data.startswith("client:reqs:"):
         await feat_match.match_requests_list(update, ctx)
     elif data.startswith("mreq:close:"):
         await feat_match.match_request_close(update, ctx)
     elif data.startswith("mresp:view:"):
         await feat_match.match_responses_view(update, ctx)
+    elif data.startswith("eve:"):
+        act = data.split(":", 2)[1] if ":" in data else ""
+        if act == "now":
+            await feat_evening.eve_now(update, ctx)
+        elif act == "later":
+            await feat_evening.eve_later(update, ctx)
+        elif act == "done":
+            await feat_evening.eve_done(update, ctx)
+        elif act == "go":
+            await feat_evening.eve_go(update, ctx)
     elif data.startswith("mresp:msg:") or data.startswith("mresp:back:"):
         await feat_match.match_relay_prompt(update, ctx)
     elif data == "mresp:cancel":
@@ -715,6 +774,8 @@ def main():
     app.add_handler(CommandHandler("viewings", feat_viewings.cmd_viewings))
     app.add_handler(CommandHandler("templates", feat_templates.cmd_templates))
     app.add_handler(CommandHandler("commission", feat_deals.cmd_commission))
+    app.add_handler(CommandHandler("premium", feat_premium.cmd_premium))
+    app.add_handler(CommandHandler("approve", feat_premium.cmd_approve))
     app.add_handler(CommandHandler("skip", feat_listings.cmd_skip_photo_delete))
     app.add_handler(CommandHandler("huy", feat_listings.cmd_cancel_addphoto))
     app.add_handler(CallbackQueryHandler(on_callback))
