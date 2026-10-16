@@ -237,7 +237,7 @@ def parse_listing_cb(data, action):
 
 _buffers = {}
 
-COLLECT_WINDOW = 30  # seconds to wait for text+photos arriving together
+COLLECT_WINDOW = 5  # seconds of silence before asking "đủ chưa?"
 
 # album (media group) reassembly: {f"{uid}:{media_group_id}": {...}}
 # Telegram splits an album into separate messages sharing one media_group_id;

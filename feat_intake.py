@@ -52,8 +52,7 @@ async def on_new_listing_prompt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     asyncio.create_task(_flush_after(uid, ctx))
 
 
-async def _flush_after(uid, ctx):
-    # Wait until the buffer deadline passes (extended by each new photo/text).
+async def _flush_after(uid, ctx):    # Wait until the buffer deadline passes (extended by each new photo/text).
     # Fixes: broker sending photos one-by-one slowly would get split listings.
     while True:
         buf = _buffers.get(uid)
@@ -64,10 +63,96 @@ async def _flush_after(uid, ctx):
         if wait <= 0:
             break
         await asyncio.sleep(min(wait + 0.5, 5))
-    buf = _buffers.pop(uid, None)
+    buf = _buffers.get(uid)
     if not buf or (not buf["texts"] and not buf["photos"]):
+        _buffers.pop(uid, None)
         return
+    # Ask: đủ chưa? (instead of auto-processing)
+    n_photos = len(buf["photos"])
+    n_texts = len([t for t in buf["texts"] if t.strip()])
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    parts = []
+    if n_texts:
+        parts.append(f"{n_texts} đoạn text")
+    if n_photos:
+        parts.append(f"{n_photos} ảnh")
+    desc = " + ".join(parts) or "trống"
+    try:
+        await ctx.bot.send_message(
+            buf["chat_id"],
+            f"Em nhận được {desc} rồi. Anh gửi đủ chưa ạ? 🤔",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Đủ rồi, xử lý đi",
+                                      callback_data="buf:done")],
+                [InlineKeyboardButton("📸 Đợi em gửi thêm",
+                                      callback_data="buf:more")],
+            ]))
+    except Exception:
+        buf = _buffers.pop(uid, None)
+        if buf:
+            await _process_buffer(uid, buf, ctx)
+
+
+async def buf_confirm_done(update, ctx):
+    """Broker confirmed buffer is complete — process it."""
+    q = update.callback_query
+    await q.answer()
+    uid = q.from_user.id
+    buf = _buffers.pop(uid, None)
+    if not buf:
+        await q.edit_message_text("Hết hạn rồi, anh gửi lại giúp em nhé 😅")
+        return
+    await q.edit_message_text("Ok, em đang xử lý... ⏳")
     await _process_buffer(uid, buf, ctx)
+
+
+async def buf_confirm_more(update, ctx):
+    """Broker wants to send more — extend deadline by 30s."""
+    q = update.callback_query
+    await q.answer()
+    uid = q.from_user.id
+    buf = _buffers.get(uid)
+    if not buf:
+        await q.edit_message_text("Hết hạn rồi, anh gửi lại giúp em nhé 😅")
+        return
+    buf["deadline"] = time.time() + 30
+    await q.edit_message_text(
+        "Ok anh cứ gửi tiếp nhé, em chờ thêm 30s 📥")
+    asyncio.create_task(_flush_after(uid, ctx))
+
+
+async def stray_confirm_yes(update, ctx):
+    """Stray photo belongs to the suggested recent listing — attach it."""
+    q = update.callback_query
+    await q.answer()
+    uid = q.from_user.id
+    sp = ctx.user_data.pop("stray_photo", None)
+    if not sp:
+        await q.edit_message_text("Hết hạn rồi, anh gửi lại giúp em nhé 😅")
+        return
+    listing_id = sp["listing_id"]
+    file_id = sp["file_id"]
+    db.add_listing_photo(listing_id, file_id)
+    await q.edit_message_text("Đã thêm ảnh vào tin rồi anh ✓ 📸")
+
+
+async def stray_confirm_new(update, ctx):
+    """Stray photo is for a new listing — start a fresh buffer."""
+    q = update.callback_query
+    await q.answer()
+    uid = q.from_user.id
+    sp = ctx.user_data.pop("stray_photo", None)
+    if not sp:
+        await q.edit_message_text("Hết hạn rồi, anh gửi lại giúp em nhé 😅")
+        return
+    from utils import _buffers, COLLECT_WINDOW
+    _buffers[uid] = {"texts": [sp["caption"]] if sp.get("caption") else [],
+                     "photos": [sp["file_id"]],
+                     "deadline": time.time() + COLLECT_WINDOW,
+                     "chat_id": sp["chat_id"]}
+    await q.edit_message_text(
+        "Ok, tin mới nhé! Anh gửi thêm text/ảnh giúp em 📥 (em chờ 5s)")
+    asyncio.create_task(_flush_after(uid, ctx))
 
 
 # ---------------------------------------------------------------- full pre-save confirmation
@@ -376,12 +461,42 @@ async def on_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             buf["texts"].append(caption)
         buf["deadline"] = time.time() + COLLECT_WINDOW
     else:
+        # No active buffer — stray photo. Usually it's for the most recent
+        # listing, so ask to confirm instead of starting a new one blindly.
+        recent = db.list_broker_listings(uid, limit=1)
+        if recent:
+            lst = recent[0]
+            created_ago = time.time() - (lst.get("created_at") or 0)
+            if created_ago < 7200:  # within 2 hours
+                p = lst.get("parsed") or {}
+                br = p.get("bedrooms")
+                br_s = "Studio" if br == 0 else (f"{int(br)}PN" if br else "")
+                loc = p.get("building_name") or p.get("district") or ""
+                label = f"{br_s} {loc}".strip() or "tin gần nhất"
+                ctx.user_data["stray_photo"] = {
+                    "file_id": file_id,
+                    "caption": caption,
+                    "listing_id": lst["id"],
+                    "chat_id": msg.chat.id,
+                }
+                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+                await update.message.reply_text(
+                    f"Ảnh này cho tin <b>{label}</b> phải không anh? 🤔",
+                    parse_mode="HTML",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("✅ Đúng rồi",
+                                              callback_data="stray:yes")],
+                        [InlineKeyboardButton("📝 Tin mới",
+                                              callback_data="stray:new")],
+                    ]))
+                return
         _buffers[uid] = {"texts": [caption] if caption else [],
                          "photos": [file_id],
                          "deadline": time.time() + COLLECT_WINDOW,
                          "chat_id": msg.chat.id}
         await update.message.reply_text(
-            "Nhận ảnh! Anh gửi thêm text mô tả giúp em nhé 📥")
+            "Em nhận 1 ảnh rồi! Đang đợi text mô tả... 📝\n"
+            "(anh gửi trong 30s nhé, em chờ)")
         asyncio.create_task(_flush_after(uid, ctx))
 
 

@@ -560,7 +560,8 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                      "deadline": time.time() + COLLECT_WINDOW,
                      "chat_id": update.effective_chat.id}
     await update.message.reply_text(
-        "Nhận được! Nếu còn ảnh thì anh gửi thêm nhé, em chờ 30 giây 📥")
+        "Em nhận text rồi! Đang đợi ảnh... 📥\n"
+        "(anh gửi ảnh trong 5s nhé, không có ảnh cũng được)")
     asyncio.create_task(_flush_after(uid, ctx))
 
 
@@ -594,6 +595,14 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await feat_clients.show_clients(update, ctx)
     elif data == "menu:premium":
         await feat_premium.cmd_premium(update, ctx)
+    elif data == "stray:yes":
+        await feat_intake.stray_confirm_yes(update, ctx)
+    elif data == "stray:new":
+        await feat_intake.stray_confirm_new(update, ctx)
+    elif data == "buf:done":
+        await feat_intake.buf_confirm_done(update, ctx)
+    elif data == "buf:more":
+        await feat_intake.buf_confirm_more(update, ctx)
     elif data == "menu:viewings":
         if not feat_premium.requires_tier(update.callback_query.from_user.id,
                                           "viewings"):
