@@ -11,13 +11,32 @@
 
   async function loadListings() {
     try {
-      const url = `/api/listings?broker_id=${brokerId}&demo=${demo}&limit=50`;
-      const res = await fetch(url);
-      if (!res.ok) return;
+      // Telegram Mini App auth: use initData when available (real bot open),
+      // fall back to URL params for demo/browser testing.
+      const tg = window.Telegram?.WebApp;
+      const initData = tg?.initData || '';
+      const headers = {};
+      let url;
+      if (initData) {
+        headers['X-Telegram-Init-Data'] = initData;
+        url = `/api/listings?limit=50`;
+      } else {
+        url = `/api/listings?broker_id=${brokerId}&demo=${demo}&limit=50`;
+      }
+      const res = await fetch(url, { headers });
+      if (!res.ok) {
+        console.warn('V2 API status:', res.status);
+        return;
+      }
       const data = await res.json();
       renderCards(data.items || []);
+      // Update count badge
+      const badge = document.querySelector('.rounded-full.bg-surface-container-highest');
+      if (badge && data.total !== undefined) {
+        badge.textContent = data.total + ' căn';
+      }
     } catch (e) {
-      console.warn('V2 API failed, keeping demo data:', e);
+      console.warn('V2 API failed:', e);
     }
   }
 
