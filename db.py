@@ -248,6 +248,7 @@ def init_db(path=None):
     _migrate_updated_at(conn)
     _migrate_deals_paid(conn)
     _migrate_listings_content_hash(conn)
+    _migrate_listings_saved_post(conn)
     conn.commit()
     conn.close()
 
@@ -425,6 +426,22 @@ def _migrate_listings_content_hash(conn):
     if "content_hash" not in cols:
         conn.execute(
             "ALTER TABLE tg_listings ADD COLUMN content_hash TEXT"
+        )
+
+
+def _migrate_listings_saved_post(conn):
+    """Add saved_post to tg_listings.
+
+    JSON object mapping language code -> generated FB post text,
+    e.g. {"vi": "...", "en": "..."}. Vietnamese is auto-generated at
+    submit time; other languages are added on demand from the write menu.
+    The write-post menu only shows listings that have a saved post.
+    """
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(tg_listings)")}
+    if "saved_post" not in cols:
+        conn.execute(
+            "ALTER TABLE tg_listings ADD COLUMN saved_post"
+            " TEXT NOT NULL DEFAULT ''"
         )
 
 
@@ -850,7 +867,7 @@ def get_listing(listing_id, path=None):
 def update_listing(listing_id, path=None, **fields):
     allowed = {"raw_text", "photo_file_ids", "parsed", "missing_fields",
                "status", "view_count", "inquiry_count", "duplicate_of",
-               "content_hash"}
+               "content_hash", "saved_post"}
     json_fields = {"photo_file_ids", "parsed", "missing_fields"}
     sets, vals = [], []
     for k, v in fields.items():
@@ -1026,6 +1043,90 @@ def list_broker_listings(broker_id, limit=5, offset=0, statuses=None, path=None)
             " ORDER BY created_at DESC LIMIT ? OFFSET ?",
             (broker_id, limit, offset),
         ).fetchall()
+    conn.close()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["photo_file_ids"] = json.loads(d["photo_file_ids"])
+        d["parsed"] = json.loads(d["parsed"])
+        d["missing_fields"] = json.loads(d["missing_fields"])
+        out.append(d)
+    return out
+
+
+def _parse_saved_post(raw):
+    """Parse the saved_post JSON column into a {lang: text} dict."""
+    if not raw or not raw.strip():
+        return {}
+    try:
+        d = json.loads(raw)
+    except (TypeError, ValueError):
+        return {}
+    if not isinstance(d, dict):
+        return {}
+    return {k: v for k, v in d.items() if isinstance(v, str) and v.strip()}
+
+
+def save_post(listing_id, post_text, lang="vi", path=None):
+    """Save a generated FB post for a language. Merges into existing
+    languages — never overwrites other languages' posts."""
+    l = get_listing(listing_id, path=path)
+    if not l:
+        return False
+    posts = _parse_saved_post(l.get("saved_post"))
+    posts[lang or "vi"] = post_text or ""
+    # drop emptied languages
+    posts = {k: v for k, v in posts.items() if v.strip()}
+    update_listing(listing_id, path=path,
+                   saved_post=json.dumps(posts, ensure_ascii=False))
+    return True
+
+
+def get_saved_post(listing_id, lang="vi", path=None):
+    """Return the saved post text for a language, or None if missing."""
+    l = get_listing(listing_id, path=path)
+    if not l:
+        return None
+    posts = _parse_saved_post(l.get("saved_post"))
+    text = (posts.get(lang or "vi") or "").strip()
+    return text or None
+
+
+def get_saved_post_langs(listing_id, path=None):
+    """Return list of language codes that have a saved post, e.g. ['vi', 'en'].
+    Vietnamese first, then alphabetical."""
+    l = get_listing(listing_id, path=path)
+    if not l:
+        return []
+    posts = _parse_saved_post(l.get("saved_post"))
+    langs = [k for k in posts if posts[k].strip()]
+    langs.sort(key=lambda k: (k != "vi", k))
+    return langs
+
+
+def has_saved_post(listing_id, path=None):
+    """True if the listing has at least one saved post."""
+    return bool(get_saved_post_langs(listing_id, path=path))
+
+
+def list_broker_listings_with_posts(broker_id, limit=5, offset=0,
+                                    statuses=None, path=None):
+    """Listings that have at least one saved FB post.
+    Same shape as list_broker_listings."""
+    conn = connect(path)
+    status_clause = ""
+    params = [broker_id]
+    if statuses:
+        ph = ", ".join("?" for _ in statuses)
+        status_clause = f" AND status IN ({ph})"
+        params.extend(statuses)
+    params.extend([limit, offset])
+    rows = conn.execute(
+        "SELECT * FROM tg_listings WHERE broker_id = ?"
+        " AND saved_post != '' AND saved_post != '{}'" + status_clause +
+        " ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        params,
+    ).fetchall()
     conn.close()
     out = []
     for r in rows:
