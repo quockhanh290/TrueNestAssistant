@@ -272,6 +272,10 @@ class Handler(BaseHTTPRequestHandler):
             data, code = api.submit_propose(broker_id, parts[1],
                                             body.get("listing_ids"))
             return self._json(code, data)
+        if parts[0] == "listing" and len(parts) == 3 and parts[2] == "refresh":
+            data, code = api.refresh_listing(broker_id, parts[1],
+                                             body.get("status"))
+            return self._json(code, data)
         return self._json(404, {"error": "not_found"})
 
     def log_message(self, fmt, *args):
