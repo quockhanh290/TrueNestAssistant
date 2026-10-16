@@ -835,7 +835,8 @@ class TestReferral(LinhFlowTest):
         """A listing that counts toward referral qualification."""
         p = {"price_vnd": 12000000.0, "bedrooms": 2.0,
              "district": "Sơn Trà", "primary_phone": "0905123456",
-             "description": "x" * 60}
+             "description": "x" * 60, "street": "An Thượng 32",
+             "amenities": ["hồ bơi"], "building_name": "Monarchy"}
         lid = db.create_listing(
             uid, raw_text="Cho thuê 2PN 12tr LH 0905123456",
             photo_file_ids=["ph1", "ph2", "ph3"],
