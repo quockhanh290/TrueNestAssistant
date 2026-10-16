@@ -947,3 +947,36 @@ async def _reveal_contacts(ctx, request_id, responder_id):
 
 # ---- delete client ----
 
+
+
+async def cmd_matchstats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Show this broker's match statistics. Command: /matchstats"""
+    uid = update.effective_user.id
+    pn = get_pronoun(uid)
+    b = db.get_broker(uid)
+    if not b:
+        await update.message.reply_text(
+            "Anh/chị chưa đăng ký. Bấm /start để bắt đầu nhé.")
+        return
+    reqs = db.list_broker_requests(uid)
+    total = len(reqs)
+    open_n = sum(1 for r in reqs if r["status"] == "open")
+    matched = sum(1 for r in reqs if r["status"] == "matched")
+    closed = sum(1 for r in reqs if r["status"] == "closed")
+    # responses received across all my requests
+    resp_total = 0
+    for r in reqs:
+        try:
+            resps = db.list_responses(r["id"])
+            resp_total += len(resps)
+        except Exception:
+            pass
+    avg = (resp_total / total) if total else 0
+    await update.message.reply_text(
+        f"📊 <b>Thống kê match của {pn}</b>\n\n"
+        f"📢 Broadcast đã gửi: {total}\n"
+        f"⏳ Đang mở: {open_n}\n"
+        f"✅ Đã match: {matched}\n"
+        f"🔒 Đã đóng: {closed}\n"
+        f"💬 Phản hồi nhận được: {resp_total} (TB {avg:.1f}/broadcast)",
+        parse_mode="HTML")
