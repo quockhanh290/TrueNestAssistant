@@ -193,7 +193,7 @@ async def onboard2_skip_phone(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """Step 2 skipped → Step 3: prompt first listing."""
     q = update.callback_query
     await q.answer()
-    await _onboard2_finish(q, update, update.callback_query.from_user.id,
+    await _onboard2_finish(q, ctx, update.callback_query.from_user.id,
                            via_callback=True)
 
 
