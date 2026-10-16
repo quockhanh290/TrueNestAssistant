@@ -221,4 +221,19 @@ body {
 .propose-done { text-align: center; padding: 40px 20px; }
 .propose-done .big { font-size: 48px; margin-bottom: 12px; }
 .propose-criteria { background: var(--card); border-radius: 14px; padding: 14px 16px; margin: 12px 0; }
+/* mechanism explainer banner (Khanh 2026-10-16) */
+.propose-mechanism { background: #1a2f4a; border: 1px solid #2aabee44; border-radius: 14px; padding: 12px 14px; margin-bottom: 12px; }
+.propose-mech-title { font-size: 14px; font-weight: 700; margin-bottom: 6px; color: var(--accent); }
+.propose-mech-body { font-size: 13px; line-height: 1.6; color: var(--text); }
+.propose-sort { font-size: 12px; color: var(--muted); margin: -6px 0 12px 2px; }
+/* per-listing quality suggestions */
+.propose-qtip { margin-top: 8px; padding: 10px 12px; background: #1c2f1c; border-radius: 10px; border: 1px solid #4caf5033; }
+.propose-qtip-title { font-size: 13px; font-weight: 700; margin-bottom: 6px; color: #7bc47f; }
+.propose-qtip-item { font-size: 13px; margin: 3px 0; color: var(--text); }
+.propose-qtip-potential { font-size: 13px; font-weight: 700; margin-top: 8px; color: var(--accent); }
+.propose-qfix { margin-top: 8px; font-size: 13px; padding: 8px 12px; }
+.propose-q-toggle { cursor: pointer; }
+/* pre-submit low-quality warning */
+.propose-warn { background: #4a2f1a; border: 1px solid #ff980055; border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; font-size: 14px; line-height: 1.5; }
+.btn-sm { padding: 8px 12px; font-size: 13px; }
 .propose-criterion { font-size: 14px; padding: 4px 0; color: var(--text); }
