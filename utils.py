@@ -19,6 +19,19 @@ log = logging.getLogger("linh")
 
 # ---------------------------------------------------------------- helpers
 
+def webapp_url(**params):
+    """Build web app URL with query params.
+
+    Example: webapp_url(view="listing", id="tg:abc123")
+    -> "https://.../?view=listing&id=tg:abc123"
+    """
+    base = config.WEBAPP_URL or ""
+    if not params:
+        return base
+    from urllib.parse import urlencode
+    return f"{base}?{urlencode(params)}"
+
+
 MENU_KB = InlineKeyboardMarkup([
     [InlineKeyboardButton("📝 Nhập căn cho thuê mới", callback_data="menu:new")],
     [InlineKeyboardButton("🏠 Quản lý căn", callback_data="menu:list:0:s:a"),
@@ -26,7 +39,7 @@ MENU_KB = InlineKeyboardMarkup([
     [InlineKeyboardButton("✍️ Viết bài đăng từ căn đã có", callback_data="menu:write"),
      InlineKeyboardButton("📅 Lịch xem", callback_data="menu:viewings")],
     [InlineKeyboardButton("🌐 Quản lý căn (Web)",
-                          web_app=WebAppInfo(url=config.WEBAPP_URL))],
+                          web_app=WebAppInfo(url=webapp_url()))],
     [InlineKeyboardButton("🤝 Liên kết broker", callback_data="menu:match"),
      InlineKeyboardButton("💰 Hoa hồng", callback_data="menu:deals")],
     [InlineKeyboardButton("💬 Mẫu tin nhắn", callback_data="menu:templates"),
