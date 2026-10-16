@@ -816,6 +816,21 @@ async def process_outbox_notifications(ctx):
                                 payload.get("report_id"))
                     except Exception as e2:
                         log.warning("false refresh penalize failed: %s", e2)
+            elif n["ntype"] == "false_amenity_suspect":
+                # Client reported false amenities/highlights
+                # (Khanh 2026-10-16): same penalty track as false refresh.
+                payload = n.get("payload") or {}
+                listing_id = payload.get("listing_id")
+                if listing_id:
+                    try:
+                        import feat_notify
+                        result = await feat_notify.penalize_false_amenity(
+                            ctx, listing_id)
+                        if result:
+                            db.mark_report_reviewed(
+                                payload.get("report_id"))
+                    except Exception as e2:
+                        log.warning("false amenity penalize failed: %s", e2)
             elif n["ntype"] == "premium_request":
                 # Webapp upgrade request -> DM Khanh with /approve instructions.
                 # (Mirrors the bot flow's direct DM in premium_paid_cb.)
