@@ -11,9 +11,15 @@
 
 <!-- ============ LIST VIEW ============ -->
 <div id="view-list" class="view active">
-  <div class="header"><h1>🏠 Quản lý căn</h1></div>
+  <div class="header">
+    <h1>🏠 Quản lý căn</h1>
+    <button class="avatar-btn" id="avatar-btn" title="Hồ sơ">👤</button>
+  </div>
   <div class="search">
     <input id="search" type="text" placeholder="🔍 Tìm kiếm...">
+  </div>
+  <div class="filter-bar">
+    <button class="btn-filter" id="open-filter">🔧 Bộ lọc <span id="filter-count" class="filter-count" style="display:none">0</span></button>
   </div>
   <div class="filters" id="filters">
     <button class="filter active" data-br="">Tất cả</button>
@@ -180,10 +186,177 @@
 </div>
 
 <div class="tabbar">
-  <button class="tab active"><span class="icon">🏠</span>Căn hộ</button>
-  <button class="tab" id="tab-soon1"><span class="icon">👥</span>Khách</button>
-  <button class="tab" id="tab-soon2"><span class="icon">📅</span>Lịch xem</button>
-  <button class="tab" id="tab-soon3"><span class="icon">💰</span>Hoa hồng</button>
+  <button class="tab active" id="nav-listings"><span class="icon">🏠</span>Căn hộ</button>
+  <button class="tab" id="nav-clients"><span class="icon">👥</span>Khách</button>
+  <button class="tab" id="nav-more"><span class="icon">⋯</span>Thêm</button>
+</div>
+
+<!-- ============ MORE MENU (⋯ overlay) ============ -->
+<div id="more-menu" class="sheet-overlay" style="display:none">
+  <div class="sheet">
+    <div class="sheet-title">⋯ Thêm</div>
+    <button class="menu-item" id="menu-commission">💰 Hoa hồng</button>
+    <button class="menu-item" id="menu-xbroker">📢 Match liên broker 💎💎</button>
+    <button class="menu-item" id="menu-upgrade">⭐ Nâng cấp Pro/Max</button>
+    <button class="menu-item" id="menu-notify">🔔 Thông báo</button>
+    <button class="menu-item" id="menu-profile">👤 Hồ sơ của tôi</button>
+    <button class="menu-item menu-cancel" id="menu-close">Đóng</button>
+  </div>
+</div>
+
+<!-- ============ FILTER BOTTOM SHEET ============ -->
+<div id="filter-sheet" class="sheet-overlay" style="display:none">
+  <div class="sheet">
+    <div class="sheet-title">🔧 Bộ lọc nâng cao</div>
+    <div id="filter-groups"></div>
+    <div class="sheet-actions">
+      <button class="btn" id="filter-clear">Xóa lọc</button>
+      <button class="btn btn-primary" id="filter-apply">Áp dụng</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ CLIENTS VIEW ============ -->
+<div id="view-clients" class="view">
+  <div class="header">
+    <h1>👥 Khách</h1>
+    <button class="btn btn-primary btn-sm" id="client-add">+ Thêm</button>
+  </div>
+  <div class="list" id="client-list"></div>
+</div>
+
+<!-- ============ CLIENT DETAIL VIEW ============ -->
+<div id="view-client-detail" class="view">
+  <div class="header">
+    <button class="back" id="client-detail-back">‹ Quay lại</button>
+    <h1 id="client-detail-title">Khách</h1>
+  </div>
+  <div id="client-detail-body"></div>
+</div>
+
+<!-- ============ CLIENT FORM VIEW ============ -->
+<div id="view-client-form" class="view">
+  <div class="header">
+    <button class="back" id="client-form-back">‹ Hủy</button>
+    <h1>Thêm khách</h1>
+  </div>
+  <div class="form" id="client-form">
+    <div class="field">
+      <label>Tên khách *</label>
+      <input id="cf-name" type="text" placeholder="Nguyễn Văn A">
+    </div>
+    <div class="field">
+      <label>Số điện thoại</label>
+      <input id="cf-phone" type="tel" placeholder="0901234567">
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Phòng ngủ</label>
+        <select id="cf-bedrooms">
+          <option value="">—</option>
+          <option value="0">Studio</option>
+          <option value="1">1PN</option>
+          <option value="2">2PN</option>
+          <option value="3">3PN</option>
+          <option value="4">4PN+</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Ngân sách tối đa (tr)</label>
+        <input id="cf-budget" type="number" inputmode="decimal" placeholder="15">
+      </div>
+    </div>
+    <div class="field">
+      <label>Quận</label>
+      <select id="cf-district">
+        <option value="">—</option>
+        <option>Ngũ Hành Sơn</option>
+        <option>Sơn Trà</option>
+        <option>Hải Châu</option>
+        <option>Thanh Khê</option>
+        <option>Liên Chiểu</option>
+        <option>Cẩm Lệ</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Ghi chú nhu cầu</label>
+      <textarea id="cf-notes" placeholder="VD: cần gần biển, dọn vào tháng 11..."></textarea>
+    </div>
+    <button class="btn btn-primary btn-block" id="client-form-save">💾 Lưu khách</button>
+  </div>
+</div>
+
+<!-- ============ SUGGEST VIEW ============ -->
+<div id="view-suggest" class="view">
+  <div class="header">
+    <button class="back" id="suggest-back">‹ Quay lại</button>
+    <h1 id="suggest-title">Gợi ý tin</h1>
+  </div>
+  <div id="suggest-body"></div>
+</div>
+
+<!-- ============ SHARE CREATE VIEW ============ -->
+<div id="view-share-create" class="view">
+  <div class="header">
+    <button class="back" id="share-create-back">‹ Quay lại</button>
+    <h1>Chia sẻ cho khách</h1>
+  </div>
+  <div id="share-create-body"></div>
+</div>
+
+<!-- ============ PROFILE VIEW ============ -->
+<div id="view-profile" class="view">
+  <div class="header">
+    <button class="back" id="profile-back">‹ Quay lại</button>
+    <h1>Hồ sơ</h1>
+  </div>
+  <div id="profile-body"></div>
+</div>
+
+<!-- ============ UPGRADE VIEW ============ -->
+<div id="view-upgrade" class="view">
+  <div class="header">
+    <button class="back" id="upgrade-back">‹ Quay lại</button>
+    <h1>⭐ Nâng cấp</h1>
+  </div>
+  <div id="upgrade-body"></div>
+</div>
+
+<!-- ============ COMMISSION VIEW ============ -->
+<div id="view-commission" class="view">
+  <div class="header">
+    <button class="back" id="commission-back">‹ Quay lại</button>
+    <h1>💰 Hoa hồng</h1>
+  </div>
+  <div id="commission-body"></div>
+</div>
+
+<!-- ============ NOTIFY SETTINGS VIEW ============ -->
+<div id="view-notify" class="view">
+  <div class="header">
+    <button class="back" id="notify-back">‹ Quay lại</button>
+    <h1>🔔 Thông báo</h1>
+  </div>
+  <div id="notify-body"></div>
+</div>
+
+<!-- ============ VIEWING FORM VIEW ============ -->
+<div id="view-viewing-form" class="view">
+  <div class="header">
+    <button class="back" id="viewing-form-back">‹ Hủy</button>
+    <h1>📅 Đặt lịch xem</h1>
+  </div>
+  <div class="form">
+    <div class="field">
+      <label>Ngày giờ</label>
+      <input id="vf-datetime" type="datetime-local">
+    </div>
+    <div class="field">
+      <label>Ghi chú</label>
+      <textarea id="vf-notes" placeholder="VD: gặp ở sảnh tòa nhà..."></textarea>
+    </div>
+    <button class="btn btn-primary btn-block" id="viewing-form-save">💾 Đặt lịch</button>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
