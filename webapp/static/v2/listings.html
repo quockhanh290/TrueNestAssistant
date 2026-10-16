@@ -102,16 +102,17 @@
     if (!container || !items.length) return;
 
     container.innerHTML = items.map(lst => {
-      const p = lst.parsed || {};
+      // API returns flat fields (not nested under parsed)
+      const p = lst.parsed || lst;
       const score = lst.quality_score || 0;
       const color = scoreColor(score);
       const photos = lst.photo_urls || [];
       const img = photos[0] || '';
-      const price = p.price_vnd ? (p.price_vnd / 1000000).toFixed(1) + 'tr' : '?';
-      const beds = p.bedrooms ? p.bedrooms + 'PN' : '';
-      const baths = p.bathrooms ? p.bathrooms + 'WC' : '';
-      const area = p.area_m2 ? p.area_m2 + 'm²' : '';
-      const district = p.district || '';
+      const price = p.price_vnd ? (p.price_vnd / 1000000).toFixed(1) + 'tr' : (lst.price || '?');
+      const beds = (p.bedrooms || lst.bedrooms) ? (p.bedrooms || lst.bedrooms) + 'PN' : (lst.bedroom_label || '');
+      const baths = (p.bathrooms || lst.bathrooms) ? (p.bathrooms || lst.bathrooms) + 'WC' : '';
+      const area = (p.area_m2 || lst.area_m2) ? (p.area_m2 || lst.area_m2) + 'm²' : '';
+      const district = p.district || lst.district || '';
       const title = lst.title || 'Chưa có tiêu đề';
       const status = lst.status === 'rented' ? 'ĐÃ THUÊ' : 'CÒN TRỐNG';
 
