@@ -1,0 +1,284 @@
+<!DOCTYPE html><html class="dark" lang="en" style=""><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"><meta content="mobile_stack" name="shell-type"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" class=""><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet" class=""><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { colors: { "surface-variant": "#293643", "surface-container": "#14212d", "primary": "#89ceff", "primary-container": "#2aabee", "on-secondary-container": "#91f389", "surface-container-low": "#101d28", "on-tertiary-container": "#4c3300", "on-surface-variant": "#bec8d2", "primary-fixed": "#c9e6ff", "on-secondary": "#003908", "outline-variant": "#3e4850", "secondary-fixed-dim": "#7bdc75", "on-primary-fixed": "#001e2f", "tertiary-container": "#d09729", "surface-container-high": "#1f2b37", "inverse-primary": "#006591", "on-secondary-fixed-variant": "#00530f", "surface": "#071420", "inverse-on-surface": "#25323e", "on-surface": "#d7e4f4", "on-tertiary-fixed": "#281900", "tertiary-fixed": "#ffdeac", "outline": "#88929b", "on-error-container": "#ffdad6", "tertiary": "#fabc4c", "surface-dim": "#071420", "on-background": "#d7e4f4", "on-error": "#690005", "on-primary-container": "#003c58", "surface-bright": "#2e3a47", "on-secondary-fixed": "#002203", "secondary": "#7bdc75", "surface-tint": "#89ceff", "secondary-container": "#007119", "error-container": "#93000a", "inverse-surface": "#d7e4f4", "tertiary-fixed-dim": "#fabc4c", "on-primary-fixed-variant": "#004c6e", "on-tertiary": "#432c00", "surface-container-lowest": "#030f1b", "primary-fixed-dim": "#89ceff", "surface-container-highest": "#293643", "background": "#071420", "on-primary": "#00344d", "secondary-fixed": "#97f98f", "on-tertiary-fixed-variant": "#604100", "error": "#ffb4ab" }, borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, spacing: { "gutter-tablet": "1rem", "space-xs": "0.25rem", "gutter": "0.75rem", "gutter-desktop": "1.25rem", "margin-tablet": "1.5rem", "margin": "1rem", "space-lg": "1rem", "margin-desktop": "2rem", "space-sm": "0.5rem", "space-md": "0.75rem", "space-xl": "1.5rem" }, fontFamily: { "body-sm": ["Geist"], "headline-md": ["Space Grotesk"], "label-md": ["JetBrains Mono"], "headline-lg": ["Space Grotesk"], "label-lg": ["JetBrains Mono"], "headline-sm": ["Space Grotesk"], "body-md": ["Geist"], "label-sm": ["JetBrains Mono"], "headline-lg-mobile": ["Space Grotesk"], "body-lg": ["Geist"] }, fontSize: { "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }], "headline-md": ["22px", { "lineHeight": "28px", "fontWeight": "600" }], "label-md": ["12px", { "lineHeight": "16px", "fontWeight": "500" }], "headline-lg": ["32px", { "lineHeight": "40px", "fontWeight": "700" }], "label-lg": ["14px", { "lineHeight": "18px", "fontWeight": "500" }], "headline-sm": ["18px", { "lineHeight": "24px", "fontWeight": "600" }], "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }], "label-sm": ["10px", { "lineHeight": "14px", "fontWeight": "600" }], "headline-lg-mobile": ["26px", { "lineHeight": "32px", "fontWeight": "700" }], "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }] } } } };</script><style>@layer base{html,body{width:100vw;margin:0;padding:0;background-color:#071420;color:#d7e4f4;}body{overscroll-behavior:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><style id="typography-fix" class="">*, ::before, ::after { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important; } .material-symbols-outlined { font-family: 'Material Symbols Outlined' !important; } h1, h2, h3, .font-headline-sm, .font-headline-md, .font-headline-lg { font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif !important; } .font-label-sm, .font-label-md, .font-label-lg { font-family: 'JetBrains Mono', monospace !important; }</style><style id="global-vietnamese-font-fix">
+body, p, span, div, h1, h2, h3, h4, h5, h6, strong, b, em, label {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+}
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined' !important;
+}
+</style></head><body class="bg-surface font-body-md text-body-md text-on-surface flex flex-col min-h-screen" style="font-family: Inter, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, sans-serif;"><header class="fixed top-0 inset-x-0 z-50 bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.25)] pt-safe"><div class="h-14 px-space-sm flex items-center justify-between"><div class="flex items-center gap-space-xs"><button aria-label="Go back" class="w-11 h-11 flex items-center justify-center text-on-surface hover:text-primary transition-colors" onclick="history.back()"><span class="material-symbols-outlined text-[24px]">arrow_back</span></button><h1 class="font-headline-sm text-headline-sm font-semibold tracking-tight text-on-surface truncate max-w-[220px]" style="font-family: &quot;Space Grotesk&quot;, sans-serif;">Apartment Details</h1></div><div class="flex items-center gap-space-xs"><button aria-label="More actions" class="w-11 h-11 flex items-center justify-center text-on-surface-variant hover:text-primary transition-colors"><span class="material-symbols-outlined text-[22px]">more_vert</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex-1 flex flex-col relative w-full pt-14 bg-surface pb-safe"><div class="flex flex-col w-full">
+<!-- Quota Status Banner -->
+<div class="px-margin pt-space-md">
+<div class="relative overflow-hidden rounded-xl bg-surface-container-high p-space-md shadow-md">
+<div class="absolute -right-6 -bottom-6 w-28 h-28 rounded-full bg-primary/10 blur-xl pointer-events-none"></div>
+<div class="flex items-start justify-between gap-space-sm relative z-10">
+<div class="flex items-start gap-space-sm">
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center text-tertiary flex-shrink-0 shadow-sm">
+<span class="material-symbols-outlined text-[24px]">redeem</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-space-xs">
+<span class="font-headline-sm text-headline-sm text-on-surface">Còn 2/3 lượt ghép miễn phí</span>
+<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-tertiary/20 text-tertiary font-label-sm text-label-sm uppercase tracking-wider">Thử nghiệm</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Nâng cấp gói Max không giới hạn match tin và bảo lãnh cọc tổng ý.</p>
+</div>
+</div>
+<button class="px-space-sm py-1.5 rounded-lg bg-primary/15 text-primary hover:bg-primary/25 font-label-md text-label-md whitespace-nowrap transition-colors flex-shrink-0">
+          Lên Max
+        </button>
+</div>
+<!-- Compact Progress Line -->
+<div class="w-full bg-surface-container-lowest h-1.5 rounded-full mt-space-md overflow-hidden relative">
+<div class="bg-primary h-full rounded-full transition-all duration-500" style="width: 66.6%;"></div>
+</div>
+</div>
+</div>
+<!-- Realtime Market Ticker -->
+<div class="px-margin mt-space-md">
+<div class="flex items-center gap-space-xs py-1.5 px-space-sm rounded-lg bg-surface-container-low text-on-surface-variant overflow-hidden">
+<span class="material-symbols-outlined text-secondary text-[16px] animate-pulse flex-shrink-0">bolt</span>
+<p class="font-body-sm text-body-sm truncate">
+<span class="text-secondary font-medium">14 giây trước:</span> Broker Hải Nam vừa match thành công 1PN Monarchy B (11tr)
+      </p>
+</div>
+</div>
+<!-- Filter & Tab Switcher -->
+<div class="px-margin mt-space-md">
+<div class="p-1 rounded-xl bg-surface-container-lowest flex items-center gap-1 shadow-sm">
+<button class="flex-1 py-2 px-space-xs rounded-lg bg-surface-container-high text-primary font-label-md text-label-md shadow-sm transition-all text-center flex items-center justify-center gap-1 truncate">
+<span class="">Đang mở</span>
+<span class="w-4 h-4 rounded-full bg-primary-container text-on-primary font-label-sm text-label-sm flex items-center justify-center">3</span>
+</button>
+<button class="flex-1 py-2 px-space-xs rounded-lg text-on-surface-variant hover:text-on-surface font-label-md text-label-md transition-all text-center flex items-center justify-center gap-1 truncate">
+<span class="">Đã đề xuất</span>
+<span class="w-4 h-4 rounded-full bg-surface-variant text-on-surface-variant font-label-sm text-label-sm flex items-center justify-center">1</span>
+</button>
+<button class="flex-1 py-2 px-space-xs rounded-lg text-on-surface-variant hover:text-on-surface font-label-md text-label-md transition-all text-center truncate">
+        Lịch sử ghép
+      </button>
+</div>
+</div>
+<!-- Demand Requests Feed -->
+<div class="px-margin mt-space-md flex flex-col gap-space-md">
+<!-- Card 1 -->
+<div class="rounded-xl bg-surface-container-low p-space-md flex flex-col gap-space-sm shadow-sm relative overflow-hidden">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs flex-wrap">
+<span class="px-2 py-0.5 rounded bg-primary/10 text-primary font-label-sm text-label-sm uppercase">Sơn Trà</span>
+<span class="font-label-md text-label-md text-secondary font-semibold">&lt; 12.000.000 ₫</span>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface mt-1 truncate">Cần 2PN &lt;12tr/tháng - Sơn Trà (gần biển)</h2>
+</div>
+<div class="flex items-center gap-1 text-tertiary bg-tertiary/10 px-2 py-1 rounded-lg flex-shrink-0">
+<span class="material-symbols-outlined text-[16px]">hourglass_top</span>
+<span class="font-label-sm text-label-sm">Còn 3 slot</span>
+</div>
+</div>
+<!-- Broker Profile Row -->
+<div class="flex items-center justify-between py-1.5 px-space-sm rounded-lg bg-surface-container">
+<div class="flex items-center gap-space-xs min-w-0">
+<div class="w-7 h-7 rounded-full bg-primary-container text-on-primary flex items-center justify-center font-label-sm text-label-sm font-bold flex-shrink-0">
+            HM
+          </div>
+<div class="flex flex-col min-w-0">
+<span class="font-body-sm text-body-sm text-on-surface font-medium truncate">Broker Hoàng Minh</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant truncate">Đà Nấng Realty</span>
+</div>
+</div>
+<div class="flex items-center gap-1 text-secondary font-label-sm text-label-sm flex-shrink-0">
+<span class="material-symbols-outlined text-[15px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="">92đ Uy tín</span>
+</div>
+</div>
+<!-- Client Criteria Tags & Specs -->
+<div class="bg-surface-container/60 rounded-lg p-space-sm flex flex-col gap-1.5">
+<div class="flex items-center gap-1.5 text-on-surface-variant font-body-sm text-body-sm">
+<span class="material-symbols-outlined text-[16px] text-primary flex-shrink-0">badge</span>
+<span class="text-on-surface">Khách nước ngoài • Dọn vào 01/11</span>
+</div>
+<div class="flex items-center gap-1.5 text-on-surface-variant font-body-sm text-body-sm">
+<span class="material-symbols-outlined text-[16px] text-primary flex-shrink-0">pets</span>
+<span class="text-on-surface truncate">Nuôi mèo • Yêu cầu ban công thoáng gió gần Mỹ Khê</span>
+</div>
+</div>
+<!-- Status Quota Bar -->
+<div class="flex items-center justify-between pt-1">
+<div class="flex items-center gap-1.5 font-label-sm text-label-sm text-on-surface-variant">
+<span class="inline-block w-2 h-2 rounded-full bg-primary animate-ping"></span>
+<span class="">⚡ 2/5 broker đã gửi nguồn căn</span>
+</div>
+<span class="font-label-sm text-label-sm text-primary font-medium">Tỉ lệ chốt 85%</span>
+</div>
+<!-- Action Button -->
+<button class="w-full h-12 rounded-xl bg-primary-container text-on-primary hover:opacity-95 font-body-md text-body-md font-semibold flex items-center justify-center gap-space-xs transition-transform active:scale-[0.98] shadow-md mt-1">
+<span class="material-symbols-outlined text-[20px]">home</span>
+<span class="">Đề xuất tin ngay</span>
+</button>
+</div>
+<!-- Card 2 (High urgency: 0/5) -->
+<div class="rounded-xl bg-surface-container-low p-space-md flex flex-col gap-space-sm shadow-sm relative overflow-hidden">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs flex-wrap">
+<span class="px-2 py-0.5 rounded bg-tertiary/15 text-tertiary font-label-sm text-label-sm uppercase">Ngũ Hành Sơn</span>
+<span class="font-label-md text-label-md text-secondary font-semibold">&lt; 7.000.000 ₫</span>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface mt-1 truncate">Cần Studio An Thượng &lt;7tr - Khách ở ngay</h2>
+</div>
+<div class="flex items-center gap-1 text-error bg-error/15 px-2 py-1 rounded-lg flex-shrink-0 animate-pulse">
+<span class="material-symbols-outlined text-[16px]">local_fire_department</span>
+<span class="font-label-sm text-label-sm font-semibold">Chưa ai nhận!</span>
+</div>
+</div>
+<!-- Broker Profile Row -->
+<div class="flex items-center justify-between py-1.5 px-space-sm rounded-lg bg-surface-container">
+<div class="flex items-center gap-space-xs min-w-0">
+<div class="w-7 h-7 rounded-full bg-secondary text-on-secondary flex items-center justify-center font-label-sm text-label-sm font-bold flex-shrink-0">
+            TV
+          </div>
+<div class="flex flex-col min-w-0">
+<span class="font-body-sm text-body-sm text-on-surface font-medium truncate">Broker Thảo Vy</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant truncate">Tự do • Chuyên Phố Tây An Thượng</span>
+</div>
+</div>
+<div class="flex items-center gap-1 text-secondary font-label-sm text-label-sm flex-shrink-0">
+<span class="material-symbols-outlined text-[15px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="">88đ Uy tín</span>
+</div>
+</div>
+<!-- Client Criteria Tags & Specs -->
+<div class="bg-surface-container/60 rounded-lg p-space-sm flex flex-col gap-1.5">
+<div class="flex items-center gap-1.5 text-on-surface-variant font-body-sm text-body-sm">
+<span class="material-symbols-outlined text-[16px] text-primary flex-shrink-0">apartment</span>
+<span class="text-on-surface">Đầy đủ nội thất • Có máy giặt riêng</span>
+</div>
+<div class="flex items-center gap-1.5 text-on-surface-variant font-body-sm text-body-sm">
+<span class="material-symbols-outlined text-[16px] text-primary flex-shrink-0">contract</span>
+<span class="text-on-surface truncate">Hợp đồng 6 tháng • Vào tiền ngay trong ngày</span>
+</div>
+</div>
+<!-- Status Quota Bar -->
+<div class="flex items-center justify-between pt-1">
+<div class="flex items-center gap-1.5 font-label-sm text-label-sm text-error">
+<span class="material-symbols-outlined text-[14px]">priority_high</span>
+<span class="">🔥 0/5 broker đề xuất • Cơ hội ăn trọn 100%</span>
+</div>
+<span class="font-label-sm text-label-sm text-tertiary">Cần gấp</span>
+</div>
+<!-- Action Button -->
+<button class="w-full h-12 rounded-xl bg-primary-container text-on-primary hover:opacity-95 font-body-md text-body-md font-semibold flex items-center justify-center gap-space-xs transition-transform active:scale-[0.98] shadow-md mt-1">
+<span class="material-symbols-outlined text-[20px]">home</span>
+<span class="">Đề xuất tin ngay</span>
+</button>
+</div>
+<!-- Card 3 (Almost Full: 4/5) -->
+<div class="rounded-xl bg-surface-container-low p-space-md flex flex-col gap-space-sm shadow-sm relative overflow-hidden">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs flex-wrap">
+<span class="px-2 py-0.5 rounded bg-primary/10 text-primary font-label-sm text-label-sm uppercase">Hải Châu / Sơn Trà</span>
+<span class="font-label-md text-label-md text-secondary font-semibold">&lt; 25.000.000 ₫</span>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface mt-1 truncate">Cần 3PN The Royal / Monarchy B &lt;25tr</h2>
+</div>
+<div class="flex items-center gap-1 text-tertiary bg-tertiary/15 px-2 py-1 rounded-lg flex-shrink-0">
+<span class="material-symbols-outlined text-[16px]">alarm</span>
+<span class="font-label-sm text-label-sm font-semibold">Sắp hết slot!</span>
+</div>
+</div>
+<!-- Agency Profile Row -->
+<div class="flex items-center justify-between py-1.5 px-space-sm rounded-lg bg-surface-container">
+<div class="flex items-center gap-space-xs min-w-0">
+<div class="w-7 h-7 rounded-full bg-surface-variant text-primary flex items-center justify-center font-label-sm text-label-sm font-bold flex-shrink-0">
+<span class="material-symbols-outlined text-[18px]">verified</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-body-sm text-body-sm text-on-surface font-medium truncate">Sàn Địa Ốc Biển Ngọc</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant truncate">Sàn liên kết kim cương</span>
+</div>
+</div>
+<div class="flex items-center gap-1 text-secondary font-label-sm text-label-sm flex-shrink-0">
+<span class="material-symbols-outlined text-[15px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="">97đ Uy tín</span>
+</div>
+</div>
+<!-- Client Criteria Tags & Specs -->
+<div class="bg-surface-container/60 rounded-lg p-space-sm flex flex-col gap-1.5">
+<div class="flex items-center gap-1.5 text-on-surface-variant font-body-sm text-body-sm">
+<span class="material-symbols-outlined text-[16px] text-primary flex-shrink-0">group</span>
+<span class="text-on-surface">Gia đình Việt kiều • Cần thuê dài hạn 12 tháng</span>
+</div>
+<div class="flex items-center gap-1.5 text-on-surface-variant font-body-sm text-body-sm">
+<span class="material-symbols-outlined text-[16px] text-primary flex-shrink-0">visibility</span>
+<span class="text-on-surface truncate">View trực diện sông Hàn hoặc biển Mỹ Khê</span>
+</div>
+</div>
+<!-- Status Quota Bar -->
+<div class="flex items-center justify-between pt-1">
+<div class="flex items-center gap-1.5 font-label-sm text-label-sm text-tertiary">
+<span class="material-symbols-outlined text-[14px]">hourglass_bottom</span>
+<span class="">⏳ 4/5 broker đã đề xuất (chỉ còn 1 lượt cuối)</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Hết hạn sau 2h</span>
+</div>
+<!-- Action Button -->
+<button class="w-full h-12 rounded-xl bg-primary-container text-on-primary hover:opacity-95 font-body-md text-body-md font-semibold flex items-center justify-center gap-space-xs transition-transform active:scale-[0.98] shadow-md mt-1">
+<span class="material-symbols-outlined text-[20px]">home</span>
+<span class="">Đề xuất tin ngay</span>
+</button>
+</div>
+</div>
+<!-- Commission Rules Box -->
+<div class="px-margin mt-space-xl">
+<div class="rounded-xl bg-surface-container p-space-md shadow-sm">
+<div class="flex items-start gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-surface-variant text-tertiary flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined text-[20px]">lightbulb</span>
+</div>
+<div class="flex flex-col gap-1 min-w-0">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Cơ chế chia sẻ hoa hồng 50/50</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
+            Phí môi giới chia đều <strong class="text-secondary font-semibold">50/50</strong> giữa broker có khách và broker có nguồn căn khi chốt thành công. TrueNest đảm bảo minh bạch tuyệt đối qua hợp đồng liên kết điện tử.
+          </p>
+<div class="flex items-center gap-space-xs mt-1 text-primary font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[15px]">verified_user</span>
+<span class="">Bảo vệ nguồn hàng không lo bị cướp khách</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Persistent Sticky Area -->
+<div class="sticky bottom-0 left-0 right-0 p-margin bg-surface/90 backdrop-blur-md mt-space-xl z-30 shadow-[0_-4px_12px_rgba(0,0,0,0.3)]">
+<div class="flex flex-col gap-2">
+<button class="w-full h-12 rounded-xl bg-primary-container text-on-primary font-body-md text-body-md font-semibold flex items-center justify-center gap-space-xs transition-transform active:scale-[0.98] shadow-md">
+<span class="material-symbols-outlined text-[20px]">add_circle</span>
+<span class="">ĐĂNG YÊU CẦU TìM CĂN MỚI</span>
+</button>
+<div class="flex items-center justify-center gap-space-xs text-on-surface-variant font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[14px] text-tertiary">diamond</span>
+<span class="">Mạng lưới 1.420+ môi giới tại Đà Nấng đang trực tuyến</span>
+</div>
+</div>
+</div>
+</div>
+<script>
+  // Micro-interaction for submit buttons
+  document.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const ripple = document.createElement('span');
+      ripple.className = 'absolute inset-0 bg-primary/20 rounded-xl pointer-events-none transition-opacity duration-300 opacity-100';
+      btn.style.position = 'relative';
+      btn.appendChild(ripple);
+      setTimeout(() => {
+        ripple.style.opacity = '0';
+        setTimeout(() => ripple.remove(), 300);
+      }, 150);
+    });
+  });
+</script></main>
+
+</body></html>

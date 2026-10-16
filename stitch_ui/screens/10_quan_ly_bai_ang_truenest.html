@@ -1,0 +1,383 @@
+<!DOCTYPE html><html class="dark" lang="vi"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"><meta content="mobile_stack" name="shell-type"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"><link href="https://fonts.googleapis.com" rel="preconnect"><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"><link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"><style>@layer base{html,body{width:100%;min-height:100vh;margin:0;padding:0;background-color:#071420;color:#d7e4f4;overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent;}body{display:flex;justify-content:center;}.pb-safe{padding-bottom:calc(env(safe-area-inset-bottom, 0px) + 1rem);}.pt-safe{padding-top:env(safe-area-inset-top, 0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "surface-variant": "#293643", "primary": "#89ceff", "on-tertiary": "#432c00", "primary-fixed-dim": "#89ceff", "error-container": "#93000a", "tertiary-container": "#d09729", "inverse-primary": "#006591", "on-secondary-fixed": "#002203", "outline": "#88929b", "on-primary-container": "#003c58", "on-surface": "#d7e4f4", "on-error-container": "#ffdad6", "surface": "#071420", "on-primary": "#00344d", "surface-container-highest": "#293643", "tertiary-fixed": "#ffdeac", "on-error": "#690005", "primary-container": "#2aabee", "surface-container-lowest": "#030f1b", "surface-bright": "#2e3a47", "surface-container-low": "#101d28", "on-tertiary-fixed": "#281900", "secondary-fixed": "#97f98f", "secondary-fixed-dim": "#7bdc75", "error": "#ffb4ab", "on-primary-fixed-variant": "#004c6e", "background": "#071420", "tertiary-fixed-dim": "#fabc4c", "on-secondary-fixed-variant": "#00530f", "surface-container": "#14212d", "surface-tint": "#89ceff", "inverse-surface": "#d7e4f4", "outline-variant": "#3e4850", "on-tertiary-fixed-variant": "#604100", "secondary-container": "#007119", "inverse-on-surface": "#25323e", "on-background": "#d7e4f4", "surface-container-high": "#1f2b37", "on-primary-fixed": "#001e2f", "on-tertiary-container": "#4c3300", "on-secondary": "#003908", "primary-fixed": "#c9e6ff", "tertiary": "#fabc4c", "on-secondary-container": "#91f389", "on-surface-variant": "#bec8d2", "secondary": "#7bdc75", "surface-dim": "#071420" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "margin-desktop": "2rem", "gutter-tablet": "1rem", "space-xl": "1.5rem", "space-lg": "1rem", "space-md": "0.75rem", "space-sm": "0.5rem", "margin-tablet": "1.5rem", "gutter": "0.75rem", "space-xs": "0.25rem", "gutter-desktop": "1.25rem", "margin": "1rem" }, "fontFamily": { "label-sm": [ "JetBrains Mono" ], "headline-md": [ "Space Grotesk" ], "label-md": [ "JetBrains Mono" ], "headline-lg": [ "Space Grotesk" ], "body-lg": [ "Geist" ], "headline-lg-mobile": [ "Space Grotesk" ], "body-sm": [ "Geist" ], "headline-sm": [ "Space Grotesk" ], "body-md": [ "Geist" ], "label-lg": [ "JetBrains Mono" ] }, "fontSize": { "label-sm": [ "10px", { "lineHeight": "14px", "fontWeight": "600" } ], "headline-md": [ "22px", { "lineHeight": "28px", "fontWeight": "600" } ], "label-md": [ "12px", { "lineHeight": "16px", "fontWeight": "500" } ], "headline-lg": [ "32px", { "lineHeight": "40px", "fontWeight": "700" } ], "body-lg": [ "16px", { "lineHeight": "24px", "fontWeight": "400" } ], "headline-lg-mobile": [ "26px", { "lineHeight": "32px", "fontWeight": "700" } ], "body-sm": [ "13px", { "lineHeight": "18px", "fontWeight": "400" } ], "headline-sm": [ "18px", { "lineHeight": "24px", "fontWeight": "600" } ], "body-md": [ "14px", { "lineHeight": "20px", "fontWeight": "400" } ], "label-lg": [ "14px", { "lineHeight": "18px", "fontWeight": "500" } ] } } } };</script></head><body class="bg-surface font-body-md text-on-surface antialiased"><div class="w-full max-w-[420px] min-h-screen relative flex flex-col bg-surface shadow-2xl"><header class="fixed top-0 w-full max-w-[420px] z-50 bg-surface-container/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.25)] pt-safe"><div class="h-16 px-space-sm flex items-center justify-between gap-space-xs"><div class="flex items-center gap-space-xs min-w-0 flex-1 px-space-xs"><img alt="TrueNest Logo" class="h-7 w-auto object-contain flex-shrink-0" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA_M9_S9ZRzzAC9V6TMVuUCLQzfm5XlNK1UZ7hK49japPIB17NSyR2V6dKKt-aKiVJxPdfog0ivICmVb74qLbACmF7JnAtgoKD6hKtcGnKrNIFToQUT2geHM0Jn-CVz3rBeWGzNTNMvMxjFQSsieyCK0sLv7rkPedzicdEaP1feKKsXsx3_VpdgFIXnahlBqUuqBIltqKk1s4hX0LQs2dYh-E-yBS17Xitxd1lQstOuMlMHeJ122ERSjQ"><div class="flex flex-col min-w-0"><h1 class="font-headline-sm text-[16px] text-on-surface font-semibold truncate leading-tight">Chi Tiết Căn Hộ</h1><span class="font-label-sm text-[10px] text-primary flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>Telegram Mini App</span></div></div><div class="flex items-center gap-2 mr-space-xs"><div class="w-8 h-8 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center flex-shrink-0"><span class="material-symbols-outlined text-primary text-[18px]">person</span></div></div></div></header><main class="flex-1 w-full pt-16 pb-safe px-margin bg-surface"><div class="flex flex-col w-full pb-safe">
+<!-- Toast Notification (Fixed Floating inside frame) -->
+<div class="fixed top-20 left-1/2 -translate-x-1/2 z-50 pointer-events-none transition-all duration-300 opacity-0 -translate-y-2 flex items-center gap-space-xs px-space-md py-space-sm bg-secondary-container text-on-secondary-container rounded-full shadow-xl" id="toastNotification">
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+<span class="font-label-sm text-label-sm tracking-wide" id="toastMessage">Đã sao chép nội dung vào Clipboard!</span>
+</div>
+<!-- Page Context Sub-Header & Property Badge -->
+<div class="flex items-center justify-between mb-space-md pt-space-xs">
+<div class="flex items-center gap-space-xs">
+<span class="font-headline-sm text-headline-sm text-on-surface">📝 Quản lý bài đăng</span>
+</div>
+<div class="flex items-center gap-1.5 px-space-sm py-1 bg-surface-container-high rounded-full shadow-sm">
+<span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
+<span class="font-label-sm text-label-sm text-primary tracking-wider">CĂN #TN-204</span>
+</div>
+</div>
+<!-- Horizontal Scrollable Language Tabs -->
+<div class="flex items-center gap-space-xs overflow-x-auto pb-space-xs mb-space-md no-scrollbar -mx-margin px-margin">
+<!-- Active: Tiếng Việt -->
+<button class="lang-tab flex-shrink-0 flex items-center gap-1.5 px-space-md py-2 rounded-xl bg-primary-container text-on-primary-container shadow-md transition-all" id="tab-vi" onclick="selectLanguage('vi')" type="button">
+<span class="text-base">🇻🇳</span>
+<span class="font-label-md text-label-md font-semibold">Tiếng Việt</span>
+<span class="material-symbols-outlined text-[14px] text-on-primary-container">check_circle</span>
+</button>
+<!-- Ready: English -->
+<button class="lang-tab flex-shrink-0 flex items-center gap-1.5 px-space-md py-2 rounded-xl bg-surface-container-high text-on-surface hover:bg-surface-variant transition-all" id="tab-en" onclick="selectLanguage('en')" type="button">
+<span class="text-base">🇬🇧</span>
+<span class="font-label-md text-label-md">English</span>
+<span class="material-symbols-outlined text-[14px] text-secondary">check_circle</span>
+</button>
+<!-- Ready: Korean -->
+<button class="lang-tab flex-shrink-0 flex items-center gap-1.5 px-space-md py-2 rounded-xl bg-surface-container-high text-on-surface hover:bg-surface-variant transition-all" id="tab-ko" onclick="selectLanguage('ko')" type="button">
+<span class="text-base">🇰🇷</span>
+<span class="font-label-md text-label-md">한국어</span>
+<span class="material-symbols-outlined text-[14px] text-secondary">check_circle</span>
+</button>
+<!-- Not generated: Chinese -->
+<button class="lang-tab flex-shrink-0 flex items-center gap-1.5 px-space-md py-2 rounded-xl bg-surface-container-lowest text-outline hover:text-on-surface transition-all opacity-70" id="tab-zh" onclick="openTranslateModal('zh')" type="button">
+<span class="text-base">🇨🇳</span>
+<span class="font-label-md text-label-md">中文</span>
+<span class="material-symbols-outlined text-[14px] text-tertiary">auto_awesome</span>
+</button>
+<!-- Not generated: Russian -->
+<button class="lang-tab flex-shrink-0 flex items-center gap-1.5 px-space-md py-2 rounded-xl bg-surface-container-lowest text-outline hover:text-on-surface transition-all opacity-70" id="tab-ru" onclick="openTranslateModal('ru')" type="button">
+<span class="text-base">🇷🇺</span>
+<span class="font-label-md text-label-md">Русский</span>
+<span class="material-symbols-outlined text-[14px] text-tertiary">auto_awesome</span>
+</button>
+</div>
+<!-- Formatted Post Preview Card -->
+<div class="relative bg-surface-container-lowest rounded-xl shadow-lg p-space-md mb-space-md overflow-hidden">
+<!-- Ambient Accent Indicator -->
+<div class="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-primary-container via-primary to-secondary"></div>
+<div class="flex items-center justify-between pb-space-sm mb-space-sm bg-surface-container-low -mx-space-md -mt-space-md px-space-md pt-space-sm">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-primary text-[18px]">verified</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-medium uppercase tracking-wider">Bản thảo lưu trữ</span>
+</div>
+<div class="flex items-center gap-1 bg-surface-container px-2 py-0.5 rounded-full">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+<span class="font-label-sm text-label-sm text-secondary font-mono" id="wordCountBadge">245 ký tự</span>
+</div>
+</div>
+<!-- Post Text Box -->
+<div class="font-mono text-body-sm text-on-surface whitespace-pre-line leading-relaxed selection:bg-primary-container selection:text-white" id="postContentArea">🏠 Cho thuê 2PN An Thượng, Đà Nẵng
+Căn góc view biển, đầy đủ nội thất cao cấp, ban công thoáng mát...
+📍 123 Trần Hưng Đạo, Sơn Trà
+💰 12.5tr/tháng (cọc 2 tháng)
+🛏️ 2PN · 🛁 2 WC · 📐 78m²
+🐾 Cho phép nuôi thú cưng nhỏ
+📞 0905123456 (Zalo/Call - TrueNest Broker)</div>
+<!-- SEO Meta Bar -->
+<div class="mt-space-md pt-space-xs flex items-center justify-between bg-surface-container-low rounded-lg px-space-sm py-1.5">
+<div class="flex items-center gap-1.5 min-w-0">
+<span class="material-symbols-outlined text-secondary text-[16px]">travel_explore</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant truncate">Chuẩn SEO Facebook Bất Động Sản Đà Nẵng</span>
+</div>
+<span class="font-label-sm text-label-sm text-primary font-bold px-1.5 py-0.5 bg-primary/10 rounded">98% Match</span>
+</div>
+</div>
+<!-- Primary Action Buttons (Grid 2x2) -->
+<div class="grid grid-cols-2 gap-space-sm mb-space-lg">
+<!-- Copy Button (Hero Primary Highlight) -->
+<button class="col-span-2 w-full h-12 rounded-xl bg-primary-container active:scale-[0.99] transition-transform text-white font-label-lg text-label-lg flex items-center justify-center gap-space-xs shadow-md" onclick="copyPostText()" type="button">
+<span class="material-symbols-outlined text-[20px]">content_copy</span>
+<span class="">Copy bài đăng</span>
+</button>
+<!-- Edit Post Button -->
+<button class="w-full h-11 rounded-xl bg-surface-container-high hover:bg-surface-variant text-on-surface font-label-md text-label-md flex items-center justify-center gap-space-xs shadow-sm transition-colors" onclick="editPostContent()" type="button">
+<span class="material-symbols-outlined text-primary text-[18px]">edit_note</span>
+<span class="">Sửa bài viết</span>
+</button>
+<!-- Add Language Button -->
+<button class="w-full h-11 rounded-xl bg-surface-container-high hover:bg-surface-variant text-on-surface font-label-md text-label-md flex items-center justify-center gap-space-xs shadow-sm transition-colors" onclick="openTranslateModal('multi')" type="button">
+<span class="material-symbols-outlined text-tertiary text-[18px]">g_translate</span>
+<span class="">Thêm ngôn ngữ</span>
+</button>
+<!-- AI Rewriter Dropdown Trigger -->
+<div class="col-span-2 relative">
+<button class="w-full h-11 rounded-xl bg-surface-container-high hover:bg-surface-variant text-on-surface font-label-md text-label-md flex items-center justify-between px-space-md shadow-sm transition-colors" id="toneButton" onclick="toggleToneMenu()" type="button">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-primary text-[18px]">auto_fix_high</span>
+<span id="currentToneLabel" class="">Viết lại với AI: Tiêu chuẩn</span>
+</div>
+<span class="material-symbols-outlined text-[16px] text-outline" id="toneChevron">expand_more</span>
+</button>
+<!-- Tone Submenu Dropdown -->
+<div class="hidden absolute bottom-full left-0 right-0 mb-space-xs bg-surface-container-highest rounded-xl shadow-xl overflow-hidden z-30 p-1 flex-col gap-1" id="toneDropdown">
+<button class="w-full text-left px-space-md py-2 rounded-lg hover:bg-surface-variant flex items-center justify-between" onclick="rewriteTone('short')" type="button">
+<span class="font-body-sm text-body-sm text-on-surface">⚡ Ngắn gọn &amp; Súc tích</span>
+<span class="font-label-sm text-label-sm text-outline">~160 ký tự</span>
+</button>
+<button class="w-full text-left px-space-md py-2 rounded-lg hover:bg-surface-variant flex items-center justify-between" onclick="rewriteTone('luxury')" type="button">
+<span class="font-body-sm text-body-sm text-on-surface">✨ Sang trọng &amp; Đẳng cấp</span>
+<span class="font-label-sm text-label-sm text-tertiary">Khách Expats</span>
+</button>
+<button class="w-full text-left px-space-md py-2 rounded-lg hover:bg-surface-variant flex items-center justify-between" onclick="rewriteTone('urgent')" type="button">
+<span class="font-body-sm text-body-sm text-on-surface">🔥 Thúc đẩy chốt deal</span>
+<span class="font-label-sm text-label-sm text-error">Tạo gấp gáp</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Quick Broadcast Section -->
+<div class="flex flex-col gap-space-sm mb-space-lg">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-outline font-semibold">Chia sẻ 1-chạm (Quick Broadcast)</span>
+<span class="font-label-sm text-label-sm text-primary">3 kênh kết nối</span>
+</div>
+<!-- Telegram Channel Direct Post -->
+<button class="w-full flex items-center justify-between p-space-md rounded-xl bg-surface-container hover:bg-surface-container-high transition-colors shadow-sm text-left" onclick="triggerTelegramBotBroadcast()" type="button"><div class="flex items-center gap-space-md min-w-0"><div class="w-10 h-10 rounded-xl bg-primary-container/20 flex items-center justify-center flex-shrink-0"><span class="material-symbols-outlined text-primary text-[22px]">send</span></div><div class="min-w-0"><div class="flex items-center gap-1.5"><h4 class="font-body-md text-body-md font-semibold text-on-surface truncate">Gửi vào kênh Telegram Broker</h4><span class="px-1.5 py-0.5 rounded bg-primary/20 text-primary font-label-sm text-[9px] font-mono">BOT API</span></div><p class="font-body-sm text-body-sm text-outline truncate">Group BĐS Đà Nẵng (4.2k thành viên)</p></div></div><span class="material-symbols-outlined text-outline text-[18px]">arrow_forward</span></button>
+<!-- Facebook Group Direct Post -->
+<button class="w-full flex items-center justify-between p-space-md rounded-xl bg-surface-container hover:bg-surface-container-high transition-colors shadow-sm text-left" onclick="triggerFacebookBroadcast()" type="button">
+<div class="flex items-center gap-space-md min-w-0">
+<div class="w-10 h-10 rounded-xl bg-surface-variant flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined text-primary text-[22px]">groups</span>
+</div>
+<div class="min-w-0">
+<h4 class="font-body-md text-body-md font-semibold text-on-surface truncate">Đăng nhóm Facebook BĐS Đà Nẵng</h4>
+<p class="font-body-sm text-body-sm text-outline truncate">Tự động gắn thẻ căn hộ &amp; giá thuê</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-outline text-[18px]">arrow_forward</span>
+</button>
+<!-- Attached Photos Bundle (6 images) -->
+<div class="bg-surface-container rounded-xl p-space-md shadow-sm">
+<div class="flex items-center justify-between mb-space-sm">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-secondary text-[20px]">photo_library</span>
+<span class="font-body-md text-body-md font-semibold text-on-surface">Ảnh đính kèm (6 ảnh đã tối ưu)</span>
+</div>
+<button class="flex items-center gap-1 font-label-sm text-label-sm text-primary hover:underline active:opacity-80" onclick="sendPhotosViaTelegramBot()" type="button"><span class="material-symbols-outlined text-[14px]">send</span><span class="">Gửi ảnh qua Telegram Bot</span></button>
+</div>
+<!-- Compact 3-Column Photo Gallery -->
+<div class="grid grid-cols-3 gap-space-xs">
+<div class="relative aspect-square rounded-lg overflow-hidden bg-surface-container-high">
+<img class="w-full h-full object-cover" data-alt="High-angle shot of a luxury modern living room in Da Nang with sea view balcony, soft natural sunlight streaming through floor to ceiling windows, blue gray and timber tones." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA8ZukFIW9pmsVOftBsOd-93HwEWmentWfv_w2xU8c_CeGuNazCxoGKEq8DFytjZ8HMGEHmkUoA0MSyHU14osmAEI59zI4_7hifYVE5tz3rqalea_yIBcnzmtzubBWOM_O2RjaC9WiVb21bO8GqsVO_00VfTTRxJ73IfHLekdyhZF_PUwiLnXD4w9j7J96OdZbNafKmS6F4wewIOR0I99OIkVo18GDN8M2Inqgd4E0zDfbsAo2anHoXZg">
+<span class="absolute bottom-1 right-1 px-1 bg-surface-container-lowest/80 rounded text-[9px] font-mono text-on-surface">Cover</span>
+</div>
+<div class="relative aspect-square rounded-lg overflow-hidden bg-surface-container-high">
+<img class="w-full h-full object-cover" data-alt="Minimalist master bedroom with king sized bed, wooden headboard, soft bedside lighting, sheer white curtains framing a sunny tropical Da Nang cityscape." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDrdrsy77VLwSFnSaxCfRdWDieQmaF6sFBzYzcUwDdASsAQufQUolAbMwysLPs0N4_ZRLnWH8-MigU5p_PNkPdCmgR0I3MxypPwHENn4uXge761qdYHb76Wwjiis0ffp64J29PXsuFXwQRZnhq2SwPSaMiPTFm0J_scqPvuoVHyW5ukQ2TBu7_hb3hAjsBDl1izQ9SF-D-25A2khIMSgbH39SjHZ5o3evXRc4TTRfdVnFfyb4LRHUAINA">
+</div>
+<div class="relative aspect-square rounded-lg overflow-hidden bg-surface-container-high">
+<img class="w-full h-full object-cover" data-alt="Sleek open kitchen island with marble countertop, induction stove, matte gray cabinetry, warm ambient bar lights in high-end rental apartment." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBiDBa-pIZdpmb6Lj04rxPBQ3047zFCUSUUxaAVu5zYriDBbPRoFLIZH-S7ZwrfIyGmtPAX1Xkw-zzNQWLYAcbZadoiS5qX3a8i8yA2wZQdmVFkhJtxZ1jdPMbg59Do2Zd8jGaIAkKosH3zLTLVenD4DHqB5p7IQ03M89tPLTb3oYvJ6yHgIssGhq4ZpDhG3EILVHTFJvMoWnCCU3-HBKbldffWpTRqz73k1ZYr4jz2UjTfwqmrkI1jaA">
+</div>
+<div class="relative aspect-square rounded-lg overflow-hidden bg-surface-container-high">
+<img class="w-full h-full object-cover" data-alt="Bright modern bathroom with glass walk-in rain shower, backlit round vanity mirror, gray terrazzo tiles and fresh rolled towels." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB0jERIph2mPNV7KrYl42Cs0cetJaHhOyIfT2A1JENd6VcxH0XPXhZSGs1h7j7nITMoijHW2OeN2vpiyppVnx0V0degfrWIBJdO-4SjGquS4yNurIQJQujx1SH6tw5NBEGd5s-Qmpas9aURmK5iQC52VNWMJqht0hjP_lgrU3hHNrNKWRnGvXXLzf6n9bXKfTq8wgQffoBnDcerzW6noxfOmS_JAo6pJH8_GpD2KXqv9npTeWE6JrMqhw">
+</div>
+<div class="relative aspect-square rounded-lg overflow-hidden bg-surface-container-high">
+<img class="w-full h-full object-cover" data-alt="Cozy apartment balcony overlooking My Khe beach and Son Tra peninsula in Da Nang with two outdoor bistro chairs and potted monstera plants." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDup0kIKPlPlXnFDY_srXJpIizG32Epk2y0m5jPqpgE4avcwlWCeZO_ptGahceX6dyi75YNsXlrrO3nCCNizQ56k-8KcEn5L2EADyWsHipMdt6orKxcp-cvmRkM9N8Ab1QxCZO7Uz5RC3kxyBy7qPONY1Q0p5Bq_Ma2sJGozrBsXvGuvVMBXON_qLhz5yDjyACsxuSHGpQhgwwZAX2FMd97XJ2BPKAjPImuIzUiZaeNyUWipzsnJxeCyw">
+</div>
+<div class="relative aspect-square rounded-lg overflow-hidden bg-surface-container-high flex flex-col items-center justify-center bg-surface-variant cursor-pointer" onclick="viewPhotoGallery()">
+<span class="material-symbols-outlined text-primary text-[24px]">visibility</span>
+<span class="font-label-sm text-label-sm text-on-surface font-semibold mt-0.5">+1 Xem hết</span>
+</div>
+</div>
+</div>
+</div>
+<!-- AI Translate Dialog Modal (Hidden by default) -->
+<div class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-space-md hidden opacity-0 transition-opacity duration-200" id="translateModal">
+<div class="w-full max-w-[390px] bg-surface-container-high rounded-2xl p-space-lg shadow-2xl flex flex-col gap-space-md">
+<div class="flex items-center justify-between pb-space-xs border-b border-outline-variant/30">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-tertiary text-[22px]">smart_toy</span>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Dịch tự động TrueNest AI</h3>
+</div>
+<button class="w-8 h-8 rounded-full flex items-center justify-center text-outline hover:text-on-surface" onclick="closeTranslateModal()" type="button">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Chọn ngôn ngữ để AI khởi tạo nội dung chuẩn văn phong bản địa, giữ nguyên thông số kỹ thuật căn hộ:</p>
+<div class="flex flex-col gap-space-xs">
+<label class="flex items-center justify-between p-space-sm rounded-xl bg-surface-container cursor-pointer hover:bg-surface-variant">
+<div class="flex items-center gap-space-sm">
+<span class="text-xl">🇨🇳</span>
+<span class="font-body-md text-body-md text-on-surface">Tiếng Trung (Giản thể)</span>
+</div>
+<input checked="" class="w-4 h-4 rounded accent-primary-container" id="checkZh" type="checkbox">
+</label>
+<label class="flex items-center justify-between p-space-sm rounded-xl bg-surface-container cursor-pointer hover:bg-surface-variant">
+<div class="flex items-center gap-space-sm">
+<span class="text-xl">🇷🇺</span>
+<span class="font-body-md text-body-md text-on-surface">Tiếng Nga (Русский)</span>
+</div>
+<input checked="" class="w-4 h-4 rounded accent-primary-container" id="checkRu" type="checkbox">
+</label>
+<label class="flex items-center justify-between p-space-sm rounded-xl bg-surface-container cursor-pointer hover:bg-surface-variant">
+<div class="flex items-center gap-space-sm">
+<span class="text-xl">🇯🇵</span>
+<span class="font-body-md text-body-md text-on-surface">Tiếng Nhật (日本語)</span>
+</div>
+<input class="w-4 h-4 rounded accent-primary-container" id="checkJa" type="checkbox">
+</label>
+</div>
+<div class="flex gap-space-sm pt-space-xs">
+<button class="flex-1 h-10 rounded-xl bg-surface-variant text-on-surface font-label-md text-label-md" onclick="closeTranslateModal()" type="button">Hủy</button>
+<button class="flex-1 h-10 rounded-xl bg-primary-container text-white font-label-md text-label-md flex items-center justify-center gap-1 shadow-md" onclick="generateTranslations()" type="button">
+<span class="material-symbols-outlined text-[16px]">bolt</span>
+<span class="">Bắt đầu dịch</span>
+</button>
+</div>
+</div>
+</div>
+<div class="sticky bottom-0 left-0 right-0 -mx-margin px-margin pt-2 pb-safe bg-surface/90 backdrop-blur-md z-40 border-t border-outline-variant/30 mt-space-md"><button id="telegramMainBtn" class="w-full h-12 rounded-xl bg-primary-container hover:bg-primary-container/90 active:scale-[0.98] transition-all text-white font-label-lg font-bold tracking-wide flex items-center justify-center gap-2 shadow-lg" onclick="handleTelegramMainButton()" type="button"><span class="material-symbols-outlined text-[20px]">content_copy</span><span class="">COPY BÀI ĐĂNG</span><span class="px-1.5 py-0.5 rounded bg-black/20 text-[10px] font-mono font-normal uppercase text-white/90">Haptic</span></button></div></div>
+<script>
+  const postStore = {
+    vi: `🏠 Cho thuê 2PN An Thượng, Đà Nẵng\nCăn góc view biển, đầy đủ nội thất cao cấp, ban công thoáng mát...\n📍 123 Trần Hưng Đạo, Sơn Trà\n💰 12.5tr/tháng (cọc 2 tháng)\n🛏️ 2PN · 🛁 2 WC · 📐 78m²\n🐾 Cho phép nuôi thú cưng nhỏ\n📞 0905123456 (Zalo/Call - TrueNest Broker)`,
+    en: `🏠 2BR Apartment for Rent in An Thuong, Da Nang\nCorner unit with direct ocean view, fully furnished, windy private balcony...\n📍 123 Tran Hung Dao, Son Tra District\n💰 12.5M VND/month ($500) - 2 months deposit\n🛏️ 2 Bed · 🛁 2 Bath · 📐 78 sqm\n🐾 Pet friendly (small pets allowed)\n📞 0905123456 (WhatsApp/Zalo - TrueNest Broker)`,
+    ko: `🏠 다낭 안트엉 2룸 고급 아파트 임대\n바다 전망 코너 유닛, 풀옵션 고급 가구 완비, 통풍 좋은 발코니...\n📍 123 Tran Hung Dao, Son Tra\n💰 월 1,250만동 (보증금 2개월)\n🛏️ 방 2개 · 🛁 욕실 2개 · 📐 78m²\n🐾 소형 반려동물 가능\n📞 0905123456 (카카오톡/Zalo - TrueNest)`,
+    zh: `🏠 岘港安商区 精装两居室海景公寓出租\n边套无遮挡海景，高档家具家电齐全，大阳台采光极佳...\n📍 123 Tran Hung Dao, Son Tra\n💰 1250万越南盾/月 (押二付一)\n🛏️ 2室 · 🛁 2卫 · 📐 78平米\n🐾 允许饲养小型宠物\n📞 0905123456 (微信/Zalo - TrueNest 经纪人)`,
+    ru: `🏠 Аренда 2-к квартиры в Ан Тхыонг, Дананг\nУгловая квартира с панорамным видом на море, дорогая мебель, балкон...\n📍 123 Tran Hung Dao, Son Tra\n💰 12.5 млн донгов/мес (депозит 2 мес)\n🛏️ 2 спальни · 🛁 2 санузла · 📐 78 м²\n🐾 Можно с небольшими питомцами\n📞 0905123456 (Telegram/Zalo - TrueNest)`
+  };
+
+  let activeLang = 'vi';
+
+  function showToast(msg) {
+    const toast = document.getElementById('toastNotification');
+    const label = document.getElementById('toastMessage');
+    label.innerText = msg;
+    toast.classList.remove('opacity-0', '-translate-y-2');
+    toast.classList.add('opacity-100', 'translate-y-0');
+    setTimeout(() => {
+      toast.classList.remove('opacity-100', 'translate-y-0');
+      toast.classList.add('opacity-0', '-translate-y-2');
+    }, 2400);
+  }
+
+  function selectLanguage(lang) {
+    activeLang = lang;
+    const contentArea = document.getElementById('postContentArea');
+    const badge = document.getElementById('wordCountBadge');
+
+    if (postStore[lang]) {
+      contentArea.innerText = postStore[lang];
+      badge.innerText = postStore[lang].length + ' ký tự';
+    }
+
+    document.querySelectorAll('.lang-tab').forEach(btn => {
+      btn.className = "lang-tab flex-shrink-0 flex items-center gap-1.5 px-space-md py-2 rounded-xl bg-surface-container-high text-on-surface hover:bg-surface-variant transition-all";
+    });
+
+    const activeBtn = document.getElementById('tab-' + lang);
+    if (activeBtn) {
+      activeBtn.className = "lang-tab flex-shrink-0 flex items-center gap-1.5 px-space-md py-2 rounded-xl bg-primary-container text-on-primary-container shadow-md transition-all";
+    }
+  }
+
+  function copyPostText() {
+    const text = document.getElementById('postContentArea').innerText;
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(() => {
+        showToast('Đã copy bài đăng vào clipboard!');
+      }).catch(() => {
+        fallbackCopy(text);
+      });
+    } else {
+      fallbackCopy(text);
+    }
+  }
+
+  function fallbackCopy(text) {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+      document.execCommand('copy');
+      showToast('Đã copy bài đăng vào clipboard!');
+    } catch (err) {
+      showToast('Không thể tự động copy, hãy bôi đen!');
+    }
+    document.body.removeChild(textarea);
+  }
+
+  function editPostContent() {
+    const contentArea = document.getElementById('postContentArea');
+    const isEditing = contentArea.getAttribute('contenteditable') === 'true';
+
+    if (!isEditing) {
+      contentArea.setAttribute('contenteditable', 'true');
+      contentArea.classList.add('outline-none', 'bg-surface-variant/40', 'p-2', 'rounded-lg');
+      contentArea.focus();
+      showToast('Chế độ chỉnh sửa đang bật');
+    } else {
+      contentArea.setAttribute('contenteditable', 'false');
+      contentArea.classList.remove('outline-none', 'bg-surface-variant/40', 'p-2', 'rounded-lg');
+      postStore[activeLang] = contentArea.innerText;
+      document.getElementById('wordCountBadge').innerText = contentArea.innerText.length + ' ký tự';
+      showToast('Đã lưu bài viết cập nhật!');
+    }
+  }
+
+  function toggleToneMenu() {
+    const menu = document.getElementById('toneDropdown');
+    const chevron = document.getElementById('toneChevron');
+    const isHidden = menu.classList.contains('hidden');
+    if (isHidden) {
+      menu.classList.remove('hidden');
+      menu.classList.add('flex');
+      chevron.innerText = 'expand_less';
+    } else {
+      menu.classList.add('hidden');
+      menu.classList.remove('flex');
+      chevron.innerText = 'expand_more';
+    }
+  }
+
+  function rewriteTone(type) {
+    toggleToneMenu();
+    const contentArea = document.getElementById('postContentArea');
+    const badge = document.getElementById('wordCountBadge');
+    const label = document.getElementById('currentToneLabel');
+
+    if (type === 'short') {
+      label.innerText = 'Viết lại với AI: Ngắn gọn';
+      contentArea.innerText = `🔥 2PN An Thượng view biển cực chill!\n📍 123 Trần Hưng Đạo, Sơn Trà\n💵 12.5tr/tháng - Full nội thất\n🐾 Pet friendly. Vào ở ngay!\n📲 0905123456 (Call/Zalo TrueNest)`;
+    } else if (type === 'luxury') {
+      label.innerText = 'Viết lại với AI: Sang trọng';
+      contentArea.innerText = `✨ Tuyệt phẩm Căn hộ Biển An Thượng - Chuẩn sống Expat thượng lưu\nThiết kế kính cong Panorama, đón bình minh Sơn Trà mỗi sớm mai.\n• Diện tích: 78m² (2PN · 2WC)\n• Giá thuê: 12.5 triệu/tháng\n• Nội thất nhập khẩu tiêu chuẩn 5 sao\nLiên hệ tham quan riêng: 0905123456 (TrueNest Specialist)`;
+    } else if (type === 'urgent') {
+      label.innerText = 'Viết lại với AI: Thôi thúc chốt deal';
+      contentArea.innerText = `🚨 GIẢM GIÁ DUY NHẤT HÔM NAY - CĂN 2PN AN THƯỢNG\nChủ nhà hỗ trợ giá còn 12.5tr/tháng (chỉ cọc 2 tháng).\nFull nội thất, view biển, cho nuôi thú cưng. Căn duy nhất còn trống!\nNhanh tay cọc giữ căn: 0905123456 (Zalo 24/7)`;
+    }
+    badge.innerText = contentArea.innerText.length + ' ký tự';
+    showToast('AI đã điều chỉnh văn phong thành công!');
+  }
+
+  function openTranslateModal(target) {
+    const modal = document.getElementById('translateModal');
+    modal.classList.remove('hidden');
+    setTimeout(() => modal.classList.remove('opacity-0'), 10);
+  }
+
+  function closeTranslateModal() {
+    const modal = document.getElementById('translateModal');
+    modal.classList.add('opacity-0');
+    setTimeout(() => modal.classList.add('hidden'), 200);
+  }
+
+  function generateTranslations() {
+    closeTranslateModal();
+    showToast('AI đã tạo bản dịch tiếng Trung & Nga!');
+    selectLanguage('zh');
+  }
+
+  function triggerFacebookBroadcast() {
+    showToast('Đã chuẩn bị nội dung và mở nhóm BĐS Đà Nẵng!');
+    window.open('https://facebook.com', '_blank');
+  }
+
+  function downloadAllPhotos() {
+    showToast('Đang nén 6 ảnh chất lượng cao (.zip)...');
+  }
+
+  function viewPhotoGallery() {
+    showToast('Mở bộ sưu tập 6 ảnh chi tiết căn hộ');
+  }
+</script></main></div>
+
+</body></html>

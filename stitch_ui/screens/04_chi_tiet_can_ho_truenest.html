@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="vi"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/>
+<meta content="mobile_stack" name="shell-type"/>
+<title>Chi tiết căn hộ #TN-204 - TrueNest Broker App</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "tg-bg": "#0e1621",
+            "tg-card": "#17212b",
+            "tg-card-high": "#202b36",
+            "tg-border": "#242f3d",
+            "tg-accent": "#2aabee",
+            "tg-accent-hover": "#229ad6",
+            "tg-amber": "#ffab00",
+            "tg-amber-bg": "rgba(255, 171, 0, 0.12)",
+            "tg-green": "#4fae5b",
+            "tg-red": "#e53935",
+            "tg-text-primary": "#f5f5f5",
+            "tg-text-secondary": "#7e8b99",
+            "primary": "#2aabee",
+            "surface": "#0e1621",
+            "surface-container": "#17212b",
+            "surface-container-high": "#202b36",
+          },
+          fontFamily: {
+            sans: ["Geist", "sans-serif"],
+            mono: ["JetBrains Mono", "monospace"],
+            display: ["Space Grotesk", "sans-serif"]
+          }
+        }
+      }
+    };
+  </script>
+<style>
+    @layer base {
+      html, body {
+        width: 100%;
+        min-height: 100vh;
+        margin: 0;
+        padding: 0;
+        background-color: #0e1621;
+        color: #f5f5f5;
+        overscroll-behavior-y: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      body {
+        display: flex;
+        justify-content: center;
+      }
+      .pb-safe {
+        padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 5rem);
+      }
+      .pt-safe {
+        padding-top: env(safe-area-inset-top, 0px);
+      }
+    }
+    ::-webkit-scrollbar {
+      display: none;
+    }
+    .skeleton-shimmer {
+      background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.03) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 2s infinite;
+    }
+    @keyframes shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+  </style>
+</head>
+<body class="bg-tg-bg font-sans text-tg-text-primary antialiased">
+<div class="w-full max-w-[420px] min-h-screen relative flex flex-col bg-tg-bg border-x border-tg-border/50 shadow-2xl selection:bg-tg-accent selection:text-white">
+<!-- 1. Top Bar Tinh Gọn tương thích Telegram WebView -->
+<header class="sticky top-0 w-full z-40 bg-tg-card/95 backdrop-blur-md border-b border-tg-border/80 pt-safe">
+<div class="h-12 px-3 flex items-center justify-between">
+<div class="flex items-center gap-2 min-w-0">
+<button class="w-8 h-8 rounded-full flex items-center justify-center text-tg-accent active:bg-white/10 transition-colors" onclick="if(window.Telegram?.WebApp?.BackButton){window.Telegram.WebApp.close();}else{history.back();}" title="Quay lại" type="button">
+<span class="material-symbols-outlined text-[20px]">arrow_back</span>
+</button>
+<div class="flex items-center gap-1.5 min-w-0">
+<span class="font-display font-semibold text-[15px] text-tg-text-primary tracking-tight truncate">Chi tiết căn hộ #TN-204</span>
+</div>
+</div>
+<div class="flex items-center gap-1.5 flex-shrink-0">
+<span class="px-2 py-0.5 rounded-full bg-tg-accent/15 text-tg-accent font-mono text-[11px] font-medium flex items-center gap-1 border border-tg-accent/20">
+<span class="w-1.5 h-1.5 rounded-full bg-tg-accent animate-pulse"></span>
+            TMA
+          </span>
+<button class="w-8 h-8 rounded-lg bg-tg-border/60 text-tg-text-secondary hover:text-tg-text-primary active:scale-95 flex items-center justify-center transition" onclick="quickShareTelegram()" title="Chia sẻ" type="button">
+<span class="material-symbols-outlined text-[18px]">share</span>
+</button>
+</div>
+</div>
+</header>
+<!-- Main Scroll Content -->
+<main class="flex-1 w-full px-3 pt-3 pb-safe flex flex-col gap-3.5">
+<!-- 2. Section Ảnh Căn Hộ Cloudflare R2 -->
+<section class="relative w-full rounded-2xl overflow-hidden bg-tg-card border border-tg-border group shadow-lg select-none">
+<!-- 16:9 Aspect Ratio Frame with Skeleton Background -->
+<div class="relative w-full aspect-[16/9] overflow-hidden bg-tg-card-high cursor-pointer" onclick="openFullscreenViewer()">
+<!-- Skeleton backdrop placeholder -->
+<div class="absolute inset-0 skeleton-shimmer z-0"></div>
+<!-- Active Image -->
+<img alt="Căn hộ 2PN An Thượng" class="relative z-10 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" id="galleryImg" loading="lazy" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDtMFgizqnKDsYFdJYIJChDykaALgxX9HdmACZkSHNpsTgEs8ODW-ksMOOjcZR4PDN-bZTHCqXV17MmflKzQtMTewBBxOM0kAs5iZmZ1-GA-U-RALPRNgkdj1uCIg1VxPEbpApReglAJT2GbZwtFLr1CKO-zsQdyrC7bCn0FwbFC0HoQTks9V8B_7p4ig40vhac3RuMQrvA2BTjmMXf0g6csr64Kdp1tddix7AmESNd4eG9X5_2WHWvRg"/>
+<div class="absolute inset-0 z-20 bg-gradient-to-t from-tg-bg/90 via-transparent to-black/30 pointer-events-none"></div>
+<!-- Cloudflare R2 Optimization Badge -->
+<div class="absolute top-2.5 left-2.5 z-30 flex items-center gap-1.5">
+<span class="px-2.5 py-1 rounded-full bg-tg-bg/80 backdrop-blur-md border border-white/10 text-[11px] font-mono text-tg-accent font-medium flex items-center gap-1 shadow-sm">
+<span class="material-symbols-outlined text-[13px] text-tg-accent">cloud_done</span>
+              Ảnh R2 Đã Tối Ưu
+            </span>
+</div>
+<!-- Full Screen Hint Button -->
+<button class="absolute top-2.5 right-2.5 z-30 px-2 py-1 rounded-lg bg-black/60 hover:bg-black/80 backdrop-blur-md text-[11px] font-mono text-white flex items-center gap-1 transition-all active:scale-95" onclick="event.stopPropagation(); openFullscreenViewer()" title="Toàn màn hình" type="button">
+<span class="material-symbols-outlined text-[14px]">fullscreen</span>
+<span>Phóng to</span>
+</button>
+<!-- Prev / Next Floating Arrows -->
+<button class="absolute left-2 top-1/2 -translate-y-1/2 z-30 w-7 h-7 rounded-full bg-black/50 hover:bg-black/75 backdrop-blur text-white flex items-center justify-center active:scale-90 transition" onclick="event.stopPropagation(); changeSlide(-1)" type="button">
+<span class="material-symbols-outlined text-[18px]">chevron_left</span>
+</button>
+<button class="absolute right-2 top-1/2 -translate-y-1/2 z-30 w-7 h-7 rounded-full bg-black/50 hover:bg-black/75 backdrop-blur text-white flex items-center justify-center active:scale-90 transition" onclick="event.stopPropagation(); changeSlide(1)" type="button">
+<span class="material-symbols-outlined text-[18px]">chevron_right</span>
+</button>
+<!-- Bottom Meta: Index & 6 Dots Indicator -->
+<div class="absolute bottom-2.5 left-0 right-0 z-30 px-3 flex items-center justify-between pointer-events-none">
+<span class="px-2 py-0.5 rounded-full bg-black/60 backdrop-blur text-[11px] font-mono text-white/90" id="slideIndicator">
+              1 / 6
+            </span>
+<div class="flex items-center gap-1.5" id="dotsContainer">
+<span class="w-4 h-1.5 rounded-full bg-tg-accent transition-all"></span>
+<span class="w-1.5 h-1.5 rounded-full bg-white/40 transition-all"></span>
+<span class="w-1.5 h-1.5 rounded-full bg-white/40 transition-all"></span>
+<span class="w-1.5 h-1.5 rounded-full bg-white/40 transition-all"></span>
+<span class="w-1.5 h-1.5 rounded-full bg-white/40 transition-all"></span>
+<span class="w-1.5 h-1.5 rounded-full bg-white/40 transition-all"></span>
+</div>
+</div>
+</div>
+</section>
+<!-- 3. SECTION RIÊNG: 🤖 AI Chấm điểm tin đăng -->
+<section class="rounded-2xl bg-tg-card border border-tg-border p-3.5 shadow-lg relative overflow-hidden">
+<div class="absolute top-0 right-0 w-32 h-32 bg-tg-amber/5 rounded-full blur-2xl pointer-events-none"></div>
+<!-- Section Header -->
+<div class="flex items-start justify-between gap-2 mb-3">
+<div class="flex items-center gap-2">
+<span class="text-xl">🤖</span>
+<div>
+<h2 class="font-display text-[15px] font-bold text-tg-text-primary tracking-tight">AI Chấm điểm tin đăng</h2>
+<p class="text-[11px] font-mono text-tg-text-secondary">TrueNest Intelligence Engine v2.4</p>
+</div>
+</div>
+<!-- Score Badge -->
+<div class="flex items-baseline gap-0.5 px-3 py-1 rounded-xl bg-tg-amber-bg border border-tg-amber/30 text-tg-amber">
+<span class="font-display font-extrabold text-[22px] leading-none">75</span>
+<span class="font-mono text-[12px] font-semibold text-tg-amber/90">/100đ</span>
+</div>
+</div>
+<!-- Progress Bar 75% Hổ phách -->
+<div class="w-full h-2.5 rounded-full bg-tg-border/70 overflow-hidden mb-3">
+<div class="h-full bg-gradient-to-r from-amber-500 to-tg-amber rounded-full transition-all duration-700" style="width: 75%"></div>
+</div>
+<!-- Cảnh báo chi tiết cần bổ sung -->
+<div class="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/25 flex items-start gap-2 mb-3.5">
+<span class="material-symbols-outlined text-[17px] text-tg-amber flex-shrink-0 mt-0.5">warning</span>
+<div class="text-[12px] leading-snug">
+<span class="font-semibold text-tg-amber">Cần bổ sung để đạt 100đ:</span>
+<span class="text-tg-text-primary/90 ml-1">Thiếu: Ảnh WC &amp; Ban công (cần tối thiểu 3 ảnh chi tiết), Chính sách thú cưng</span>
+</div>
+</div>
+<!-- Bảng phân tích tiêu chí logic rõ ràng -->
+<div class="rounded-xl bg-tg-bg/70 border border-tg-border/60 p-2.5">
+<div class="text-[11px] font-mono uppercase tracking-wider text-tg-text-secondary mb-2 flex items-center justify-between">
+<span>Bảng phân tích tiêu chí chấm điểm</span>
+<span class="text-tg-accent">11 chỉ số</span>
+</div>
+<div class="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[12px]">
+<!-- Row 1 -->
+<div class="flex items-center justify-between py-1 border-b border-tg-border/40">
+<span class="text-tg-text-secondary flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px] text-tg-green">check_circle</span> Giá thuê
+              </span>
+<span class="font-mono font-medium text-tg-green">20/20đ</span>
+</div>
+<div class="flex items-center justify-between py-1 border-b border-tg-border/40">
+<span class="text-tg-text-secondary flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px] text-tg-green">check_circle</span> SĐT liên hệ
+              </span>
+<span class="font-mono font-medium text-tg-green">15/15đ</span>
+</div>
+<!-- Row 2 -->
+<div class="flex items-center justify-between py-1 border-b border-tg-border/40">
+<span class="text-tg-text-secondary flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px] text-tg-amber">error</span> Hình ảnh
+              </span>
+<span class="font-mono font-medium text-tg-amber">10/15đ <span class="text-[10px] text-tg-amber/80">(thiếu)</span></span>
+</div>
+<div class="flex items-center justify-between py-1 border-b border-tg-border/40">
+<span class="text-tg-text-secondary flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px] text-tg-green">check_circle</span> Số PN
+              </span>
+<span class="font-mono font-medium text-tg-green">10/10đ</span>
+</div>
+<!-- Row 3 -->
+<div class="flex items-center justify-between py-1 border-b border-tg-border/40">
+<span class="text-tg-text-secondary flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px] text-tg-green">check_circle</span> Khu vực
+              </span>
+<span class="font-mono font-medium text-tg-green">10/10đ</span>
+</div>
+<div class="flex items-center justify-between py-1 border-b border-tg-border/40">
+<span class="text-tg-text-secondary flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px] text-tg-green">check_circle</span> Diện tích
+              </span>
+<span class="font-mono font-medium text-tg-green">10/10đ</span>
+</div>
+<!-- Row 4 -->
+<div class="flex items-center justify-between py-1 border-b border-tg-border/40">
+<span class="text-tg-text-secondary flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px] text-tg-green">check_circle</span> Mô tả
+              </span>
+<span class="font-mono font-medium text-tg-green">10/10đ</span>
+</div>
+<div class="flex items-center justify-between py-1 border-b border-tg-border/40">
+<span class="text-tg-text-secondary flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px] text-tg-red">cancel</span> WC
+              </span>
+<span class="font-mono font-medium text-tg-red">0/5đ</span>
+</div>
+<!-- Row 5 -->
+<div class="flex items-center justify-between py-1">
+<span class="text-tg-text-secondary flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px] text-tg-green">check_circle</span> Loại hình
+              </span>
+<span class="font-mono font-medium text-tg-green">5/5đ</span>
+</div>
+<div class="flex items-center justify-between py-1">
+<span class="text-tg-text-secondary flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px] text-tg-green">check_circle</span> Nội thất
+              </span>
+<span class="font-mono font-medium text-tg-green">5/5đ</span>
+</div>
+<!-- Row 6 -->
+<div class="col-span-2 flex items-center justify-between pt-1 border-t border-tg-border/40">
+<span class="text-tg-text-secondary flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px] text-tg-red">cancel</span> Thú cưng (Pet)
+              </span>
+<span class="font-mono font-medium text-tg-red">0/5đ</span>
+</div>
+</div>
+</div>
+</section>
+<!-- 4. Hai Tab: [Thông tin] và [Bài đăng marketing] -->
+<section class="w-full">
+<div class="flex items-center p-1 rounded-xl bg-tg-card border border-tg-border">
+<button class="flex-1 py-2 rounded-lg text-center font-display font-medium text-[13px] transition-all bg-tg-accent text-white shadow" id="tabBtnInfo" onclick="switchTab('info')" type="button">
+            Thông tin
+          </button>
+<button class="flex-1 py-2 rounded-lg text-center font-display font-medium text-[13px] transition-all text-tg-text-secondary hover:text-tg-text-primary" id="tabBtnMarketing" onclick="switchTab('marketing')" type="button">
+            Bài đăng marketing
+          </button>
+</div>
+</section>
+<!-- TAB CONTENT: [THÔNG TIN] -->
+<div class="flex flex-col gap-3.5" id="tabContentInfo">
+<!-- 5. Bảng thông số chi tiết căn hộ -->
+<section class="rounded-2xl bg-tg-card border border-tg-border p-3.5 shadow-lg flex flex-col gap-3">
+<!-- Main Title & Price Header -->
+<div class="flex items-start justify-between gap-3 border-b border-tg-border/60 pb-3">
+<div class="flex-1 min-w-0">
+<div class="flex items-center gap-2 mb-1">
+<span class="px-2 py-0.5 rounded-md bg-tg-green/15 text-tg-green text-[11px] font-mono font-semibold">Còn trống</span>
+<span class="px-2 py-0.5 rounded-md bg-tg-accent/15 text-tg-accent text-[11px] font-mono">TN-204</span>
+</div>
+<h1 class="font-display font-bold text-[17px] leading-snug text-tg-text-primary">
+                Căn hộ 2PN An Thượng - View Biển Mỹ Khê
+              </h1>
+<p class="text-[12px] text-tg-text-secondary mt-1 flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px] text-tg-accent">location_on</span>
+                123 Trần Hưng Đạo, P. An Hải Bắc, Sơn Trà, Đà Nẵng
+              </p>
+</div>
+<div class="text-right flex-shrink-0">
+<span class="block font-display font-extrabold text-[20px] text-tg-accent leading-none">12.5tr</span>
+<span class="text-[11px] font-mono text-tg-text-secondary">/ tháng</span>
+</div>
+</div>
+<!-- Parameter Bento Grid -->
+<div class="grid grid-cols-2 gap-2.5">
+<!-- Giá & Cọc -->
+<div class="p-2.5 rounded-xl bg-tg-bg/80 border border-tg-border/70 flex items-center gap-2.5">
+<div class="w-8 h-8 rounded-lg bg-tg-accent/15 text-tg-accent flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined text-[18px]">payments</span>
+</div>
+<div class="min-w-0">
+<span class="block text-[10px] font-mono text-tg-text-secondary uppercase">Giá thuê</span>
+<span class="font-display font-semibold text-[13px] text-tg-text-primary truncate">12.5 tr/tháng</span>
+</div>
+</div>
+<div class="p-2.5 rounded-xl bg-tg-bg/80 border border-tg-border/70 flex items-center gap-2.5">
+<div class="w-8 h-8 rounded-lg bg-tg-accent/15 text-tg-accent flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined text-[18px]">savings</span>
+</div>
+<div class="min-w-0">
+<span class="block text-[10px] font-mono text-tg-text-secondary uppercase">Tiền cọc</span>
+<span class="font-display font-semibold text-[13px] text-tg-text-primary truncate">Cọc 2 tháng</span>
+</div>
+</div>
+<!-- Phòng ngủ & WC -->
+<div class="p-2.5 rounded-xl bg-tg-bg/80 border border-tg-border/70 flex items-center gap-2.5">
+<div class="w-8 h-8 rounded-lg bg-tg-accent/15 text-tg-accent flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined text-[18px]">bed</span>
+</div>
+<div class="min-w-0">
+<span class="block text-[10px] font-mono text-tg-text-secondary uppercase">Phòng ngủ</span>
+<span class="font-display font-semibold text-[13px] text-tg-text-primary">2 PN</span>
+</div>
+</div>
+<div class="p-2.5 rounded-xl bg-tg-bg/80 border border-tg-border/70 flex items-center gap-2.5">
+<div class="w-8 h-8 rounded-lg bg-tg-accent/15 text-tg-accent flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined text-[18px]">bathtub</span>
+</div>
+<div class="min-w-0">
+<span class="block text-[10px] font-mono text-tg-text-secondary uppercase">Vệ sinh (WC)</span>
+<span class="font-display font-semibold text-[13px] text-tg-text-primary">2 WC</span>
+</div>
+</div>
+<!-- Diện tích & Địa chỉ -->
+<div class="p-2.5 rounded-xl bg-tg-bg/80 border border-tg-border/70 flex items-center gap-2.5">
+<div class="w-8 h-8 rounded-lg bg-tg-accent/15 text-tg-accent flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined text-[18px]">square_foot</span>
+</div>
+<div class="min-w-0">
+<span class="block text-[10px] font-mono text-tg-text-secondary uppercase">Diện tích</span>
+<span class="font-display font-semibold text-[13px] text-tg-text-primary">78 m²</span>
+</div>
+</div>
+<div class="p-2.5 rounded-xl bg-tg-bg/80 border border-tg-border/70 flex items-center gap-2.5">
+<div class="w-8 h-8 rounded-lg bg-tg-accent/15 text-tg-accent flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined text-[18px]">home_pin</span>
+</div>
+<div class="min-w-0">
+<span class="block text-[10px] font-mono text-tg-text-secondary uppercase">Khu vực</span>
+<span class="font-display font-semibold text-[13px] text-tg-text-primary truncate">Sơn Trà, ĐN</span>
+</div>
+</div>
+</div>
+<!-- Nội thất & Thú cưng Tag list -->
+<div class="pt-2 border-t border-tg-border/60 flex flex-col gap-2">
+<div class="flex items-center justify-between text-[12px]">
+<span class="text-tg-text-secondary flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px] text-tg-accent">chair</span>
+                Nội thất:
+              </span>
+<span class="font-semibold text-tg-text-primary bg-tg-card-high px-2 py-0.5 rounded border border-tg-border/80">Full nội thất cao cấp</span>
+</div>
+<div class="flex items-center justify-between text-[12px]">
+<span class="text-tg-text-secondary flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px] text-tg-amber">pets</span>
+                Thú cưng:
+              </span>
+<span class="font-semibold text-tg-text-primary bg-tg-card-high px-2 py-0.5 rounded border border-tg-border/80 flex items-center gap-1">
+                🐶 Pet friendly (Có cam kết)
+              </span>
+</div>
+</div>
+</section>
+<!-- Thông tin tiện ích & Dịch vụ -->
+<section class="rounded-2xl bg-tg-card border border-tg-border p-3.5 shadow-lg flex flex-col gap-2.5">
+<div class="flex items-center gap-1.5 text-tg-text-primary">
+<span class="material-symbols-outlined text-[18px] text-tg-accent">receipt_long</span>
+<h3 class="font-display font-semibold text-[14px]">Chi phí dịch vụ tòa nhà</h3>
+</div>
+<div class="grid grid-cols-3 gap-2 text-center">
+<div class="bg-tg-bg/70 p-2 rounded-xl border border-tg-border/60">
+<span class="block text-[10px] font-mono text-tg-text-secondary">Điện</span>
+<span class="font-display font-semibold text-[13px] text-tg-text-primary">3.800đ/kWh</span>
+</div>
+<div class="bg-tg-bg/70 p-2 rounded-xl border border-tg-border/60">
+<span class="block text-[10px] font-mono text-tg-text-secondary">Nước</span>
+<span class="font-display font-semibold text-[13px] text-tg-text-primary">100k/người</span>
+</div>
+<div class="bg-tg-bg/70 p-2 rounded-xl border border-tg-border/60">
+<span class="block text-[10px] font-mono text-tg-text-secondary">Internet Wifi</span>
+<span class="font-display font-semibold text-[13px] text-tg-green">Miễn phí</span>
+</div>
+</div>
+</section>
+<!-- Mô tả chi tiết -->
+<section class="rounded-2xl bg-tg-card border border-tg-border p-3.5 shadow-lg flex flex-col gap-2">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-1.5 text-tg-text-primary">
+<span class="material-symbols-outlined text-[18px] text-tg-accent">description</span>
+<h3 class="font-display font-semibold text-[14px]">Mô tả chi tiết</h3>
+</div>
+<span class="text-[11px] font-mono text-tg-accent">Bản quyền TrueNest</span>
+</div>
+<p class="text-[12.5px] text-tg-text-secondary leading-relaxed line-clamp-3" id="descContent">
+            Căn hộ tầng cao thoáng mát, ban công đón gió biển trong lành. Cách bãi tắm Mỹ Khê chỉ 300m đi bộ, tọa lạc tại trung tâm khu phố Tây An Thượng sầm uất với nhiều quán cafe sang trọng, chuỗi nhà hàng ẩm thực quốc tế và siêu thị tiện lợi mở cửa 24/7. Tòa nhà trang bị hệ thống an ninh đa lớp camera 24/24, thang máy thẻ từ, hầm để xe máy rộng rãi. Rất lý tưởng cho chuyên gia nước ngoài, digital nomad hoặc gia đình trẻ cần không gian sống chuẩn tiện nghi dài hạn.
+          </p>
+<button class="self-start text-[12px] text-tg-accent font-medium mt-0.5 flex items-center gap-0.5 active:opacity-75" id="descToggleBtn" onclick="toggleDescription()" type="button">
+<span>Xem thêm</span>
+<span class="material-symbols-outlined text-[16px]">expand_more</span>
+</button>
+</section>
+</div>
+<!-- TAB CONTENT: [BÀI ĐĂNG MARKETING] -->
+<div class="hidden flex flex-col gap-3.5" id="tabContentMarketing">
+<section class="rounded-2xl bg-tg-card border border-tg-border p-3.5 shadow-lg flex flex-col gap-3">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[18px] text-tg-accent">campaign</span>
+<h3 class="font-display font-semibold text-[14px] text-tg-text-primary">Mẫu đăng bài Social &amp; Ads</h3>
+</div>
+<span class="px-2 py-0.5 rounded bg-tg-accent/15 text-tg-accent text-[11px] font-mono">Đã chuẩn SEO</span>
+</div>
+<!-- Language Tabs for Marketing Post -->
+<div class="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+<button class="px-3 py-1 rounded-full text-[11px] font-medium bg-tg-accent text-white flex-shrink-0" id="btnLang-vi" onclick="changeMktLang('vi')" type="button">
+              🇻🇳 Tiếng Việt
+            </button>
+<button class="px-3 py-1 rounded-full text-[11px] font-medium bg-tg-card-high text-tg-text-secondary flex-shrink-0 hover:text-white" id="btnLang-en" onclick="changeMktLang('en')" type="button">
+              🇬🇧 English
+            </button>
+<button class="px-3 py-1 rounded-full text-[11px] font-medium bg-tg-card-high text-tg-text-secondary flex-shrink-0 hover:text-white" id="btnLang-ko" onclick="changeMktLang('ko')" type="button">
+              🇰🇷 한국어
+            </button>
+<button class="px-3 py-1 rounded-full text-[11px] font-medium bg-tg-card-high text-tg-text-secondary flex-shrink-0 hover:text-white" id="btnLang-ja" onclick="changeMktLang('ja')" type="button">
+              🇯🇵 日本語
+            </button>
+</div>
+<!-- Marketing Text Box -->
+<div class="relative">
+<textarea class="w-full h-56 p-3 rounded-xl bg-tg-bg/90 border border-tg-border font-mono text-[12px] leading-relaxed text-tg-text-primary resize-none focus:outline-none selection:bg-tg-accent/40" id="facebookMarketingText" readonly="">🏖️ [CHO THUÊ] CĂN HỘ 2PN AN THƯỢNG - CÁCH BIỂN MỸ KHÊ 300M!
+📍 Vị trí: 123 Trần Hưng Đạo, Sơn Trà, Đà Nẵng (Khu phố Tây An Thượng)
+
+✨ Điểm nổi bật:
+- Diện tích: 78m² thông thoáng, ban công gió biển Mỹ Khê
+- Thiết kế: 2 Phòng Ngủ + 2 WC riêng tư, tiện nghi
+- Đầy đủ nội thất cao cấp: Smart TV 55", tủ lạnh Inverter, máy giặt, điều hòa các phòng
+- Chính sách: Cho phép thú cưng (Pet-friendly)
+
+💰 Giá thuê: 12.5 triệu / tháng (Cọc 2 tháng)
+⚡ Điện: 3.8k/kWh | Nước: 100k/người | Wifi: Miễn phí
+📲 Inbox / Zalo / Telegram để xem căn trực tiếp hôm nay!</textarea>
+</div>
+<div class="flex items-center justify-between pt-1">
+<span class="text-[11px] font-mono text-tg-text-secondary">Sẵn sàng copy đăng Facebook Group</span>
+<button class="px-3 py-1.5 rounded-lg bg-tg-card-high hover:bg-tg-border text-tg-accent text-[12px] font-medium flex items-center gap-1 active:scale-95 transition" onclick="copyFacebookPost()" type="button">
+<span class="material-symbols-outlined text-[15px]">content_copy</span>
+<span>Sao chép nhanh</span>
+</button>
+</div>
+</section>
+</div>
+</main>
+<!-- 6. Sticky Action Bar Telegram ở đáy -->
+<!-- [✏️ Sửa thông tin], [⚡ Đổi trạng thái], [🗑️ Xóa căn] và MainButton Telegram [COPY BÀI ĐĂNG FACEBOOK] -->
+<footer class="fixed bottom-0 left-0 right-0 z-40 flex justify-center bg-tg-card/95 backdrop-blur-md border-t border-tg-border shadow-2xl">
+<div class="w-full max-w-[420px] p-2.5 flex flex-col gap-2">
+<!-- Action Row: Sửa, Đổi trạng thái, Xóa -->
+<div class="grid grid-cols-3 gap-2">
+<!-- ✏️ Sửa thông tin -->
+<button class="h-9 px-2 rounded-xl bg-tg-card-high hover:bg-tg-border text-tg-text-primary text-[12px] font-medium flex items-center justify-center gap-1.5 active:scale-95 transition border border-tg-border/70" onclick="actionEditPost()" title="Sửa thông tin căn" type="button">
+<span>✏️</span>
+<span class="truncate">Sửa thông tin</span>
+</button>
+<!-- ⚡ Đổi trạng thái -->
+<button class="h-9 px-2 rounded-xl bg-tg-amber/15 hover:bg-tg-amber/25 text-tg-amber text-[12px] font-medium flex items-center justify-center gap-1 active:scale-95 transition border border-tg-amber/30" onclick="openStatusModal()" title="Cập nhật trạng thái" type="button">
+<span>⚡</span>
+<span class="truncate">Trạng thái</span>
+</button>
+<!-- 🗑️ Xóa căn -->
+<button class="h-9 px-2 rounded-xl bg-tg-red/15 hover:bg-tg-red/25 text-tg-red text-[12px] font-medium flex items-center justify-center gap-1 active:scale-95 transition border border-tg-red/30" onclick="actionDeletePost()" title="Xóa căn hộ này" type="button">
+<span>🗑️</span>
+<span class="truncate">Xóa căn</span>
+</button>
+</div>
+<!-- MainButton Telegram [COPY BÀI ĐĂNG FACEBOOK] -->
+<button class="w-full h-11 rounded-xl bg-tg-accent hover:bg-tg-accent-hover active:scale-[0.98] text-white font-display font-bold text-[14px] uppercase tracking-wide flex items-center justify-center gap-2 shadow-lg transition-all" id="tgMainButton" onclick="copyFacebookPost()" type="button">
+<span class="material-symbols-outlined text-[19px]">content_copy</span>
+<span id="tgMainButtonText">COPY BÀI ĐĂNG FACEBOOK</span>
+</button>
+</div>
+</footer>
+<!-- Full Screen Viewer Modal -->
+<div class="hidden fixed inset-0 z-50 bg-black flex flex-col items-center justify-between p-4 select-none" id="fsModal">
+<div class="w-full flex items-center justify-between text-white pt-safe">
+<span class="font-mono text-[13px] text-white/80" id="fsIndicator">Ảnh 1 / 6</span>
+<button class="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center active:scale-90 transition" onclick="closeFullscreenViewer()" type="button">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<div class="w-full flex-1 flex items-center justify-center relative overflow-hidden">
+<img alt="Full Screen Preview" class="max-w-full max-h-[80vh] object-contain rounded-lg transition-transform duration-200" id="fsImage" src=""/>
+<button class="absolute left-2 w-10 h-10 rounded-full bg-white/20 text-white flex items-center justify-center active:scale-90" onclick="changeSlide(-1)" type="button">
+<span class="material-symbols-outlined text-[24px]">chevron_left</span>
+</button>
+<button class="absolute right-2 w-10 h-10 rounded-full bg-white/20 text-white flex items-center justify-center active:scale-90" onclick="changeSlide(1)" type="button">
+<span class="material-symbols-outlined text-[24px]">chevron_right</span>
+</button>
+</div>
+<div class="w-full text-center pb-safe">
+<span class="px-3 py-1 rounded-full bg-white/10 text-white text-[12px] font-mono">Cloudflare R2 CDN Stream • 1080p Ultra HD</span>
+</div>
+</div>
+<!-- Status Change Modal -->
+<div class="hidden fixed inset-0 z-50 flex items-end justify-center bg-black/75 backdrop-blur-sm p-3" id="statusChangeModal">
+<div class="w-full max-w-[400px] bg-tg-card rounded-2xl p-4 shadow-2xl border border-tg-border flex flex-col gap-3 mb-2 animate-in fade-in slide-in-from-bottom duration-200">
+<div class="flex items-center justify-between pb-2 border-b border-tg-border">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-tg-accent text-[20px]">sync_alt</span>
+<span class="font-display font-bold text-[15px] text-tg-text-primary">Đổi trạng thái căn #TN-204</span>
+</div>
+<button class="text-tg-text-secondary hover:text-white" onclick="closeStatusModal()" type="button">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<div class="flex flex-col gap-2">
+<button class="flex items-center justify-between p-3 rounded-xl bg-tg-card-high hover:bg-tg-border text-left transition" onclick="setStatusValue('Còn trống', 'tg-green')" type="button">
+<div class="flex items-center gap-2.5">
+<span class="w-3 h-3 rounded-full bg-tg-green"></span>
+<div>
+<p class="font-medium text-[13px] text-tg-text-primary">Còn trống (Available)</p>
+<p class="text-[11px] text-tg-text-secondary">Hiển thị cho khách và broker tìm kiếm</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-[18px] text-tg-green">check</span>
+</button>
+<button class="flex items-center justify-between p-3 rounded-xl bg-tg-card-high hover:bg-tg-border text-left transition" onclick="setStatusValue('Đã cọc / Giữ chỗ', 'tg-amber')" type="button">
+<div class="flex items-center gap-2.5">
+<span class="w-3 h-3 rounded-full bg-tg-amber"></span>
+<div>
+<p class="font-medium text-[13px] text-tg-text-primary">Đã cọc (Hold / Deposit)</p>
+<p class="text-[11px] text-tg-text-secondary">Tạm ẩn để chờ hoàn tất thủ tục</p>
+</div>
+</div>
+</button>
+<button class="flex items-center justify-between p-3 rounded-xl bg-tg-card-high hover:bg-tg-border text-left transition" onclick="setStatusValue('Đã cho thuê', 'tg-red')" type="button">
+<div class="flex items-center gap-2.5">
+<span class="w-3 h-3 rounded-full bg-tg-red"></span>
+<div>
+<p class="font-medium text-[13px] text-tg-text-primary">Đã cho thuê (Rented)</p>
+<p class="text-[11px] text-tg-text-secondary">Lưu trữ lịch sử hợp đồng</p>
+</div>
+</div>
+</button>
+</div>
+</div>
+</div>
+<!-- Toast Notification -->
+<div class="fixed top-14 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl bg-tg-accent text-white font-medium text-[13px] shadow-2xl flex items-center gap-2 opacity-0 pointer-events-none transition-all duration-300" id="toastNotification">
+<span class="material-symbols-outlined text-[18px]">done_all</span>
+<span id="toastMessage">Đã sao chép vào clipboard!</span>
+</div>
+</div>
+<script>
+    // Image Gallery Slides
+    const galleryImages = [
+      "https://lh3.googleusercontent.com/aida-public/AB6AXuDtMFgizqnKDsYFdJYIJChDykaALgxX9HdmACZkSHNpsTgEs8ODW-ksMOOjcZR4PDN-bZTHCqXV17MmflKzQtMTewBBxOM0kAs5iZmZ1-GA-U-RALPRNgkdj1uCIg1VxPEbpApReglAJT2GbZwtFLr1CKO-zsQdyrC7bCn0FwbFC0HoQTks9V8B_7p4ig40vhac3RuMQrvA2BTjmMXf0g6csr64Kdp1tddix7AmESNd4eG9X5_2WHWvRg",
+      "https://lh3.googleusercontent.com/aida-public/AB6AXuA_M9_S9ZRzzAC9V6TMVuUCLQzfm5XlNK1UZ7hK49japPIB17NSyR2V6dKKt-aKiVJxPdfog0ivICmVb74qLbACmF7JnAtgoKD6hKtcGnKrNIFToQUT2geHM0Jn-CVz3rBeWGzNTNMvMxjFQSsieyCK0sLv7rkPedzicdEaP1feKKsXsx3_VpdgFIXnahlBqUuqBIltqKk1s4hX0LQs2dYh-E-yBS17Xitxd1lQstOuMlMHeJ122ERSjQ",
+      "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1484154218962-a197022b5858?auto=format&fit=crop&w=800&q=80"
+    ];
+
+    let currentSlide = 0;
+
+    function renderSlide() {
+      const img = document.getElementById('galleryImg');
+      const counter = document.getElementById('slideIndicator');
+      const dots = document.getElementById('dotsContainer');
+      const fsImg = document.getElementById('fsImage');
+      const fsIndicator = document.getElementById('fsIndicator');
+
+      img.src = galleryImages[currentSlide];
+      counter.innerText = (currentSlide + 1) + " / " + galleryImages.length;
+      
+      if (fsImg) fsImg.src = galleryImages[currentSlide];
+      if (fsIndicator) fsIndicator.innerText = "Ảnh " + (currentSlide + 1) + " / " + galleryImages.length;
+
+      // Update dots
+      dots.innerHTML = '';
+      for (let i = 0; i < galleryImages.length; i++) {
+        const dot = document.createElement('span');
+        if (i === currentSlide) {
+          dot.className = "w-4 h-1.5 rounded-full bg-tg-accent transition-all";
+        } else {
+          dot.className = "w-1.5 h-1.5 rounded-full bg-white/40 transition-all";
+        }
+        dots.appendChild(dot);
+      }
+    }
+
+    function changeSlide(direction) {
+      currentSlide = (currentSlide + direction + galleryImages.length) % galleryImages.length;
+      renderSlide();
+    }
+
+    // Full Screen Viewer
+    function openFullscreenViewer() {
+      const modal = document.getElementById('fsModal');
+      modal.classList.remove('hidden');
+      renderSlide();
+    }
+
+    function closeFullscreenViewer() {
+      document.getElementById('fsModal').classList.add('hidden');
+    }
+
+    // Tab Switching
+    function switchTab(tab) {
+      const tabInfo = document.getElementById('tabContentInfo');
+      const tabMkt = document.getElementById('tabContentMarketing');
+      const btnInfo = document.getElementById('tabBtnInfo');
+      const btnMkt = document.getElementById('tabBtnMarketing');
+
+      if (tab === 'info') {
+        tabInfo.classList.remove('hidden');
+        tabMkt.classList.add('hidden');
+        btnInfo.className = "flex-1 py-2 rounded-lg text-center font-display font-medium text-[13px] transition-all bg-tg-accent text-white shadow";
+        btnMkt.className = "flex-1 py-2 rounded-lg text-center font-display font-medium text-[13px] transition-all text-tg-text-secondary hover:text-tg-text-primary";
+      } else {
+        tabInfo.classList.add('hidden');
+        tabMkt.classList.remove('hidden');
+        btnMkt.className = "flex-1 py-2 rounded-lg text-center font-display font-medium text-[13px] transition-all bg-tg-accent text-white shadow";
+        btnInfo.className = "flex-1 py-2 rounded-lg text-center font-display font-medium text-[13px] transition-all text-tg-text-secondary hover:text-tg-text-primary";
+      }
+    }
+
+    // Expand/Collapse Description
+    function toggleDescription() {
+      const desc = document.getElementById('descContent');
+      const btn = document.getElementById('descToggleBtn');
+      if (desc.classList.contains('line-clamp-3')) {
+        desc.classList.remove('line-clamp-3');
+        btn.innerHTML = '<span>Thu gọn</span><span class="material-symbols-outlined text-[16px]">expand_less</span>';
+      } else {
+        desc.classList.add('line-clamp-3');
+        btn.innerHTML = '<span>Xem thêm</span><span class="material-symbols-outlined text-[16px]">expand_more</span>';
+      }
+    }
+
+    // Marketing Post Multi-language
+    const marketingPosts = {
+      vi: `🏖️ [CHO THUÊ] CĂN HỘ 2PN AN THƯỢNG - CÁCH BIỂN MỸ KHÊ 300M!
+📍 Vị trí: 123 Trần Hưng Đạo, Sơn Trà, Đà Nẵng (Khu phố Tây An Thượng)
+
+✨ Điểm nổi bật:
+- Diện tích: 78m² thông thoáng, ban công gió biển Mỹ Khê
+- Thiết kế: 2 Phòng Ngủ + 2 WC riêng tư, tiện nghi
+- Đầy đủ nội thất cao cấp: Smart TV 55", tủ lạnh Inverter, máy giặt, điều hòa các phòng
+- Chính sách: Cho phép thú cưng (Pet-friendly)
+
+💰 Giá thuê: 12.5 triệu / tháng (Cọc 2 tháng)
+⚡ Điện: 3.8k/kWh | Nước: 100k/người | Wifi: Miễn phí
+📲 Inbox / Zalo / Telegram để xem căn trực tiếp hôm nay!`,
+      en: `🏖️ [FOR RENT] MODERN 2-BEDROOM APARTMENT - 300M TO MY KHE BEACH!
+📍 Location: 123 Tran Hung Dao, Son Tra, Da Nang (An Thuong Tourist Quarter)
+
+✨ Key Features:
+- Size: 78 sqm with spacious ocean breeze balcony
+- Layout: 2 Bedrooms + 2 Bathrooms, high floor
+- Fully furnished: 55" 4K Smart TV, Inverter fridge, washer, inverter AC
+- Pet-friendly (agreement required)
+
+💰 Rent: 12.5M VND / month (~$500 USD) - Deposit 2 months
+⚡ Electricity: 3.8k/kWh | Water: 100k/person | High-speed Wifi: FREE
+📲 DM or contact via Telegram / WhatsApp for a viewing tour!`,
+      ko: `🏖️ [다낭 아파트 임대] 미케비치 300m 안트엉 2베드룸 고급 아파트!
+📍 위치: 123 Tran Hung Dao, Son Tra, Da Nang (안트엉 관광지구)
+
+✨ 특징:
+- 면적: 78㎡ 바다 전망 발코니 구비
+- 구조: 방 2개 + 욕실 2개 (2PN/2WC)
+- 풀옵션 가구: 55인치 스마트TV, 인버터 냉장고, 세탁기, 에어컨 완비
+- 반려동물 동반 가능 (협의)
+
+💰 월세: 12,500,000 VND / 월 (보증금 2개월)
+⚡ 전기세: 3,800 VND/kWh | 수도: 100k/인 | 와이파이: 무료
+📲 텔레그램 / 카카오톡으로 지금 바로 문의하세요!`,
+      ja: `🏖️【ダナン賃貸】ミーケビーチ徒歩3分 アントゥオン 2LDK オーシャンビュー！
+📍 所在地: 123 Tran Hung Dao, Son Tra, Da Nang (外国人街アントゥオン)
+
+✨ 特徴:
+- 広さ: 78㎡ 爽やかな海風が通るバルコニー付き
+- 間取り: 2ベッドルーム + 2バスルーム (2PN/2WC)
+- 家具家電完備: 55型スマートテレビ、インバーター冷蔵庫、洗濯機、エアコン
+- ペット飼育相談可 (事前同意書)
+
+💰 賃料: 1,250万ドン / 月 (敷金2ヶ月)
+⚡ 電気代: 3.8k/kWh | 水道: 100k/人 | 高速Wifi: 無料
+📲 お気軽にダイレクトメッセージでお問い合わせください！`
+    };
+
+    function changeMktLang(lang) {
+      ['vi', 'en', 'ko', 'ja'].forEach(l => {
+        const btn = document.getElementById('btnLang-' + l);
+        if (btn) {
+          if (l === lang) {
+            btn.className = "px-3 py-1 rounded-full text-[11px] font-medium bg-tg-accent text-white flex-shrink-0";
+          } else {
+            btn.className = "px-3 py-1 rounded-full text-[11px] font-medium bg-tg-card-high text-tg-text-secondary flex-shrink-0 hover:text-white";
+          }
+        }
+      });
+      document.getElementById('facebookMarketingText').value = marketingPosts[lang] || marketingPosts.vi;
+    }
+
+    // Toast and Copy Handler
+    function showToast(message) {
+      const toast = document.getElementById('toastNotification');
+      const text = document.getElementById('toastMessage');
+      text.innerText = message;
+      toast.classList.remove('opacity-0', 'pointer-events-none');
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'pointer-events-none');
+      }, 2200);
+    }
+
+    function copyFacebookPost() {
+      const text = document.getElementById('facebookMarketingText').value;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+          showToast("Đã copy bài đăng Facebook thành công!");
+          const btn = document.getElementById('tgMainButtonText');
+          const original = btn.innerText;
+          btn.innerText = "✓ ĐÃ SAO CHÉP THÀNH CÔNG";
+          setTimeout(() => { btn.innerText = original; }, 2000);
+        }).catch(() => {
+          fallbackCopy(text);
+        });
+      } else {
+        fallbackCopy(text);
+      }
+    }
+
+    function fallbackCopy(text) {
+      const textarea = document.getElementById('facebookMarketingText');
+      textarea.select();
+      document.execCommand('copy');
+      showToast("Đã copy bài đăng Facebook!");
+    }
+
+    // Modal Status Controls
+    function openStatusModal() {
+      document.getElementById('statusChangeModal').classList.remove('hidden');
+    }
+
+    function closeStatusModal() {
+      document.getElementById('statusChangeModal').classList.add('hidden');
+    }
+
+    function setStatusValue(statusName, colorClass) {
+      closeStatusModal();
+      showToast("Đã cập nhật trạng thái: " + statusName);
+    }
+
+    // Telegram Bottom Actions
+    function actionEditPost() {
+      showToast("Mở màn hình chỉnh sửa #TN-204");
+    }
+
+    function actionDeletePost() {
+      if (confirm("Xác nhận xóa căn hộ #TN-204 khỏi hệ thống TrueNest?")) {
+        showToast("Đã đưa căn hộ vào mục lưu trữ");
+      }
+    }
+
+    function quickShareTelegram() {
+      if (navigator.share) {
+        navigator.share({
+          title: 'Căn hộ 2PN An Thượng #TN-204',
+          text: 'Căn hộ 2PN view biển Mỹ Khê 12.5tr/tháng - TrueNest Broker App',
+          url: window.location.href
+        }).catch(() => {});
+      } else {
+        copyFacebookPost();
+      }
+    }
+
+    // Initialize on load
+    renderSlide();
+  </script>
+</body></html>

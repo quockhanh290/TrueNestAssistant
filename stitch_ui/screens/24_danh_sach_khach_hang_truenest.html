@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="vi"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_tab" name="shell-type"/><title>Quản Lý Khách Hàng   Truenest - TrueNest Broker</title><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "surface-variant": "#202b36", "primary": "#2aabee", "on-tertiary": "#432c00", "primary-fixed-dim": "#89ceff", "error-container": "#93000a", "tertiary-container": "#d09729", "inverse-primary": "#006591", "on-secondary-fixed": "#002203", "outline": "#242f3d", "on-primary-container": "#ffffff", "on-surface": "#f5f5f5", "on-error-container": "#ffdad6", "surface": "#0e1621", "on-primary": "#ffffff", "surface-container-highest": "#242f3d", "tertiary-fixed": "#ffdeac", "on-error": "#690005", "primary-container": "#2aabee", "surface-container-lowest": "#080d14", "surface-bright": "#202b36", "surface-container-low": "#121b24", "on-tertiary-fixed": "#281900", "secondary-fixed": "#97f98f", "secondary-fixed-dim": "#7bdc75", "error": "#e53935", "on-primary-fixed-variant": "#004c6e", "background": "#0e1621", "tertiary-fixed-dim": "#fabc4c", "on-secondary-fixed-variant": "#00530f", "surface-container": "#17212b", "surface-tint": "#2aabee", "inverse-surface": "#f5f5f5", "outline-variant": "#242f3d", "on-tertiary-fixed-variant": "#604100", "secondary-container": "#1d3d24", "inverse-on-surface": "#0e1621", "on-background": "#f5f5f5", "surface-container-high": "#202b36", "on-primary-fixed": "#001e2f", "on-tertiary-container": "#4c3300", "on-secondary": "#003908", "primary-fixed": "#c9e6ff", "tertiary": "#ffab00", "on-secondary-container": "#91f389", "on-surface-variant": "#7e8b99", "secondary": "#4fae5b", "surface-dim": "#0e1621" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "margin-desktop": "2rem", "gutter-tablet": "1rem", "space-xl": "1.5rem", "space-lg": "1rem", "space-md": "0.75rem", "space-sm": "0.5rem", "margin-tablet": "1.5rem", "gutter": "0.75rem", "space-xs": "0.25rem", "gutter-desktop": "1.25rem", "margin": "1rem" }, "fontFamily": { "label-sm": [ "JetBrains Mono" ], "headline-md": [ "Space Grotesk" ], "label-md": [ "JetBrains Mono" ], "headline-lg": [ "Space Grotesk" ], "body-lg": [ "Geist" ], "headline-lg-mobile": [ "Space Grotesk" ], "body-sm": [ "Geist" ], "headline-sm": [ "Space Grotesk" ], "body-md": [ "Geist" ], "label-lg": [ "JetBrains Mono" ] }, "fontSize": { "label-sm": [ "10px", { "lineHeight": "14px", "fontWeight": "600" } ], "headline-md": [ "22px", { "lineHeight": "28px", "fontWeight": "600" } ], "label-md": [ "12px", { "lineHeight": "16px", "fontWeight": "500" } ], "headline-lg": [ "32px", { "lineHeight": "40px", "fontWeight": "700" } ], "body-lg": [ "16px", { "lineHeight": "24px", "fontWeight": "400" } ], "headline-lg-mobile": [ "26px", { "lineHeight": "32px", "fontWeight": "700" } ], "body-sm": [ "13px", { "lineHeight": "18px", "fontWeight": "400" } ], "headline-sm": [ "18px", { "lineHeight": "24px", "fontWeight": "600" } ], "body-md": [ "14px", { "lineHeight": "20px", "fontWeight": "400" } ], "label-lg": [ "14px", { "lineHeight": "18px", "fontWeight": "500" } ] } } } };</script><style>@layer base{html,body{width:100%;min-height:100vh;margin:0;padding:0;background-color:#0e1621;color:#f5f5f5;overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent;}body{display:flex;justify-content:center;}.pb-safe{padding-bottom:calc(env(safe-area-inset-bottom, 0px) + 4.25rem);}.pt-safe{padding-top:env(safe-area-inset-top, 0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface font-body-md text-on-surface antialiased"><div class="w-full max-w-[420px] min-h-screen relative flex flex-col bg-surface shadow-2xl"><header class="fixed top-0 w-full max-w-[420px] z-50 bg-surface-container/95 backdrop-blur-md shadow-sm pt-safe"><div class="h-12 px-3 flex items-center justify-between"><div class="flex items-center gap-2 min-w-0"><div class="w-7 h-7 rounded-lg bg-primary/15 flex items-center justify-center text-primary font-headline-sm text-[16px] font-bold">TN</div><span class="font-headline-sm text-[16px] text-on-surface font-bold tracking-tight truncate">TrueNest</span><span class="px-1.5 py-0.5 rounded bg-surface-variant text-primary font-label-sm text-[10px] tracking-wider uppercase">Broker</span></div><div class="flex items-center gap-2"><button aria-label="Hồ sơ Broker" class="w-9 h-9 rounded-full bg-surface-variant flex items-center justify-center text-on-surface active:scale-95 transition-transform relative" onclick="if(window.Telegram?.WebApp){window.Telegram.WebApp.HapticFeedback?.impactOccurred('light');}" type="button"><span class="material-symbols-outlined text-[20px] text-primary">account_circle</span><span class="absolute top-1 right-1 w-2 h-2 rounded-full bg-secondary ring-2 ring-surface-container"></span></button></div></div></header><main class="flex-1 w-full pt-12 pb-safe px-3 bg-surface"><div class="flex flex-col w-full pb-6 space-y-4">
+<!-- Top Action & Overview Bar -->
+<div class="flex items-center justify-between pt-1">
+<div class="flex items-center gap-2">
+<h1 class="font-headline-sm text-headline-sm text-on-surface tracking-tight">Khách hàng</h1>
+<span class="px-2 py-0.5 rounded-full bg-surface-container-high text-primary font-label-sm text-label-sm">8 khách</span>
+</div>
+<button class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary-container text-on-primary-container font-headline-sm text-[13px] font-semibold active:scale-95 transition-transform shadow-sm" onclick="if(window.Telegram?.WebApp){window.Telegram.WebApp.HapticFeedback?.impactOccurred('medium');}" type="button">
+<span class="material-symbols-outlined text-[18px]">person_add</span>
+<span>Thêm mới</span>
+</button>
+</div>
+<!-- Search Input Bar -->
+<div class="relative w-full">
+<div class="absolute inset-y-0 left-3 flex items-center pointer-events-none text-on-surface-variant">
+<span class="material-symbols-outlined text-[19px]">search</span>
+</div>
+<input class="w-full h-11 pl-9 pr-8 rounded-xl bg-surface-container text-on-surface placeholder:text-on-surface-variant font-body-md text-body-md outline-none focus:bg-surface-container-high transition-colors" placeholder="Tìm theo tên, SĐT, nhu cầu..." type="text"/>
+<button aria-label="Bộ lọc nâng cao" class="absolute inset-y-0 right-2 flex items-center text-on-surface-variant active:text-primary transition-colors" type="button">
+<span class="material-symbols-outlined text-[20px]">tune</span>
+</button>
+</div>
+<!-- Horizontal Filter Chips Scroll -->
+<div class="flex items-center gap-2 overflow-x-auto no-scrollbar -mx-3 px-3 py-0.5">
+<button class="flex-shrink-0 px-3 py-1.5 rounded-lg bg-surface-bright text-primary font-label-md text-label-md flex items-center gap-1.5 active:scale-95 transition-all shadow-sm" type="button">
+<span>Tất cả</span>
+<span class="px-1.5 py-0.2 rounded-full bg-primary/20 text-primary font-label-sm text-[10px]">8</span>
+</button>
+<button class="flex-shrink-0 px-3 py-1.5 rounded-lg bg-surface-container text-on-surface-variant font-label-md text-label-md flex items-center gap-1.5 active:scale-95 transition-all" type="button">
+<span>Đang tìm</span>
+<span class="px-1.5 py-0.2 rounded-full bg-surface-variant text-on-surface font-label-sm text-[10px]">4</span>
+</button>
+<button class="flex-shrink-0 px-3 py-1.5 rounded-lg bg-surface-container text-on-surface-variant font-label-md text-label-md flex items-center gap-1.5 active:scale-95 transition-all" type="button">
+<span>Đã gửi tin</span>
+<span class="px-1.5 py-0.2 rounded-full bg-surface-variant text-on-surface font-label-sm text-[10px]">2</span>
+</button>
+<button class="flex-shrink-0 px-3 py-1.5 rounded-lg bg-surface-container text-on-surface-variant font-label-md text-label-md flex items-center gap-1.5 active:scale-95 transition-all" type="button">
+<span>Đã xem</span>
+<span class="px-1.5 py-0.2 rounded-full bg-surface-variant text-on-surface font-label-sm text-[10px]">1</span>
+</button>
+<button class="flex-shrink-0 px-3 py-1.5 rounded-lg bg-surface-container text-on-surface-variant font-label-md text-label-md flex items-center gap-1.5 active:scale-95 transition-all" type="button">
+<span>Đã chốt</span>
+<span class="px-1.5 py-0.2 rounded-full bg-surface-variant text-on-surface font-label-sm text-[10px]">1</span>
+</button>
+</div>
+<!-- Customer Cards Feed -->
+<div class="flex flex-col space-y-3">
+<!-- Card 1: Nguyễn Văn A (Đang tìm - Có lịch xem) -->
+<div class="p-3.5 rounded-xl bg-surface-container flex flex-col space-y-2.5 shadow-sm active:bg-surface-container-high transition-colors">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2 min-w-0">
+<div class="w-8 h-8 rounded-full bg-primary/15 text-primary flex items-center justify-center font-headline-sm text-sm font-semibold flex-shrink-0">
+            A
+          </div>
+<div class="min-w-0">
+<h2 class="font-headline-sm text-headline-sm text-on-surface truncate leading-tight">Nguyễn Văn A</h2>
+<div class="flex items-center gap-1 text-on-surface-variant">
+<span class="material-symbols-outlined text-[13px] text-primary">smart_toy</span>
+<span class="font-body-sm text-[11px]">Bot Sale Tự Động</span>
+</div>
+</div>
+</div>
+<span class="px-2 py-0.5 rounded-md bg-primary/15 text-primary font-label-sm text-label-sm uppercase flex items-center gap-1 flex-shrink-0">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+          Đang tìm
+        </span>
+</div>
+<!-- Demand Specs -->
+<div class="p-2.5 rounded-lg bg-surface-container-low flex flex-col space-y-1">
+<div class="flex items-start gap-1.5 text-on-surface">
+<span class="material-symbols-outlined text-[16px] text-primary flex-shrink-0 mt-0.5">apartment</span>
+<p class="font-body-md text-body-md leading-snug">
+            Cần <span class="font-label-md font-semibold text-primary">2PN &lt;15tr</span> Sơn Trà, dọn vào tháng 11
+          </p>
+</div>
+</div>
+<!-- Schedule Badge -->
+<div class="px-2.5 py-1.5 rounded-lg bg-tertiary-container/20 flex items-center justify-between">
+<div class="flex items-center gap-1.5 text-tertiary min-w-0">
+<span class="material-symbols-outlined text-[16px] flex-shrink-0">schedule</span>
+<span class="font-label-md text-label-md truncate">20/10 14:00 · 2PN An Thượng</span>
+</div>
+<span class="font-label-sm text-[11px] text-tertiary font-semibold flex-shrink-0">Hôm nay</span>
+</div>
+<!-- Actions Footer -->
+<div class="flex items-center gap-2 pt-1">
+<button class="flex-1 h-9 rounded-lg bg-surface-container-high text-primary font-headline-sm text-[12px] font-semibold flex items-center justify-center gap-1 active:scale-95 transition-transform" onclick="if(window.Telegram?.WebApp){window.Telegram.WebApp.HapticFeedback?.impactOccurred('light');}" type="button">
+<span class="material-symbols-outlined text-[16px]">maps_home_work</span>
+<span>Gợi ý tin (3)</span>
+</button>
+<button class="w-12 h-9 rounded-lg bg-secondary-container text-on-secondary-container flex items-center justify-center active:scale-95 transition-transform flex-shrink-0" onclick="if(window.Telegram?.WebApp){window.Telegram.WebApp.HapticFeedback?.impactOccurred('light');}" type="button">
+<span class="material-symbols-outlined text-[18px]">call</span>
+</button>
+</div>
+</div>
+<!-- Card 2: Trần Thị Bích (Đã gửi tin) -->
+<div class="p-3.5 rounded-xl bg-surface-container flex flex-col space-y-2.5 shadow-sm active:bg-surface-container-high transition-colors">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2 min-w-0">
+<div class="w-8 h-8 rounded-full bg-secondary/15 text-secondary flex items-center justify-center font-headline-sm text-sm font-semibold flex-shrink-0">
+            B
+          </div>
+<div class="min-w-0">
+<h2 class="font-headline-sm text-headline-sm text-on-surface truncate leading-tight">Trần Thị Bích</h2>
+<div class="flex items-center gap-1 text-on-surface-variant">
+<span class="material-symbols-outlined text-[13px] text-primary-fixed-dim">campaign</span>
+<span class="font-body-sm text-[11px]">Facebook Ads Lead</span>
+</div>
+</div>
+</div>
+<span class="px-2 py-0.5 rounded-md bg-surface-variant text-on-surface-variant font-label-sm text-label-sm uppercase flex-shrink-0">
+          Đã gửi tin
+        </span>
+</div>
+<!-- Demand Specs -->
+<div class="p-2.5 rounded-lg bg-surface-container-low flex flex-col space-y-1">
+<div class="flex items-start gap-1.5 text-on-surface">
+<span class="material-symbols-outlined text-[16px] text-secondary flex-shrink-0 mt-0.5">chair</span>
+<p class="font-body-md text-body-md leading-snug">
+            Cần <span class="font-label-md font-semibold text-secondary">&lt;7tr Studio</span> full đồ, gần ĐH Ngoại Ngữ / Ngũ Hành Sơn
+          </p>
+</div>
+</div>
+<!-- Status note -->
+<div class="flex items-center gap-1.5 text-on-surface-variant font-body-sm text-body-sm px-1">
+<span class="material-symbols-outlined text-[16px]">calendar_today</span>
+<span>Chưa đặt lịch hẹn xem</span>
+</div>
+<!-- Actions Footer -->
+<div class="flex items-center gap-2 pt-1">
+<button class="flex-1 h-9 rounded-lg bg-surface-container-high text-on-surface font-headline-sm text-[12px] font-semibold flex items-center justify-center gap-1.5 active:scale-95 transition-transform" onclick="if(window.Telegram?.WebApp){window.Telegram.WebApp.HapticFeedback?.impactOccurred('light');}" type="button">
+<span class="material-symbols-outlined text-[16px] text-tertiary">forward_to_inbox</span>
+<span>Gửi rổ hàng mới</span>
+<span class="px-1.5 py-0.2 rounded bg-tertiary/20 text-tertiary font-label-sm text-[10px]">còn 2/3</span>
+</button>
+<button class="w-12 h-9 rounded-lg bg-surface-container-high text-on-surface-variant flex items-center justify-center active:scale-95 transition-transform flex-shrink-0" onclick="if(window.Telegram?.WebApp){window.Telegram.WebApp.HapticFeedback?.impactOccurred('light');}" type="button">
+<span class="material-symbols-outlined text-[18px]">chat</span>
+</button>
+</div>
+</div>
+<!-- Card 3: Lê Hoàng Nam (VIP - Đang đàm phán) -->
+<div class="p-3.5 rounded-xl bg-surface-container flex flex-col space-y-2.5 shadow-sm active:bg-surface-container-high transition-colors relative overflow-hidden">
+<!-- VIP accent edge -->
+<div class="absolute top-0 right-0 w-16 h-16 bg-gradient-to-bl from-tertiary/20 via-transparent to-transparent pointer-events-none"></div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2 min-w-0">
+<div class="w-8 h-8 rounded-full bg-tertiary/20 text-tertiary flex items-center justify-center font-headline-sm text-sm font-semibold flex-shrink-0">
+            N
+          </div>
+<div class="min-w-0">
+<div class="flex items-center gap-1.5">
+<h2 class="font-headline-sm text-headline-sm text-on-surface truncate leading-tight">Lê Hoàng Nam</h2>
+<span class="px-1.5 py-0.2 rounded bg-tertiary/20 text-tertiary font-label-sm text-[9px] font-bold tracking-wider uppercase">VIP</span>
+</div>
+<div class="flex items-center gap-1 text-on-surface-variant">
+<span class="material-symbols-outlined text-[13px] text-primary">chat_bubble</span>
+<span class="font-body-sm text-[11px]">Zalo Cá Nhân</span>
+</div>
+</div>
+</div>
+<span class="px-2 py-0.5 rounded-md bg-tertiary/15 text-tertiary font-label-sm text-label-sm uppercase flex-shrink-0">
+          Đã xem
+        </span>
+</div>
+<!-- Demand Specs -->
+<div class="p-2.5 rounded-lg bg-surface-container-low flex flex-col space-y-1.5">
+<div class="flex items-start gap-1.5 text-on-surface">
+<span class="material-symbols-outlined text-[16px] text-tertiary flex-shrink-0 mt-0.5">water_lux</span>
+<p class="font-body-md text-body-md leading-snug">
+            Cần <span class="font-label-md font-semibold text-tertiary">3PN &lt;25tr</span> view biển Mỹ Khê hoặc sông Hàn
+          </p>
+</div>
+<div class="flex items-center gap-1 text-on-surface-variant font-body-sm text-[12px] pt-1">
+<span class="material-symbols-outlined text-[14px] text-secondary">verified</span>
+<span>Đã xem căn Monarchy hôm qua · đang đàm phán cọc</span>
+</div>
+</div>
+<!-- Actions Footer -->
+<div class="flex items-center gap-2 pt-1">
+<button class="flex-1 h-9 rounded-lg bg-primary-container text-on-primary-container font-headline-sm text-[12px] font-semibold flex items-center justify-center gap-1.5 active:scale-95 transition-transform" onclick="if(window.Telegram?.WebApp){window.Telegram.WebApp.HapticFeedback?.impactOccurred('medium');}" type="button">
+<span class="material-symbols-outlined text-[16px]">edit_calendar</span>
+<span>Đặt lịch chốt cọc</span>
+</button>
+<button class="w-12 h-9 rounded-lg bg-secondary-container text-on-secondary-container flex items-center justify-center active:scale-95 transition-transform flex-shrink-0" onclick="if(window.Telegram?.WebApp){window.Telegram.WebApp.HapticFeedback?.impactOccurred('light');}" type="button">
+<span class="material-symbols-outlined text-[18px]">call</span>
+</button>
+</div>
+</div>
+<!-- Card 4: Phạm Minh Tuấn (Đã chốt) -->
+<div class="p-3.5 rounded-xl bg-surface-container/70 flex flex-col space-y-2.5 shadow-sm active:bg-surface-container-high transition-colors">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2 min-w-0">
+<div class="w-8 h-8 rounded-full bg-secondary-container text-on-secondary-container flex items-center justify-center font-headline-sm text-sm font-semibold flex-shrink-0">
+            T
+          </div>
+<div class="min-w-0">
+<h2 class="font-headline-sm text-headline-sm text-on-surface truncate leading-tight">Phạm Minh Tuấn</h2>
+<div class="flex items-center gap-1 text-on-surface-variant">
+<span class="material-symbols-outlined text-[13px] text-secondary">handshake</span>
+<span class="font-body-sm text-[11px]">Hợp đồng thành công</span>
+</div>
+</div>
+</div>
+<span class="px-2 py-0.5 rounded-md bg-secondary-container text-on-secondary-container font-label-sm text-label-sm uppercase flex items-center gap-1 flex-shrink-0 font-bold">
+<span class="material-symbols-outlined text-[12px]">check_circle</span>
+          Đã chốt
+        </span>
+</div>
+<!-- Success Details -->
+<div class="p-2.5 rounded-lg bg-surface-container-low/60 flex flex-col space-y-1">
+<div class="flex items-center gap-1.5 text-on-surface">
+<span class="material-symbols-outlined text-[16px] text-secondary flex-shrink-0">key</span>
+<p class="font-body-md text-body-md truncate">
+            Đã thuê 2PN The Royal · Hợp đồng 12 tháng
+          </p>
+</div>
+<div class="flex items-center justify-between text-on-surface-variant font-label-md text-[11px] pt-1">
+<span>Phí hoa hồng nhận: <strong class="text-secondary font-mono">100%</strong></span>
+<span>Hết hạn: 10/2025</span>
+</div>
+</div>
+<!-- Actions Footer -->
+<div class="flex items-center gap-2 pt-1">
+<button class="flex-1 h-9 rounded-lg bg-surface-container-high text-on-surface-variant font-headline-sm text-[12px] font-medium flex items-center justify-center gap-1 active:scale-95 transition-transform" type="button">
+<span class="material-symbols-outlined text-[16px]">description</span>
+<span>Xem hợp đồng số</span>
+</button>
+<button class="px-3 h-9 rounded-lg bg-surface-container-high text-on-surface-variant font-headline-sm text-[12px] flex items-center justify-center gap-1 active:scale-95 transition-transform" type="button">
+<span class="material-symbols-outlined text-[16px]">notifications</span>
+<span>Nhắc tái ký</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Quick Add Floating / Sticky Action Trigger -->
+<div class="pt-2">
+<button class="w-full h-12 rounded-xl bg-primary-container text-on-primary-container font-headline-sm text-body-md font-semibold flex items-center justify-center gap-2 shadow-md active:scale-[0.98] transition-transform" onclick="if(window.Telegram?.WebApp){window.Telegram.WebApp.HapticFeedback?.impactOccurred('medium');}" type="button">
+<span class="material-symbols-outlined text-[20px]">add_circle</span>
+<span class="tracking-wide uppercase font-bold text-[13px]">+ Thêm khách hàng mới</span>
+</button>
+</div>
+</div>
+<script>
+  // Simple Telegram WebApp feedback integration check
+  document.addEventListener('DOMContentLoaded', () => {
+    if (window.Telegram && window.Telegram.WebApp) {
+      window.Telegram.WebApp.ready();
+    }
+  });
+</script></main><nav class="fixed bottom-0 w-full max-w-[420px] z-50 pb-safe bg-surface-container/95 backdrop-blur-xl shadow-[0_-2px_12px_rgba(0,0,0,0.35)]" data-active-classes="text-primary font-semibold"><div class="h-14 px-1 flex items-center justify-around"><a class="flex-1 h-12 flex flex-col items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors" data-path="can-ho" href="#"><span class="material-symbols-outlined text-[22px]">home</span><span class="font-headline-sm text-[11px] leading-tight mt-0.5">Căn hộ</span></a><a class="flex-1 h-12 flex flex-col items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors relative" data-path="khach-hang" href="#"><div class="relative flex items-center justify-center"><span class="material-symbols-outlined text-[22px]">group</span><span class="absolute -top-1 -right-2 px-1 min-w-[14px] h-[14px] rounded-full bg-primary text-surface font-label-sm text-[9px] font-bold flex items-center justify-center leading-none">3</span></div><span class="font-headline-sm text-[11px] leading-tight mt-0.5">Khách</span></a><a class="flex-1 h-12 flex flex-col items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors" data-path="lich-xem" href="#"><span class="material-symbols-outlined text-[22px]">calendar_month</span><span class="font-headline-sm text-[11px] leading-tight mt-0.5">Lịch xem</span></a><a class="flex-1 h-12 flex flex-col items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors" data-path="menu-mo-rong" href="#"><span class="material-symbols-outlined text-[22px]">more_horiz</span><span class="font-headline-sm text-[11px] leading-tight mt-0.5">Thêm</span></a></div></nav></div></body></html>

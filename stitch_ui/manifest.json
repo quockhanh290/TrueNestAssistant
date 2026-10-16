@@ -1,0 +1,252 @@
+[
+  {
+    "index": 1,
+    "title": "Tài liệu diễn giải hệ thống màn hình TrueNest",
+    "slug": "tai_lieu_dien_giai_he_thong_man_hinh",
+    "deviceType": "DESKTOP",
+    "width": "2560",
+    "height": "5472",
+    "htmlFile": "01_tai_lieu_dien_giai_he_thong_man_hinh.html",
+    "screenshotFile": "01_tai_lieu_dien_giai_he_thong_man_hinh.png"
+  },
+  {
+    "index": 2,
+    "title": "Cài đặt thông báo - TrueNest",
+    "slug": "cai_at_thong_bao_truenest",
+    "deviceType": "MOBILE",
+    "width": "780",
+    "height": "2476",
+    "htmlFile": "02_cai_at_thong_bao_truenest.html",
+    "screenshotFile": "02_cai_at_thong_bao_truenest.png"
+  },
+  {
+    "index": 3,
+    "title": "Sửa thông tin căn - TrueNest",
+    "slug": "sua_thong_tin_can_truenest",
+    "deviceType": "MOBILE",
+    "width": "780",
+    "height": "3340",
+    "htmlFile": "03_sua_thong_tin_can_truenest.html",
+    "screenshotFile": "03_sua_thong_tin_can_truenest.png"
+  },
+  {
+    "index": 4,
+    "title": "Chi tiết căn hộ - TrueNest",
+    "slug": "chi_tiet_can_ho_truenest",
+    "deviceType": "MOBILE",
+    "width": "780",
+    "height": "3294",
+    "htmlFile": "04_chi_tiet_can_ho_truenest.html",
+    "screenshotFile": "04_chi_tiet_can_ho_truenest.png"
+  },
+  {
+    "index": 5,
+    "title": "Tạo trang chia sẻ tin - TrueNest",
+    "slug": "tao_trang_chia_se_tin_truenest",
+    "deviceType": "MOBILE",
+    "width": "780",
+    "height": "2468",
+    "htmlFile": "05_tao_trang_chia_se_tin_truenest.html",
+    "screenshotFile": "05_tao_trang_chia_se_tin_truenest.png"
+  },
+  {
+    "index": 6,
+    "title": "Đề xuất tin liên broker - TrueNest",
+    "slug": "e_xuat_tin_lien_broker_truenest",
+    "deviceType": "MOBILE",
+    "width": "780",
+    "height": "2328",
+    "htmlFile": "06_e_xuat_tin_lien_broker_truenest.html",
+    "screenshotFile": "06_e_xuat_tin_lien_broker_truenest.png"
+  },
+  {
+    "index": 7,
+    "title": "Marketing Kit & Copywriting - TrueNest Broker App",
+    "slug": "marketing_kit_copywriting_truenes",
+    "deviceType": "DESKTOP",
+    "width": "2560",
+    "height": "4088",
+    "htmlFile": "07_marketing_kit_copywriting_truenes.html",
+    "screenshotFile": "07_marketing_kit_copywriting_truenes.png"
+  },
+  {
+    "index": 8,
+    "title": "Social media card for TrueNest Broker Web App, a modern real estate broker Telegram Mini App and management platform in Da Nang Vietnam. High-tech fintech UI aesthetics, dark blue and cyan neon accents (#0e1621, #2aabee), 3D isometric floating smartphone displaying app UI cards, AI scoring badge 100/100, cloud data sync, sleek luxury real estate coastal Da Nang backdrop blurred subtly. Professional, clean, engaging Instagram card with bold typography and modern tech startup visual appeal.",
+    "slug": "social_media_card_for_truenest_broker",
+    "deviceType": "DESKTOP",
+    "width": "1024",
+    "height": "1024",
+    "htmlFile": null,
+    "screenshotFile": "08_social_media_card_for_truenest_broker.png"
+  },
+  {
+    "index": 9,
+    "title": "Gợi ý tin cho khách - TrueNest",
+    "slug": "goi_y_tin_cho_khach_truenest",
+    "deviceType": "MOBILE",
+    "width": "780",
+    "height": "2296",
+    "htmlFile": "09_goi_y_tin_cho_khach_truenest.html",
+    "screenshotFile": "09_goi_y_tin_cho_khach_truenest.png"
+  },
+  {
+    "index": 10,
+    "title": "Quản lý bài đăng - TrueNest",
+    "slug": "quan_ly_bai_ang_truenest",
+    "deviceType": "MOBILE",
+    "width": "780",
+    "height": "2250",
+    "htmlFile": "10_quan_ly_bai_ang_truenest.html",
+    "screenshotFile": "10_quan_ly_bai_ang_truenest.png"
+  },
+  {
+    "index": 11,
+    "title": "image.png",
+    "slug": "imagepng",
+    "deviceType": "DESKTOP",
+    "width": "672",
+    "height": "148",
+    "htmlFile": null,
+    "screenshotFile": "11_imagepng.png"
+  },
+  {
+    "index": 12,
+    "title": "Chi tiết căn hộ - TrueNest",
+    "slug": "chi_tiet_can_ho_truenest_2",
+    "deviceType": "MOBILE",
+    "width": "780",
+    "height": "3126",
+    "htmlFile": "12_chi_tiet_can_ho_truenest_2.html",
+    "screenshotFile": "12_chi_tiet_can_ho_truenest_2.png"
+  },
+  {
+    "index": 13,
+    "title": "Thêm căn mới - TrueNest",
+    "slug": "them_can_moi_truenest",
+    "deviceType": "MOBILE",
+    "width": "780",
+    "height": "2164",
+    "htmlFile": "13_them_can_moi_truenest.html",
+    "screenshotFile": "13_them_can_moi_truenest.png"
+  },
+  {
+    "index": 14,
+    "title": "Tab Thêm - TrueNest Broker",
+    "slug": "tab_them_truenest_broker",
+    "deviceType": "MOBILE",
+    "width": "780",
+    "height": "1948",
+    "htmlFile": "14_tab_them_truenest_broker.html",
+    "screenshotFile": "14_tab_them_truenest_broker.png"
+  },
+  {
+    "index": 15,
+    "title": "Danh sách căn - TrueNest",
+    "slug": "danh_sach_can_truenest",
+    "deviceType": "MOBILE",
+    "width": "780",
+    "height": "3158",
+    "htmlFile": "15_danh_sach_can_truenest.html",
+    "screenshotFile": "15_danh_sach_can_truenest.png"
+  },
+  {
+    "index": 16,
+    "title": "Match liên broker - TrueNest",
+    "slug": "match_lien_broker_truenest",
+    "deviceType": "MOBILE",
+    "width": "780",
+    "height": "2916",
+    "htmlFile": "16_match_lien_broker_truenest.html",
+    "screenshotFile": "16_match_lien_broker_truenest.png"
+  },
+  {
+    "index": 17,
+    "title": "Quản lý Hoa hồng - TrueNest",
+    "slug": "quan_ly_hoa_hong_truenest",
+    "deviceType": "MOBILE",
+    "width": "780",
+    "height": "1878",
+    "htmlFile": "17_quan_ly_hoa_hong_truenest.html",
+    "screenshotFile": "17_quan_ly_hoa_hong_truenest.png"
+  },
+  {
+    "index": 18,
+    "title": "Hồ sơ Broker & Uy tín - TrueNest",
+    "slug": "ho_so_broker_uy_tin_truenest",
+    "deviceType": "MOBILE",
+    "width": "780",
+    "height": "3028",
+    "htmlFile": "18_ho_so_broker_uy_tin_truenest.html",
+    "screenshotFile": "18_ho_so_broker_uy_tin_truenest.png"
+  },
+  {
+    "index": 19,
+    "title": "Sleek and polished email newsletter header banner for TrueNest Real Estate Broker Ecosystem. Clean modern dark-mode aesthetic (#071420 to #101d28 background with vibrant cyan #2aabee glow), featuring stylized minimalist skyline of Da Nang coastal city integrated with geometric tech nodes, network broker matching lines, and subtle smartphone frame. Sophisticated, executive B2B tech newsletter header, elegant typography TrueNest Broker Terminal.",
+    "slug": "sleek_and_polished_email_newsletter_h",
+    "deviceType": "DESKTOP",
+    "width": "1376",
+    "height": "768",
+    "htmlFile": null,
+    "screenshotFile": "19_sleek_and_polished_email_newsletter_h.png"
+  },
+  {
+    "index": 20,
+    "title": "Bộ lọc căn hộ (Bottom Sheet) - TrueNest",
+    "slug": "bo_loc_can_ho_bottom_sheet_truenest",
+    "deviceType": "MOBILE",
+    "width": "780",
+    "height": "3920",
+    "htmlFile": "20_bo_loc_can_ho_bottom_sheet_truenest.html",
+    "screenshotFile": "20_bo_loc_can_ho_bottom_sheet_truenest.png"
+  },
+  {
+    "index": 21,
+    "title": "Nâng cấp gói cước - TrueNest",
+    "slug": "nang_cap_goi_cuoc_truenest",
+    "deviceType": "MOBILE",
+    "width": "780",
+    "height": "2934",
+    "htmlFile": "21_nang_cap_goi_cuoc_truenest.html",
+    "screenshotFile": "21_nang_cap_goi_cuoc_truenest.png"
+  },
+  {
+    "index": 22,
+    "title": "Marketing Kit.md",
+    "slug": "marketing_kitmd",
+    "deviceType": "MOBILE",
+    "width": "780",
+    "height": "1768",
+    "htmlFile": "22_marketing_kitmd.md",
+    "screenshotFile": null
+  },
+  {
+    "index": 23,
+    "title": "Digital marketing web banner ad for TrueNest Broker Platform, real estate AI-powered Telegram Mini App. Premium dark UI style (#0e1621 dark navy with bright electric cyan #2aabee highlights), featuring modern UI mockup screens floating dynamically, AI Matching indicators, Cloudflare R2 fast photo badges, Telegram Mini App native integration badge. High conversion advertising layout with spacious copy area on the left and dynamic 3D app visual on the right. Professional B2B SaaS real estate tech banner.",
+    "slug": "digital_marketing_web_banner_ad_for_t",
+    "deviceType": "DESKTOP",
+    "width": "1376",
+    "height": "768",
+    "htmlFile": null,
+    "screenshotFile": "23_digital_marketing_web_banner_ad_for_t.png"
+  },
+  {
+    "index": 24,
+    "title": "Danh sách khách hàng - TrueNest",
+    "slug": "danh_sach_khach_hang_truenest",
+    "deviceType": "MOBILE",
+    "width": "780",
+    "height": "2484",
+    "htmlFile": "24_danh_sach_khach_hang_truenest.html",
+    "screenshotFile": "24_danh_sach_khach_hang_truenest.png"
+  },
+  {
+    "index": 25,
+    "title": "Chi tiết khách hàng - TrueNest",
+    "slug": "chi_tiet_khach_hang_truenest",
+    "deviceType": "MOBILE",
+    "width": "780",
+    "height": "1960",
+    "htmlFile": "25_chi_tiet_khach_hang_truenest.html",
+    "screenshotFile": "25_chi_tiet_khach_hang_truenest.png"
+  }
+]

@@ -1,0 +1,511 @@
+<!DOCTYPE html><html lang="vi" style=""><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tài Liệu Diễn Giải UI/UX — TrueNest Broker App (Telegram Mini App)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=Plus+Jakarta+Sans:wght@600;700;800&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #050d15;
+      color: #e2e8f0;
+    }
+    h1, h2, h3, h4, .font-heading {
+      font-family: 'Space Grotesk', sans-serif;
+    }
+    .custom-scroll::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: #1e293b;
+      border-radius: 4px;
+    }
+    .badge-glow {
+      box-shadow: 0 0 15px rgba(42, 171, 238, 0.25);
+    }
+  </style>
+<style>
+  *, *::before, *::after {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+  }
+  h1, h2, h3, h4, .font-heading, .font-display, [class*="font-bold"], [class*="font-semibold"] {
+    font-family: 'Space Grotesk', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  }
+  .material-symbols-outlined, [class*="material-symbols"] {
+    font-family: 'Material Symbols Outlined' !important;
+  }
+  code, pre, .font-mono, [class*="font-mono"] {
+    font-family: 'JetBrains Mono', monospace !important;
+  }
+</style></head>
+<body class="min-h-screen text-slate-200 antialiased p-4 md:p-10 selection:bg-sky-500 selection:text-white">
+
+  <!-- TOP HEADER / HERO -->
+  <header class="max-w-6xl mx-auto mb-12 border-b border-slate-800/80 pb-8">
+    <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+      <div class="flex items-center space-x-3">
+        <div class="w-12 h-12 rounded-xl bg-gradient-to-tr from-sky-600 to-cyan-400 flex items-center justify-center font-bold text-xl text-white shadow-lg shadow-sky-500/20">
+          TN
+        </div>
+        <div>
+          <h1 class="text-2xl md:text-3xl font-extrabold text-white tracking-tight flex items-center gap-2">
+            TrueNest Broker Web App
+            <span class="text-xs uppercase font-semibold px-2.5 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20">Telegram Mini App</span>
+          </h1>
+          <p class="text-sm text-slate-400">Kiến trúc UI/UX &amp; Diễn giải chi tiết toàn bộ màn hình hệ thống (17 Màn hình)</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 text-xs text-slate-400 bg-slate-900/80 border border-slate-800 px-3.5 py-2 rounded-lg">
+        <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+        Hệ màu Dark Theme TMA: <code class="text-sky-300 font-mono">#0e1621 · #17212b · #2aabee</code>
+      </div>
+    </div>
+
+    <!-- Tóm tắt số liệu -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+      <div class="bg-slate-900/60 border border-slate-800/80 rounded-xl p-4">
+        <div class="text-slate-400 text-xs uppercase font-medium">Tổng màn hình</div>
+        <div class="text-2xl font-bold text-white mt-1">17 Màn hình</div>
+        <div class="text-[11px] text-sky-400 mt-0.5">Mobile-First (420px standard)</div>
+      </div>
+      <div class="bg-slate-900/60 border border-slate-800/80 rounded-xl p-4">
+        <div class="text-slate-400 text-xs uppercase font-medium">Trụ cột nghiệp vụ</div>
+        <div class="text-2xl font-bold text-sky-400 mt-1">4 Phân hệ</div>
+        <div class="text-[11px] text-slate-400 mt-0.5">Kho căn, Lead CRM, Match, Gói</div>
+      </div>
+      <div class="bg-slate-900/60 border border-slate-800/80 rounded-xl p-4">
+        <div class="text-slate-400 text-xs uppercase font-medium">Môi trường thực thi</div>
+        <div class="text-2xl font-bold text-emerald-400 mt-1">Telegram TMA</div>
+        <div class="text-[11px] text-slate-400 mt-0.5">WebView, MainButton, Haptic</div>
+      </div>
+      <div class="bg-slate-900/60 border border-slate-800/80 rounded-xl p-4">
+        <div class="text-slate-400 text-xs uppercase font-medium">Công nghệ phụ trợ</div>
+        <div class="text-2xl font-bold text-amber-400 mt-1">AI &amp; Cloudflare</div>
+        <div class="text-[11px] text-slate-400 mt-0.5">AI Scoring 100đ, Ảnh R2 CDN</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- NỘI DUNG CHÍNH -->
+  <main class="max-w-6xl mx-auto space-y-16">
+
+    <!-- PHẦN 1: QUẢN LÝ QUỸ CĂN HỘ -->
+    <section>
+      <div class="flex items-center gap-3 mb-6">
+        <span class="w-8 h-8 rounded-lg bg-sky-500/20 text-sky-400 flex items-center justify-center font-bold text-base">01</span>
+        <div>
+          <h2 class="text-xl font-bold text-white tracking-wide">Phân Hệ 1: Quản Lý Quỹ Căn Hộ (Listing &amp; Inventory Flow)</h2>
+          <p class="text-xs text-slate-400">Giúp broker quản lý giỏ hàng căn hộ Đà Nẵng, lọc chuyên sâu 6 nhóm tiêu chí và tối ưu điểm số AI.</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+
+        <!-- Màn 1 -->
+        <div class="bg-slate-900/70 border border-slate-800 rounded-xl p-5 hover:border-slate-700 transition flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-sky-300">Screen #1 · Tab Home</span>
+              <span class="text-[11px] text-emerald-400 font-medium">● Tab Bar Cố Định</span>
+            </div>
+            <h3 class="text-base font-bold text-white">Danh sách căn hộ (Tab 🏠 Căn hộ)</h3>
+            <p class="text-xs text-slate-400 mt-2 leading-relaxed">
+              Hiển thị danh sách rổ hàng broker quản lý dạng card ảnh R2 tỉ lệ 16:9. Tích hợp điểm AI (≥80đ xanh, 50-79đ vàng, &lt;50đ đỏ), giá thuê, diện tích, trạng thái trống/đã thuê.
+            </p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+            <span class="">Thao tác: Search, Lọc, [+] Thêm</span>
+            <span class="text-sky-400 font-mono">Mobile Tab</span>
+          </div>
+        </div>
+
+        <!-- Màn 2 -->
+        <div class="bg-slate-900/70 border border-slate-800 rounded-xl p-5 hover:border-slate-700 transition flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-sky-300">Screen #2 · Modal</span>
+              <span class="text-[11px] text-amber-400 font-medium">● Bottom Sheet</span>
+            </div>
+            <h3 class="text-base font-bold text-white">Bộ lọc căn hộ (Bottom Sheet)</h3>
+            <p class="text-xs text-slate-400 mt-2 leading-relaxed">
+              Trượt từ dưới lên khi bấm [🔍 Bộ lọc]. Đầy đủ 6 nhóm tiêu chí: Giá thuê (2 ô từ-đến), Loại phòng (chips đa chọn), Vị trí quận ĐN, Tiện ích, Điểm AI (≥50/70/80đ), Trạng thái phòng.
+            </p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+            <span class="">MainButton: [Áp dụng (4 tiêu chí)]</span>
+            <span class="text-amber-400 font-mono">TMA Native Sheet</span>
+          </div>
+        </div>
+
+        <!-- Màn 3 -->
+        <div class="bg-slate-900/70 border border-slate-800 rounded-xl p-5 hover:border-slate-700 transition flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-sky-300">Screen #3 · Detail</span>
+              <span class="text-[11px] text-sky-400 font-medium">● AI Scoring Breakdown</span>
+            </div>
+            <h3 class="text-base font-bold text-white">Chi tiết căn hộ &amp; Điểm AI</h3>
+            <p class="text-xs text-slate-400 mt-2 leading-relaxed">
+              Slider ảnh R2 có nút phóng to. Khối điểm AI lớn (75/100đ), thanh tiến trình, box cảnh báo thiếu ảnh/chính sách, bảng phân tích 11 tiêu chí minh bạch. Cụm nút Copy bài đăng Facebook &amp; Sửa tin.
+            </p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+            <span class="">Tích hợp: Cloudflare R2 CDN</span>
+            <span class="text-sky-400 font-mono">Mobile Stack</span>
+          </div>
+        </div>
+
+        <!-- Màn 4 -->
+        <div class="bg-slate-900/70 border border-slate-800 rounded-xl p-5 hover:border-slate-700 transition flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-sky-300">Screen #4 · Form</span>
+              <span class="text-[11px] text-purple-400 font-medium">● AI Parsing</span>
+            </div>
+            <h3 class="text-base font-bold text-white">Thêm căn mới siêu tốc</h3>
+            <p class="text-xs text-slate-400 mt-2 leading-relaxed">
+              Hỗ trợ 2 chế độ: Tự động trích xuất thông tin khi dán tin nhắn hoặc link từ bot Telegram, hoặc nhập biểu mẫu chuẩn hóa. Tải ảnh trực tiếp lên Cloudflare R2 có thumbnail preview.
+            </p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+            <span class="">MainButton: [Xác nhận &amp; Lưu căn]</span>
+            <span class="text-purple-400 font-mono">Mobile Stack</span>
+          </div>
+        </div>
+
+        <!-- Màn 5 -->
+        <div class="bg-slate-900/70 border border-slate-800 rounded-xl p-5 hover:border-slate-700 transition flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-sky-300">Screen #5 · Form</span>
+              <span class="text-[11px] text-slate-400 font-medium">● Cập nhật</span>
+            </div>
+            <h3 class="text-base font-bold text-white">Sửa thông tin căn</h3>
+            <p class="text-xs text-slate-400 mt-2 leading-relaxed">
+              Chỉnh sửa giá thuê, cập nhật ảnh bổ sung theo đề xuất AI (ví dụ thêm ảnh WC/ban công) để nâng điểm tin đăng lên ≥80đ và mở khóa tính năng tự động đẩy top.
+            </p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+            <span class="">Lưu thay đổi API + Haptic</span>
+            <span class="text-slate-400 font-mono">Mobile Stack</span>
+          </div>
+        </div>
+
+        <!-- Màn 6 -->
+        <div class="bg-slate-900/70 border border-slate-800 rounded-xl p-5 hover:border-slate-700 transition flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-sky-300">Screen #6 · Marketing</span>
+              <span class="text-[11px] text-pink-400 font-medium">● Generator</span>
+            </div>
+            <h3 class="text-base font-bold text-white">Quản lý bài đăng Marketing</h3>
+            <p class="text-xs text-slate-400 mt-2 leading-relaxed">
+              Tự động sinh bài viết Facebook/Zalo chuẩn định dạng môi giới kèm hashtag, icon và số hotline. Nút copy 1-chạm và nút gửi toàn bộ gói ảnh gốc độ phân giải cao qua tin nhắn bot Telegram.
+            </p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+            <span class="">Xuất bài đăng đa kênh</span>
+            <span class="text-pink-400 font-mono">Mobile Stack</span>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- PHẦN 2: CRM KHÁCH HÀNG & CHIA SẺ TIN -->
+    <section>
+      <div class="flex items-center gap-3 mb-6">
+        <span class="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-base">02</span>
+        <div>
+          <h2 class="text-xl font-bold text-white tracking-wide">Phân Hệ 2: Quản Lý Khách Hàng &amp; Ghép Tin (CRM &amp; Public Share Link)</h2>
+          <p class="text-xs text-slate-400">Theo dõi phễu khách hàng, thuật toán gợi ý tin tự động và trang chia sẻ web mobile bảo mật.</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+
+        <!-- Màn 7 -->
+        <div class="bg-slate-900/70 border border-slate-800 rounded-xl p-5 hover:border-slate-700 transition flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-emerald-300">Screen #7 · Tab CRM</span>
+              <span class="text-[11px] text-emerald-400 font-medium">● Badge 3 Lead</span>
+            </div>
+            <h3 class="text-base font-bold text-white">Danh sách khách hàng</h3>
+            <p class="text-xs text-slate-400 mt-2 leading-relaxed">
+              Phân loại theo phễu: Đang tìm, Đã gửi tin, Đã xem, Đã chốt. Mỗi card gồm nhu cầu, lịch hẹn xem phòng hôm nay, nguồn khách (Bot sale, Ads) và nút tắt [Gợi ý tin].
+            </p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-800/80 text-xs text-slate-400">
+            Thao tác nhanh: Gọi 📞, Gửi tin
+          </div>
+        </div>
+
+        <!-- Màn 8 -->
+        <div class="bg-slate-900/70 border border-slate-800 rounded-xl p-5 hover:border-slate-700 transition flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-emerald-300">Screen #8 · Profile</span>
+              <span class="text-[11px] text-sky-400 font-medium">● VIP Lead</span>
+            </div>
+            <h3 class="text-base font-bold text-white">Chi tiết hồ sơ khách hàng</h3>
+            <p class="text-xs text-slate-400 mt-2 leading-relaxed">
+              Tổng hợp ngân sách (12-15tr), ngày dọn, yêu cầu thú cưng. 3 nút chiến lược: Gợi ý tin, Gửi tin (quà 2/3), Đặt lịch. Kèm lịch xem nhà và timeline tương tác.
+            </p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-800/80 text-xs text-slate-400">
+            MainButton: [Xem gợi ý (3 căn)]
+          </div>
+        </div>
+
+        <!-- Màn 9 -->
+        <div class="bg-slate-900/70 border border-slate-800 rounded-xl p-5 hover:border-slate-700 transition flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-emerald-300">Screen #9 · Match</span>
+              <span class="text-[11px] text-amber-400 font-medium">● Match % AI</span>
+            </div>
+            <h3 class="text-base font-bold text-white">Gợi ý tin cho khách</h3>
+            <p class="text-xs text-slate-400 mt-2 leading-relaxed">
+              Tự động ghép quỹ căn với nhu cầu: hiển thị Match 92%, điểm AI 85đ, nhãn 'Tiết kiệm 2.5tr'. Khi thiếu hàng có box cứu cánh [Match broker khác 🎁] và [Thêm căn mới].
+            </p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-800/80 text-xs text-slate-400">
+            MainButton: [Tạo trang chia sẻ]
+          </div>
+        </div>
+
+        <!-- Màn 10 -->
+        <div class="bg-slate-900/70 border border-slate-800 rounded-xl p-5 hover:border-slate-700 transition flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-emerald-300">Screen #10 · Share</span>
+              <span class="text-[11px] text-purple-400 font-medium">● Public Link</span>
+            </div>
+            <h3 class="text-base font-bold text-white">Tạo trang chia sẻ tin</h3>
+            <p class="text-xs text-slate-400 mt-2 leading-relaxed">
+              Sinh link rút gọn <code class="text-sky-300 font-mono text-[11px]">truenest.app/s/xxx</code> kèm nút copy. Tùy chỉnh: Ẩn SĐT chủ nhà (chuyển tiếp gọi tới broker), gắn thương hiệu cá nhân ở chân trang.
+            </p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-800/80 text-xs text-slate-400">
+            Bảo mật: Mã hóa link SSL 256-bit
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- PHẦN 3: SÀN LIÊN BROKER & ĐỀ XUẤT TIN -->
+    <section>
+      <div class="flex items-center gap-3 mb-6">
+        <span class="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-base">03</span>
+        <div>
+          <h2 class="text-xl font-bold text-white tracking-wide">Phân Hệ 3: Sàn Match Liên Broker &amp; Propose Slot (Inter-broker Matching)</h2>
+          <p class="text-xs text-slate-400">Kết nối mạng lưới hơn 1,420 môi giới tại Đà Nẵng, chia sẻ nguồn căn chéo và cơ chế hoa hồng 50/50 an toàn.</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+        <!-- Màn 11 -->
+        <div class="bg-slate-900/70 border border-slate-800 rounded-xl p-5 hover:border-slate-700 transition flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-amber-300">Screen #11 · Marketplace</span>
+              <span class="text-[11px] text-amber-400 font-medium">● 💎💎 Co-broking</span>
+            </div>
+            <h3 class="text-base font-bold text-white">Màn hình Match liên broker (Sàn yêu cầu tìm căn)</h3>
+            <p class="text-xs text-slate-400 mt-2 leading-relaxed">
+              Nơi hiển thị các "đơn đặt hàng" từ các broker và sàn khác đang cần tìm căn gấp tại Sơn Trà, Ngũ Hành Sơn, Hải Châu.
+            </p>
+            <ul class="text-xs text-slate-300 mt-3 space-y-1.5 list-disc list-inside">
+              <li class="">Banner lượt thử: <strong>🎁 Còn 2/3 lượt ghép miễn phí</strong> (hoặc nâng Max để mở vô hạn).</li>
+              <li class="">Bộ đếm slot thời gian thực: Hiển thị trạng thái slot (VD: <em>2/5 broker đã gửi tin · Còn 3 slot</em>).</li>
+              <li class="">Thông tin uy tín đối tác: Tên broker đăng, sàn liên kết, điểm uy tín (VD: ⭐ 92đ).</li>
+              <li class="">Hộp cam kết cơ chế: <strong>Chia sẻ hoa hồng 50/50 minh bạch</strong>, bảo lãnh cọc qua TrueNest, chống cướp khách.</li>
+            </ul>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+            <span class="">MainButton: [➕ Đăng yêu cầu tìm căn mới]</span>
+            <span class="text-amber-400 font-mono">Mobile Stack</span>
+          </div>
+        </div>
+
+        <!-- Màn 12 -->
+        <div class="bg-slate-900/70 border border-slate-800 rounded-xl p-5 hover:border-slate-700 transition flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-amber-300">Screen #12 · Countdown Slot</span>
+              <span class="text-[11px] text-rose-400 font-medium animate-pulse">● ⏰ Slot 58:29</span>
+            </div>
+            <h3 class="text-base font-bold text-white">Đề xuất tin (Propose Slot sau khi reserve)</h3>
+            <p class="text-xs text-slate-400 mt-2 leading-relaxed">
+              Giao diện dành cho broker sau khi nhanh tay bấm giữ slot đề xuất căn hộ vào yêu cầu tìm kiếm của đối tác.
+            </p>
+            <ul class="text-xs text-slate-300 mt-3 space-y-1.5 list-disc list-inside">
+              <li class="">Đồng hồ đếm ngược: <strong>⏰ Thời gian giữ chỗ còn: 58:29</strong> kèm thanh thời gian trực quan.</li>
+              <li class="">Cơ chế sàn: Khách hàng sẽ ưu tiên chọn căn có chất lượng ảnh nét và điểm tin AI cao nhất.</li>
+              <li class="">Phân loại tuổi tin trực quan: 🟢 Mới 3 ngày, 🟡 12 ngày, 🟠 25 ngày.</li>
+              <li class="">Gợi ý tăng điểm AI: <em>Mẹo thêm 2 ảnh WC (+15đ), video thực tế (+10đ) để tăng tỉ lệ được khách chọn</em>.</li>
+            </ul>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+            <span class="">MainButton: [📤 Xác nhận gửi đề xuất (1 tin)]</span>
+            <span class="text-rose-400 font-mono">Mobile Stack</span>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- PHẦN 4: DOANH SỐ, HỒ SƠ & MONETIZATION -->
+    <section>
+      <div class="flex items-center gap-3 mb-6">
+        <span class="w-8 h-8 rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center font-bold text-base">04</span>
+        <div>
+          <h2 class="text-xl font-bold text-white tracking-wide">Phân Hệ 4: Doanh Số, Hồ Sơ Môi Giới &amp; Mô Hình Gói Cước</h2>
+          <p class="text-xs text-slate-400">Quản lý dòng tiền hoa hồng, bảng xếp hạng tín nhiệm AI và gói cước Free / Pro / Max tích hợp thanh toán VietQR.</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+
+        <!-- Màn 13 -->
+        <div class="bg-slate-900/70 border border-slate-800 rounded-xl p-5 hover:border-slate-700 transition flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-purple-300">Screen #13 · Tab Menu</span>
+              <span class="text-[11px] text-purple-400 font-medium">● Tab ⋯ Thêm</span>
+            </div>
+            <h3 class="text-base font-bold text-white">Tab Thêm (Trung tâm mở rộng)</h3>
+            <p class="text-xs text-slate-400 mt-2 leading-relaxed">
+              Tổng hành dinh mở rộng: Card tóm tắt broker (Gói Free, Điểm uy tín 85đ), Banner khuyến mại Pro 99k/tháng, menu Quản lý hoa hồng, Match liên broker, Cài đặt thông báo.
+            </p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-800/80 text-xs text-slate-400">
+            Điều hướng toàn bộ nghiệp vụ phụ
+          </div>
+        </div>
+
+        <!-- Màn 14 -->
+        <div class="bg-slate-900/70 border border-slate-800 rounded-xl p-5 hover:border-slate-700 transition flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-purple-300">Screen #14 · Finance</span>
+              <span class="text-[11px] text-emerald-400 font-medium">● 15.000.000 đ</span>
+            </div>
+            <h3 class="text-base font-bold text-white">Quản lý hoa hồng môi giới</h3>
+            <p class="text-xs text-slate-400 mt-2 leading-relaxed">
+              Thống kê tổng hoa hồng tháng (15tr, đạt 82% KPI). Phân định rạch ròi <em>Đã thanh toán (7.5tr)</em> và <em>Chờ thanh toán (7.5tr)</em>. Danh sách hợp đồng chốt &amp; đang đàm phán cọc.
+            </p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-800/80 text-xs text-slate-400">
+            Nút: [➕ Thêm giao dịch mới]
+          </div>
+        </div>
+
+        <!-- Màn 15 -->
+        <div class="bg-slate-900/70 border border-slate-800 rounded-xl p-5 hover:border-slate-700 transition flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-purple-300">Screen #15 · Trust</span>
+              <span class="text-[11px] text-sky-400 font-medium">● AI Trust 85đ</span>
+            </div>
+            <h3 class="text-base font-bold text-white">Hồ sơ Broker &amp; Điểm uy tín</h3>
+            <p class="text-xs text-slate-400 mt-2 leading-relaxed">
+              Avatar verified, Hạng Bạc Uy Tín (Top 15% Sơn Trà). 4 cấu phần điểm: CCCD (+40), Cập nhật đều (+30), Phản hồi nhanh (+15), 0 tin ảo. 18 đánh giá 4.9⭐ từ khách thuê thực.
+            </p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-800/80 text-xs text-slate-400">
+            Mở bằng avatar [👤] ở mọi header
+          </div>
+        </div>
+
+        <!-- Màn 16 -->
+        <div class="bg-slate-900/70 border border-slate-800 rounded-xl p-5 hover:border-slate-700 transition flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-purple-300">Screen #16 · Monetize</span>
+              <span class="text-[11px] text-amber-400 font-medium">● Free/Pro/Max</span>
+            </div>
+            <h3 class="text-base font-bold text-white">Nâng cấp gói cước &amp; Paywall</h3>
+            <p class="text-xs text-slate-400 mt-2 leading-relaxed">
+              Banner cảnh báo dùng 2/3 lượt thử. Bảng so sánh 3 gói cước: Free (20 căn), Pro 99k/tháng (Vô hạn căn + bỏ logo TrueNest), Max 199k/tháng (Vô hạn match broker + Phân tích AI).
+            </p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-800/80 text-xs text-slate-400">
+            Thanh toán Napas247 VietQR tự động
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Màn 17: Cài đặt thông báo -->
+      <div class="mt-5 bg-slate-900/70 border border-slate-800 rounded-xl p-5 hover:border-slate-700 transition flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <div class="flex items-center gap-2 mb-1.5">
+            <span class="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-sky-300">Screen #17 · Settings</span>
+            <span class="text-[11px] text-emerald-400 font-medium">● Push Notification Telegram Bot</span>
+          </div>
+          <h3 class="text-base font-bold text-white">Cài đặt thông báo &amp; Cảnh báo Lead tức thời (Push Notification)</h3>
+          <p class="text-xs text-slate-400 mt-1 max-w-3xl leading-relaxed">
+            Đồng bộ 2 chiều với Telegram Bot <code>@TrueNestBrokerBot</code> qua lệnh <code>/thongbao</code>. Cung cấp các công tắc bật/tắt (Toggle) cho 7 danh mục quan trọng: Lead phù hợp mới, Nhắc lịch hẹn xem nhà trước 2h/30p, Khách tương tác mở link chia sẻ tin, Yêu cầu match liên broker mới 💎, Cảnh báo đếm ngược slot dưới 10 phút, Cảnh báo tin đăng quá 14 ngày chưa cập nhật bị tụt điểm AI, và Nhắc hạn lượt dùng thử. Có chế độ im lặng ban đêm (23:00 - 06:30) tránh làm phiền broker.
+          </p>
+        </div>
+        <div class="shrink-0 flex items-center gap-2">
+          <span class="px-3 py-1.5 rounded-lg bg-sky-500/10 border border-sky-500/20 text-sky-400 text-xs font-mono">/thongbao</span>
+          <span class="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-xs font-medium">Toggle Switch</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- NGUYÊN TẮC THIẾT KẾ & TƯƠNG TÁC -->
+    <section class="bg-slate-900/40 border border-slate-800 rounded-2xl p-6 md:p-8">
+      <h2 class="text-xl font-bold text-white tracking-wide mb-4">Các Tiêu Chuẩn Kỹ Thuật Đã Áp Dụng Triệt Để</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-xs text-slate-300">
+        <div class="space-y-2">
+          <div class="font-bold text-sky-400 flex items-center gap-1.5 text-sm">
+            <span class="">📱</span> Telegram Mini App Native
+          </div>
+          <p class="text-slate-400 leading-relaxed">
+            Không sử dụng thanh URL trình duyệt; sử dụng nút quay lại native (Telegram BackButton), nút hành động lớn dưới đáy (Telegram MainButton) và giả lập Haptic Feedback khi bấm chọn.
+          </p>
+        </div>
+        <div class="space-y-2">
+          <div class="font-bold text-emerald-400 flex items-center gap-1.5 text-sm">
+            <span class="">🎨</span> Dark Theme Tối Ưu Mắt
+          </div>
+          <p class="text-slate-400 leading-relaxed">
+            Áp dụng chuẩn màu ban đêm đặc trưng của Telegram: Màu nền chính <code>#071420 / #0e1621</code>, nền card <code>#101d28 / #17212b</code>, viền mảnh <code>#1e293b</code> và sắc xanh thương hiệu <code>#2aabee</code>.
+          </p>
+        </div>
+        <div class="space-y-2">
+          <div class="font-bold text-amber-400 flex items-center gap-1.5 text-sm">
+            <span class="">🔒</span> Quản Trị Trải Nghiệm &amp; Paywall
+          </div>
+          <p class="text-slate-400 leading-relaxed">
+            Bảo toàn trải nghiệm dùng thử với badge <code>🎁 còn X/3 lượt</code>, các tính năng độc quyền (như Match vô hạn) luôn hiển thị kèm biểu tượng ổ khóa <code>🔒</code> kèm đường dẫn tới Paywall Modal.
+          </p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="max-w-6xl mx-auto mt-16 pt-8 border-t border-slate-800 text-center text-xs text-slate-500">
+    <p class="">TrueNest Broker Terminal • Da Nang Real Estate Ecosystem • Build 2024.11</p>
+    <p class="mt-1">Tài liệu kiến trúc UI/UX được xuất tự động phục vụ bàn giao thiết kế và triển khai Frontend.</p>
+  </footer>
+
+
+
+
+
+
+
+
+</body></html>

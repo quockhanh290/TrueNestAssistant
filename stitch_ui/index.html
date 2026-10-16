@@ -1,0 +1,1624 @@
+<!DOCTYPE html>
+<html lang="vi" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TrueNest Broker UI Hub | Google Stitch MCP</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    :root {
+      --bg: #071420;
+      --surface: #0e1a26;
+      --card-bg: #14212d;
+      --card-hover: #1b2c3c;
+      --border: #243444;
+      --border-light: #2d4154;
+      --primary: #2aabee;
+      --primary-light: #89ceff;
+      --secondary: #7bdc75;
+      --tertiary: #fabc4c;
+      --text-main: #d7e4f4;
+      --text-muted: #889bb0;
+      --text-dim: #5c7084;
+    }
+    body {
+      font-family: 'Geist', -apple-system, sans-serif;
+      background-color: var(--bg);
+      color: var(--text-main);
+      min-height: 100vh;
+      line-height: 1.5;
+      overflow-x: hidden;
+    }
+    header {
+      background: linear-gradient(180deg, #0b1724 0%, #071420 100%);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      backdrop-filter: blur(16px);
+    }
+    .header-inner {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 1.25rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+    }
+    .brand-logo {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #2aabee, #006591);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 14px rgba(42, 171, 238, 0.35);
+      font-size: 24px;
+    }
+    .brand-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .brand-sub {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .brand-sub span.badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      padding: 0.15rem 0.5rem;
+      border-radius: 6px;
+      background: rgba(42, 171, 238, 0.15);
+      color: var(--primary-light);
+      border: 1px solid rgba(42, 171, 238, 0.3);
+    }
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .btn-design-sys {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.5rem 1rem;
+      border-radius: 10px;
+      background: #172635;
+      color: var(--text-main);
+      border: 1px solid var(--border-light);
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .btn-design-sys:hover {
+      background: #203549;
+      border-color: var(--primary);
+      color: #fff;
+      box-shadow: 0 2px 10px rgba(42, 171, 238, 0.2);
+    }
+
+    /* STATS BAR */
+    .stats-bar {
+      max-width: 1400px;
+      margin: 1.5rem auto 0;
+      padding: 0 2rem;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+    }
+    .stat-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .stat-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 10px;
+      background: rgba(42, 171, 238, 0.12);
+      color: var(--primary-light);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .stat-val {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: #fff;
+    }
+    .stat-lbl {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    /* CONTROLS (SEARCH & CATEGORIES) */
+    .controls {
+      max-width: 1400px;
+      margin: 1.75rem auto 0;
+      padding: 0 2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .search-row {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+    }
+    .search-box {
+      flex: 1;
+      position: relative;
+    }
+    .search-box span.material-symbols-outlined {
+      position: absolute;
+      left: 1rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-dim);
+      font-size: 20px;
+    }
+    .search-input {
+      width: 100%;
+      padding: 0.8rem 1rem 0.8rem 2.8rem;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: #fff;
+      font-size: 0.95rem;
+      font-family: inherit;
+      outline: none;
+      transition: all 0.2s;
+    }
+    .search-input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(42, 171, 238, 0.18);
+    }
+    .filter-chips {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      overflow-x: auto;
+      padding-bottom: 0.5rem;
+    }
+    .chip {
+      padding: 0.45rem 1rem;
+      border-radius: 9999px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 0.84rem;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .chip:hover {
+      background: var(--card-hover);
+      color: var(--text-main);
+      border-color: var(--border-light);
+    }
+    .chip.active {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+      font-weight: 600;
+      box-shadow: 0 2px 10px rgba(42, 171, 238, 0.35);
+    }
+
+    /* MAIN GRID */
+    .container {
+      max-width: 1400px;
+      margin: 1.5rem auto 3rem;
+      padding: 0 2rem;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 1.5rem;
+    }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: all 0.25s ease;
+      position: relative;
+    }
+    .card:hover {
+      transform: translateY(-4px);
+      border-color: var(--primary);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+    }
+    .card-thumb {
+      position: relative;
+      width: 100%;
+      height: 220px;
+      background: #09121a;
+      overflow: hidden;
+      cursor: pointer;
+    }
+    .card-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: top center;
+      transition: transform 0.4s ease;
+    }
+    .card:hover .card-thumb img {
+      transform: scale(1.04);
+    }
+    .card-thumb-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(0,0,0,0.1) 0%, rgba(7,20,32,0.85) 100%);
+      display: flex;
+      align-items: flex-end;
+      padding: 0.85rem;
+      opacity: 0.9;
+    }
+    .card-idx-badge {
+      position: absolute;
+      top: 0.75rem;
+      left: 0.75rem;
+      background: rgba(7, 20, 32, 0.85);
+      backdrop-filter: blur(8px);
+      padding: 0.2rem 0.55rem;
+      border-radius: 6px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--primary-light);
+      border: 1px solid var(--border);
+    }
+    .card-device-badge {
+      position: absolute;
+      top: 0.75rem;
+      right: 0.75rem;
+      background: rgba(7, 20, 32, 0.85);
+      backdrop-filter: blur(8px);
+      padding: 0.2rem 0.55rem;
+      border-radius: 6px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      border: 1px solid var(--border);
+    }
+    .card-device-badge.mobile {
+      color: var(--secondary);
+    }
+    .card-device-badge.desktop {
+      color: var(--primary-light);
+    }
+
+    .card-body {
+      padding: 1.15rem;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+    }
+    .card-meta {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      font-family: 'JetBrains Mono', monospace;
+      margin-bottom: 0.4rem;
+    }
+    .card-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 0.75rem;
+      line-height: 1.35;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      height: 2.7em;
+    }
+    .card-actions {
+      margin-top: auto;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 0.5rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid var(--border);
+    }
+    .btn-preview {
+      padding: 0.6rem 0.8rem;
+      border-radius: 8px;
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+      transition: background 0.2s;
+    }
+    .btn-preview:hover {
+      background: #1e96d4;
+    }
+    .btn-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 8px;
+      background: var(--card-hover);
+      border: 1px solid var(--border);
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-icon:hover {
+      background: var(--border-light);
+      color: #fff;
+    }
+
+    /* MODAL PREVIEW */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(3, 10, 16, 0.85);
+      backdrop-filter: blur(12px);
+      z-index: 100;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+    .modal-backdrop.open {
+      display: flex;
+    }
+    .modal-window {
+      background: var(--surface);
+      border: 1px solid var(--border-light);
+      border-radius: 20px;
+      width: 100%;
+      max-width: 1100px;
+      height: 90vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.75);
+      overflow: hidden;
+    }
+    .modal-header {
+      padding: 0.85rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--card-bg);
+      gap: 1rem;
+    }
+    .modal-title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      min-width: 0;
+    }
+    .modal-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .modal-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-shrink: 0;
+    }
+    .view-btn {
+      padding: 0.35rem 0.65rem;
+      border-radius: 6px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+    .view-btn.active {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+    .modal-close {
+      background: #1f3042;
+      border: none;
+      color: #fff;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      margin-left: 0.5rem;
+    }
+    .modal-close:hover {
+      background: #e53935;
+    }
+    .modal-body {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #03080e;
+      overflow: auto;
+      padding: 1.5rem;
+    }
+    .frame-container {
+      transition: all 0.3s ease;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+      border: 1px solid var(--border);
+      height: 100%;
+    }
+    .frame-container.mobile {
+      width: 390px;
+      max-width: 100%;
+      border-radius: 36px;
+      border: 8px solid #1a2736;
+      height: 844px;
+      max-height: 100%;
+    }
+    .frame-container.desktop {
+      width: 100%;
+      height: 100%;
+    }
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+      background: var(--bg);
+    }
+
+    /* EMPTY STATE */
+    .empty-state {
+      grid-column: 1 / -1;
+      text-align: center;
+      padding: 4rem 1rem;
+      color: var(--text-muted);
+      display: none;
+    }
+    .empty-state span {
+      font-size: 48px;
+      color: var(--text-dim);
+      margin-bottom: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="header-inner">
+      <div class="brand">
+        <div class="brand-logo">🏠</div>
+        <div>
+          <div class="brand-title">TrueNest Broker UI Hub</div>
+          <div class="brand-sub">
+            Google Stitch MCP Integration
+            <span class="badge">v1.0.0</span>
+            <span class="badge" style="color:var(--secondary); background:rgba(123,220,117,0.12); border-color:rgba(123,220,117,0.3)">Live Connected</span>
+          </div>
+        </div>
+      </div>
+      <div class="header-actions">
+        <a href="DESIGN.md" target="_blank" class="btn-design-sys">
+          <span class="material-symbols-outlined" style="font-size:18px;">palette</span>
+          Design System (DESIGN.md)
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <div class="stats-bar">
+    <div class="stat-card">
+      <div class="stat-icon"><span class="material-symbols-outlined">dashboard</span></div>
+      <div>
+        <div class="stat-val">25</div>
+        <div class="stat-lbl">Tổng màn hình Stitch</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon" style="color:var(--secondary); background:rgba(123,220,117,0.12);"><span class="material-symbols-outlined">code</span></div>
+      <div>
+        <div class="stat-val">21</div>
+        <div class="stat-lbl">HTML + Tailwind tương tác</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon" style="color:var(--tertiary); background:rgba(250,188,76,0.12);"><span class="material-symbols-outlined">devices</span></div>
+      <div>
+        <div class="stat-val">19 / 6</div>
+        <div class="stat-lbl">Mobile / Desktop UI</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon" style="color:#d09729; background:rgba(208,151,41,0.12);"><span class="material-symbols-outlined">image</span></div>
+      <div>
+        <div class="stat-val">24</div>
+        <div class="stat-lbl">Screenshots sắc nét</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="search-row">
+      <div class="search-box">
+        <span class="material-symbols-outlined">search</span>
+        <input type="text" id="searchInput" class="search-input" placeholder="Tìm kiếm nhanh màn hình (ví dụ: căn hộ, bộ lọc, hoa hồng, khách hàng...)" />
+      </div>
+    </div>
+
+    <div class="filter-chips">
+      <button class="chip active" data-cat="all">
+        <span class="material-symbols-outlined" style="font-size:18px;">grid_view</span>
+        Tất cả (25)
+      </button>
+      <button class="chip" data-cat="apartments">
+        <span class="material-symbols-outlined" style="font-size:18px;">apartment</span>
+        Căn hộ & Bất động sản
+      </button>
+      <button class="chip" data-cat="clients">
+        <span class="material-symbols-outlined" style="font-size:18px;">group</span>
+        Khách hàng & Leads
+      </button>
+      <button class="chip" data-cat="broker">
+        <span class="material-symbols-outlined" style="font-size:18px;">handshake</span>
+        Mạng lưới Broker
+      </button>
+      <button class="chip" data-cat="system">
+        <span class="material-symbols-outlined" style="font-size:18px;">settings</span>
+        Hệ thống & Cài đặt
+      </button>
+      <button class="chip" data-cat="marketing">
+        <span class="material-symbols-outlined" style="font-size:18px;">campaign</span>
+        Marketing & Tư liệu
+      </button>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="grid" id="screensGrid">
+      
+      <div class="card" data-cat="system" data-title="tài liệu diễn giải hệ thống màn hình truenest" data-dev="desktop">
+        <div class="card-thumb" onclick="openModal('screens/01_tai_lieu_dien_giai_he_thong_man_hinh.html', 'Tài liệu diễn giải hệ thống màn hình TrueNest', 'DESKTOP', true)">
+          <img src="screenshots/01_tai_lieu_dien_giai_he_thong_man_hinh.png" alt="Tài liệu diễn giải hệ thống màn hình TrueNest" loading="lazy" />
+          <div class="card-idx-badge">#01</div>
+          <div class="card-device-badge desktop">
+            <span class="material-symbols-outlined" style="font-size:14px;">desktop_windows</span>
+            DESKTOP
+          </div>
+          <div class="card-thumb-overlay">
+            <span style="font-size:0.75rem; color:#fff; display:flex; align-items:center; gap:0.35rem;">
+              <span class="material-symbols-outlined" style="font-size:14px; color:var(--secondary)">check_circle</span> HTML Sẵn sàng
+            </span>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span>Hệ thống & Cài đặt</span>
+            <span>•</span>
+            <span>2560x5472px</span>
+          </div>
+          <div class="card-title" title="Tài liệu diễn giải hệ thống màn hình TrueNest">Tài liệu diễn giải hệ thống màn hình TrueNest</div>
+          <div class="card-actions">
+            <button class="btn-preview" onclick="openModal('screens/01_tai_lieu_dien_giai_he_thong_man_hinh.html', 'Tài liệu diễn giải hệ thống màn hình TrueNest', 'DESKTOP', true)">
+          <span class="material-symbols-outlined" style="font-size:18px;">visibility</span>
+          Xem trước
+        </button>
+            <a href="screens/01_tai_lieu_dien_giai_he_thong_man_hinh.html" target="_blank" class="btn-icon" title="Mở trong tab riêng">
+          <span class="material-symbols-outlined" style="font-size:18px;">open_in_new</span>
+        </a>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="card" data-cat="system" data-title="cài đặt thông báo - truenest" data-dev="mobile">
+        <div class="card-thumb" onclick="openModal('screens/02_cai_at_thong_bao_truenest.html', 'Cài đặt thông báo - TrueNest', 'MOBILE', true)">
+          <img src="screenshots/02_cai_at_thong_bao_truenest.png" alt="Cài đặt thông báo - TrueNest" loading="lazy" />
+          <div class="card-idx-badge">#02</div>
+          <div class="card-device-badge mobile">
+            <span class="material-symbols-outlined" style="font-size:14px;">smartphone</span>
+            MOBILE
+          </div>
+          <div class="card-thumb-overlay">
+            <span style="font-size:0.75rem; color:#fff; display:flex; align-items:center; gap:0.35rem;">
+              <span class="material-symbols-outlined" style="font-size:14px; color:var(--secondary)">check_circle</span> HTML Sẵn sàng
+            </span>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span>Hệ thống & Cài đặt</span>
+            <span>•</span>
+            <span>780x2476px</span>
+          </div>
+          <div class="card-title" title="Cài đặt thông báo - TrueNest">Cài đặt thông báo - TrueNest</div>
+          <div class="card-actions">
+            <button class="btn-preview" onclick="openModal('screens/02_cai_at_thong_bao_truenest.html', 'Cài đặt thông báo - TrueNest', 'MOBILE', true)">
+          <span class="material-symbols-outlined" style="font-size:18px;">visibility</span>
+          Xem trước
+        </button>
+            <a href="screens/02_cai_at_thong_bao_truenest.html" target="_blank" class="btn-icon" title="Mở trong tab riêng">
+          <span class="material-symbols-outlined" style="font-size:18px;">open_in_new</span>
+        </a>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="card" data-cat="system" data-title="sửa thông tin căn - truenest" data-dev="mobile">
+        <div class="card-thumb" onclick="openModal('screens/03_sua_thong_tin_can_truenest.html', 'Sửa thông tin căn - TrueNest', 'MOBILE', true)">
+          <img src="screenshots/03_sua_thong_tin_can_truenest.png" alt="Sửa thông tin căn - TrueNest" loading="lazy" />
+          <div class="card-idx-badge">#03</div>
+          <div class="card-device-badge mobile">
+            <span class="material-symbols-outlined" style="font-size:14px;">smartphone</span>
+            MOBILE
+          </div>
+          <div class="card-thumb-overlay">
+            <span style="font-size:0.75rem; color:#fff; display:flex; align-items:center; gap:0.35rem;">
+              <span class="material-symbols-outlined" style="font-size:14px; color:var(--secondary)">check_circle</span> HTML Sẵn sàng
+            </span>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span>Hệ thống & Cài đặt</span>
+            <span>•</span>
+            <span>780x3340px</span>
+          </div>
+          <div class="card-title" title="Sửa thông tin căn - TrueNest">Sửa thông tin căn - TrueNest</div>
+          <div class="card-actions">
+            <button class="btn-preview" onclick="openModal('screens/03_sua_thong_tin_can_truenest.html', 'Sửa thông tin căn - TrueNest', 'MOBILE', true)">
+          <span class="material-symbols-outlined" style="font-size:18px;">visibility</span>
+          Xem trước
+        </button>
+            <a href="screens/03_sua_thong_tin_can_truenest.html" target="_blank" class="btn-icon" title="Mở trong tab riêng">
+          <span class="material-symbols-outlined" style="font-size:18px;">open_in_new</span>
+        </a>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="card" data-cat="system" data-title="chi tiết căn hộ - truenest" data-dev="mobile">
+        <div class="card-thumb" onclick="openModal('screens/04_chi_tiet_can_ho_truenest.html', 'Chi tiết căn hộ - TrueNest', 'MOBILE', true)">
+          <img src="screenshots/04_chi_tiet_can_ho_truenest.png" alt="Chi tiết căn hộ - TrueNest" loading="lazy" />
+          <div class="card-idx-badge">#04</div>
+          <div class="card-device-badge mobile">
+            <span class="material-symbols-outlined" style="font-size:14px;">smartphone</span>
+            MOBILE
+          </div>
+          <div class="card-thumb-overlay">
+            <span style="font-size:0.75rem; color:#fff; display:flex; align-items:center; gap:0.35rem;">
+              <span class="material-symbols-outlined" style="font-size:14px; color:var(--secondary)">check_circle</span> HTML Sẵn sàng
+            </span>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span>Hệ thống & Cài đặt</span>
+            <span>•</span>
+            <span>780x3294px</span>
+          </div>
+          <div class="card-title" title="Chi tiết căn hộ - TrueNest">Chi tiết căn hộ - TrueNest</div>
+          <div class="card-actions">
+            <button class="btn-preview" onclick="openModal('screens/04_chi_tiet_can_ho_truenest.html', 'Chi tiết căn hộ - TrueNest', 'MOBILE', true)">
+          <span class="material-symbols-outlined" style="font-size:18px;">visibility</span>
+          Xem trước
+        </button>
+            <a href="screens/04_chi_tiet_can_ho_truenest.html" target="_blank" class="btn-icon" title="Mở trong tab riêng">
+          <span class="material-symbols-outlined" style="font-size:18px;">open_in_new</span>
+        </a>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="card" data-cat="system" data-title="tạo trang chia sẻ tin - truenest" data-dev="mobile">
+        <div class="card-thumb" onclick="openModal('screens/05_tao_trang_chia_se_tin_truenest.html', 'Tạo trang chia sẻ tin - TrueNest', 'MOBILE', true)">
+          <img src="screenshots/05_tao_trang_chia_se_tin_truenest.png" alt="Tạo trang chia sẻ tin - TrueNest" loading="lazy" />
+          <div class="card-idx-badge">#05</div>
+          <div class="card-device-badge mobile">
+            <span class="material-symbols-outlined" style="font-size:14px;">smartphone</span>
+            MOBILE
+          </div>
+          <div class="card-thumb-overlay">
+            <span style="font-size:0.75rem; color:#fff; display:flex; align-items:center; gap:0.35rem;">
+              <span class="material-symbols-outlined" style="font-size:14px; color:var(--secondary)">check_circle</span> HTML Sẵn sàng
+            </span>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span>Hệ thống & Cài đặt</span>
+            <span>•</span>
+            <span>780x2468px</span>
+          </div>
+          <div class="card-title" title="Tạo trang chia sẻ tin - TrueNest">Tạo trang chia sẻ tin - TrueNest</div>
+          <div class="card-actions">
+            <button class="btn-preview" onclick="openModal('screens/05_tao_trang_chia_se_tin_truenest.html', 'Tạo trang chia sẻ tin - TrueNest', 'MOBILE', true)">
+          <span class="material-symbols-outlined" style="font-size:18px;">visibility</span>
+          Xem trước
+        </button>
+            <a href="screens/05_tao_trang_chia_se_tin_truenest.html" target="_blank" class="btn-icon" title="Mở trong tab riêng">
+          <span class="material-symbols-outlined" style="font-size:18px;">open_in_new</span>
+        </a>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="card" data-cat="broker" data-title="đề xuất tin liên broker - truenest" data-dev="mobile">
+        <div class="card-thumb" onclick="openModal('screens/06_e_xuat_tin_lien_broker_truenest.html', 'Đề xuất tin liên broker - TrueNest', 'MOBILE', true)">
+          <img src="screenshots/06_e_xuat_tin_lien_broker_truenest.png" alt="Đề xuất tin liên broker - TrueNest" loading="lazy" />
+          <div class="card-idx-badge">#06</div>
+          <div class="card-device-badge mobile">
+            <span class="material-symbols-outlined" style="font-size:14px;">smartphone</span>
+            MOBILE
+          </div>
+          <div class="card-thumb-overlay">
+            <span style="font-size:0.75rem; color:#fff; display:flex; align-items:center; gap:0.35rem;">
+              <span class="material-symbols-outlined" style="font-size:14px; color:var(--secondary)">check_circle</span> HTML Sẵn sàng
+            </span>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span>Mạng lưới Broker</span>
+            <span>•</span>
+            <span>780x2328px</span>
+          </div>
+          <div class="card-title" title="Đề xuất tin liên broker - TrueNest">Đề xuất tin liên broker - TrueNest</div>
+          <div class="card-actions">
+            <button class="btn-preview" onclick="openModal('screens/06_e_xuat_tin_lien_broker_truenest.html', 'Đề xuất tin liên broker - TrueNest', 'MOBILE', true)">
+          <span class="material-symbols-outlined" style="font-size:18px;">visibility</span>
+          Xem trước
+        </button>
+            <a href="screens/06_e_xuat_tin_lien_broker_truenest.html" target="_blank" class="btn-icon" title="Mở trong tab riêng">
+          <span class="material-symbols-outlined" style="font-size:18px;">open_in_new</span>
+        </a>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="card" data-cat="broker" data-title="marketing kit & copywriting - truenest broker app" data-dev="desktop">
+        <div class="card-thumb" onclick="openModal('screens/07_marketing_kit_copywriting_truenes.html', 'Marketing Kit & Copywriting - TrueNest Broker App', 'DESKTOP', true)">
+          <img src="screenshots/07_marketing_kit_copywriting_truenes.png" alt="Marketing Kit & Copywriting - TrueNest Broker App" loading="lazy" />
+          <div class="card-idx-badge">#07</div>
+          <div class="card-device-badge desktop">
+            <span class="material-symbols-outlined" style="font-size:14px;">desktop_windows</span>
+            DESKTOP
+          </div>
+          <div class="card-thumb-overlay">
+            <span style="font-size:0.75rem; color:#fff; display:flex; align-items:center; gap:0.35rem;">
+              <span class="material-symbols-outlined" style="font-size:14px; color:var(--secondary)">check_circle</span> HTML Sẵn sàng
+            </span>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span>Mạng lưới Broker</span>
+            <span>•</span>
+            <span>2560x4088px</span>
+          </div>
+          <div class="card-title" title="Marketing Kit & Copywriting - TrueNest Broker App">Marketing Kit & Copywriting - TrueNest Broker App</div>
+          <div class="card-actions">
+            <button class="btn-preview" onclick="openModal('screens/07_marketing_kit_copywriting_truenes.html', 'Marketing Kit & Copywriting - TrueNest Broker App', 'DESKTOP', true)">
+          <span class="material-symbols-outlined" style="font-size:18px;">visibility</span>
+          Xem trước
+        </button>
+            <a href="screens/07_marketing_kit_copywriting_truenes.html" target="_blank" class="btn-icon" title="Mở trong tab riêng">
+          <span class="material-symbols-outlined" style="font-size:18px;">open_in_new</span>
+        </a>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="card" data-cat="broker" data-title="social media card for truenest broker web app, a modern real estate broker telegram mini app and management platform in da nang vietnam. high-tech fintech ui aesthetics, dark blue and cyan neon accents (#0e1621, #2aabee), 3d isometric floating smartphone displaying app ui cards, ai scoring badge 100/100, cloud data sync, sleek luxury real estate coastal da nang backdrop blurred subtly. professional, clean, engaging instagram card with bold typography and modern tech startup visual appeal." data-dev="desktop">
+        <div class="card-thumb" onclick="openModal('screenshots/08_social_media_card_for_truenest_broker.png', 'Social media card for TrueNest Broker Web App, a modern real estate broker Telegram Mini App and management platform in Da Nang Vietnam. High-tech fintech UI aesthetics, dark blue and cyan neon accents (#0e1621, #2aabee), 3D isometric floating smartphone displaying app UI cards, AI scoring badge 100/100, cloud data sync, sleek luxury real estate coastal Da Nang backdrop blurred subtly. Professional, clean, engaging Instagram card with bold typography and modern tech startup visual appeal.', 'DESKTOP', false)">
+          <img src="screenshots/08_social_media_card_for_truenest_broker.png" alt="Social media card for TrueNest Broker Web App, a modern real estate broker Telegram Mini App and management platform in Da Nang Vietnam. High-tech fintech UI aesthetics, dark blue and cyan neon accents (#0e1621, #2aabee), 3D isometric floating smartphone displaying app UI cards, AI scoring badge 100/100, cloud data sync, sleek luxury real estate coastal Da Nang backdrop blurred subtly. Professional, clean, engaging Instagram card with bold typography and modern tech startup visual appeal." loading="lazy" />
+          <div class="card-idx-badge">#08</div>
+          <div class="card-device-badge desktop">
+            <span class="material-symbols-outlined" style="font-size:14px;">desktop_windows</span>
+            DESKTOP
+          </div>
+          <div class="card-thumb-overlay">
+            <span style="font-size:0.75rem; color:#fff; display:flex; align-items:center; gap:0.35rem;">
+              <span class="material-symbols-outlined" style="font-size:14px; color:var(--tertiary)">image</span> Ảnh đồ họa
+            </span>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span>Mạng lưới Broker</span>
+            <span>•</span>
+            <span>1024x1024px</span>
+          </div>
+          <div class="card-title" title="Social media card for TrueNest Broker Web App, a modern real estate broker Telegram Mini App and management platform in Da Nang Vietnam. High-tech fintech UI aesthetics, dark blue and cyan neon accents (#0e1621, #2aabee), 3D isometric floating smartphone displaying app UI cards, AI scoring badge 100/100, cloud data sync, sleek luxury real estate coastal Da Nang backdrop blurred subtly. Professional, clean, engaging Instagram card with bold typography and modern tech startup visual appeal.">Social media card for TrueNest Broker Web App, a modern real estate broker Telegram Mini App and management platform in Da Nang Vietnam. High-tech fintech UI aesthetics, dark blue and cyan neon accents (#0e1621, #2aabee), 3D isometric floating smartphone displaying app UI cards, AI scoring badge 100/100, cloud data sync, sleek luxury real estate coastal Da Nang backdrop blurred subtly. Professional, clean, engaging Instagram card with bold typography and modern tech startup visual appeal.</div>
+          <div class="card-actions">
+            <button class="btn-preview" onclick="openModal('screenshots/08_social_media_card_for_truenest_broker.png', 'Social media card for TrueNest Broker Web App, a modern real estate broker Telegram Mini App and management platform in Da Nang Vietnam. High-tech fintech UI aesthetics, dark blue and cyan neon accents (#0e1621, #2aabee), 3D isometric floating smartphone displaying app UI cards, AI scoring badge 100/100, cloud data sync, sleek luxury real estate coastal Da Nang backdrop blurred subtly. Professional, clean, engaging Instagram card with bold typography and modern tech startup visual appeal.', 'DESKTOP', false)">
+          <span class="material-symbols-outlined" style="font-size:18px;">visibility</span>
+          Xem trước
+        </button>
+            <a href="screenshots/08_social_media_card_for_truenest_broker.png" target="_blank" class="btn-icon" title="Xem ảnh gốc">
+          <span class="material-symbols-outlined" style="font-size:18px;">open_in_new</span>
+        </a>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="card" data-cat="system" data-title="gợi ý tin cho khách - truenest" data-dev="mobile">
+        <div class="card-thumb" onclick="openModal('screens/09_goi_y_tin_cho_khach_truenest.html', 'Gợi ý tin cho khách - TrueNest', 'MOBILE', true)">
+          <img src="screenshots/09_goi_y_tin_cho_khach_truenest.png" alt="Gợi ý tin cho khách - TrueNest" loading="lazy" />
+          <div class="card-idx-badge">#09</div>
+          <div class="card-device-badge mobile">
+            <span class="material-symbols-outlined" style="font-size:14px;">smartphone</span>
+            MOBILE
+          </div>
+          <div class="card-thumb-overlay">
+            <span style="font-size:0.75rem; color:#fff; display:flex; align-items:center; gap:0.35rem;">
+              <span class="material-symbols-outlined" style="font-size:14px; color:var(--secondary)">check_circle</span> HTML Sẵn sàng
+            </span>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span>Hệ thống & Cài đặt</span>
+            <span>•</span>
+            <span>780x2296px</span>
+          </div>
+          <div class="card-title" title="Gợi ý tin cho khách - TrueNest">Gợi ý tin cho khách - TrueNest</div>
+          <div class="card-actions">
+            <button class="btn-preview" onclick="openModal('screens/09_goi_y_tin_cho_khach_truenest.html', 'Gợi ý tin cho khách - TrueNest', 'MOBILE', true)">
+          <span class="material-symbols-outlined" style="font-size:18px;">visibility</span>
+          Xem trước
+        </button>
+            <a href="screens/09_goi_y_tin_cho_khach_truenest.html" target="_blank" class="btn-icon" title="Mở trong tab riêng">
+          <span class="material-symbols-outlined" style="font-size:18px;">open_in_new</span>
+        </a>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="card" data-cat="system" data-title="quản lý bài đăng - truenest" data-dev="mobile">
+        <div class="card-thumb" onclick="openModal('screens/10_quan_ly_bai_ang_truenest.html', 'Quản lý bài đăng - TrueNest', 'MOBILE', true)">
+          <img src="screenshots/10_quan_ly_bai_ang_truenest.png" alt="Quản lý bài đăng - TrueNest" loading="lazy" />
+          <div class="card-idx-badge">#10</div>
+          <div class="card-device-badge mobile">
+            <span class="material-symbols-outlined" style="font-size:14px;">smartphone</span>
+            MOBILE
+          </div>
+          <div class="card-thumb-overlay">
+            <span style="font-size:0.75rem; color:#fff; display:flex; align-items:center; gap:0.35rem;">
+              <span class="material-symbols-outlined" style="font-size:14px; color:var(--secondary)">check_circle</span> HTML Sẵn sàng
+            </span>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span>Hệ thống & Cài đặt</span>
+            <span>•</span>
+            <span>780x2250px</span>
+          </div>
+          <div class="card-title" title="Quản lý bài đăng - TrueNest">Quản lý bài đăng - TrueNest</div>
+          <div class="card-actions">
+            <button class="btn-preview" onclick="openModal('screens/10_quan_ly_bai_ang_truenest.html', 'Quản lý bài đăng - TrueNest', 'MOBILE', true)">
+          <span class="material-symbols-outlined" style="font-size:18px;">visibility</span>
+          Xem trước
+        </button>
+            <a href="screens/10_quan_ly_bai_ang_truenest.html" target="_blank" class="btn-icon" title="Mở trong tab riêng">
+          <span class="material-symbols-outlined" style="font-size:18px;">open_in_new</span>
+        </a>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="card" data-cat="marketing" data-title="image.png" data-dev="desktop">
+        <div class="card-thumb" onclick="openModal('screenshots/11_imagepng.png', 'image.png', 'DESKTOP', false)">
+          <img src="screenshots/11_imagepng.png" alt="image.png" loading="lazy" />
+          <div class="card-idx-badge">#11</div>
+          <div class="card-device-badge desktop">
+            <span class="material-symbols-outlined" style="font-size:14px;">desktop_windows</span>
+            DESKTOP
+          </div>
+          <div class="card-thumb-overlay">
+            <span style="font-size:0.75rem; color:#fff; display:flex; align-items:center; gap:0.35rem;">
+              <span class="material-symbols-outlined" style="font-size:14px; color:var(--tertiary)">image</span> Ảnh đồ họa
+            </span>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span>Marketing & Tư liệu</span>
+            <span>•</span>
+            <span>672x148px</span>
+          </div>
+          <div class="card-title" title="image.png">image.png</div>
+          <div class="card-actions">
+            <button class="btn-preview" onclick="openModal('screenshots/11_imagepng.png', 'image.png', 'DESKTOP', false)">
+          <span class="material-symbols-outlined" style="font-size:18px;">visibility</span>
+          Xem trước
+        </button>
+            <a href="screenshots/11_imagepng.png" target="_blank" class="btn-icon" title="Xem ảnh gốc">
+          <span class="material-symbols-outlined" style="font-size:18px;">open_in_new</span>
+        </a>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="card" data-cat="system" data-title="chi tiết căn hộ - truenest" data-dev="mobile">
+        <div class="card-thumb" onclick="openModal('screens/12_chi_tiet_can_ho_truenest_2.html', 'Chi tiết căn hộ - TrueNest', 'MOBILE', true)">
+          <img src="screenshots/12_chi_tiet_can_ho_truenest_2.png" alt="Chi tiết căn hộ - TrueNest" loading="lazy" />
+          <div class="card-idx-badge">#12</div>
+          <div class="card-device-badge mobile">
+            <span class="material-symbols-outlined" style="font-size:14px;">smartphone</span>
+            MOBILE
+          </div>
+          <div class="card-thumb-overlay">
+            <span style="font-size:0.75rem; color:#fff; display:flex; align-items:center; gap:0.35rem;">
+              <span class="material-symbols-outlined" style="font-size:14px; color:var(--secondary)">check_circle</span> HTML Sẵn sàng
+            </span>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span>Hệ thống & Cài đặt</span>
+            <span>•</span>
+            <span>780x3126px</span>
+          </div>
+          <div class="card-title" title="Chi tiết căn hộ - TrueNest">Chi tiết căn hộ - TrueNest</div>
+          <div class="card-actions">
+            <button class="btn-preview" onclick="openModal('screens/12_chi_tiet_can_ho_truenest_2.html', 'Chi tiết căn hộ - TrueNest', 'MOBILE', true)">
+          <span class="material-symbols-outlined" style="font-size:18px;">visibility</span>
+          Xem trước
+        </button>
+            <a href="screens/12_chi_tiet_can_ho_truenest_2.html" target="_blank" class="btn-icon" title="Mở trong tab riêng">
+          <span class="material-symbols-outlined" style="font-size:18px;">open_in_new</span>
+        </a>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="card" data-cat="system" data-title="thêm căn mới - truenest" data-dev="mobile">
+        <div class="card-thumb" onclick="openModal('screens/13_them_can_moi_truenest.html', 'Thêm căn mới - TrueNest', 'MOBILE', true)">
+          <img src="screenshots/13_them_can_moi_truenest.png" alt="Thêm căn mới - TrueNest" loading="lazy" />
+          <div class="card-idx-badge">#13</div>
+          <div class="card-device-badge mobile">
+            <span class="material-symbols-outlined" style="font-size:14px;">smartphone</span>
+            MOBILE
+          </div>
+          <div class="card-thumb-overlay">
+            <span style="font-size:0.75rem; color:#fff; display:flex; align-items:center; gap:0.35rem;">
+              <span class="material-symbols-outlined" style="font-size:14px; color:var(--secondary)">check_circle</span> HTML Sẵn sàng
+            </span>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span>Hệ thống & Cài đặt</span>
+            <span>•</span>
+            <span>780x2164px</span>
+          </div>
+          <div class="card-title" title="Thêm căn mới - TrueNest">Thêm căn mới - TrueNest</div>
+          <div class="card-actions">
+            <button class="btn-preview" onclick="openModal('screens/13_them_can_moi_truenest.html', 'Thêm căn mới - TrueNest', 'MOBILE', true)">
+          <span class="material-symbols-outlined" style="font-size:18px;">visibility</span>
+          Xem trước
+        </button>
+            <a href="screens/13_them_can_moi_truenest.html" target="_blank" class="btn-icon" title="Mở trong tab riêng">
+          <span class="material-symbols-outlined" style="font-size:18px;">open_in_new</span>
+        </a>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="card" data-cat="broker" data-title="tab thêm - truenest broker" data-dev="mobile">
+        <div class="card-thumb" onclick="openModal('screens/14_tab_them_truenest_broker.html', 'Tab Thêm - TrueNest Broker', 'MOBILE', true)">
+          <img src="screenshots/14_tab_them_truenest_broker.png" alt="Tab Thêm - TrueNest Broker" loading="lazy" />
+          <div class="card-idx-badge">#14</div>
+          <div class="card-device-badge mobile">
+            <span class="material-symbols-outlined" style="font-size:14px;">smartphone</span>
+            MOBILE
+          </div>
+          <div class="card-thumb-overlay">
+            <span style="font-size:0.75rem; color:#fff; display:flex; align-items:center; gap:0.35rem;">
+              <span class="material-symbols-outlined" style="font-size:14px; color:var(--secondary)">check_circle</span> HTML Sẵn sàng
+            </span>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span>Mạng lưới Broker</span>
+            <span>•</span>
+            <span>780x1948px</span>
+          </div>
+          <div class="card-title" title="Tab Thêm - TrueNest Broker">Tab Thêm - TrueNest Broker</div>
+          <div class="card-actions">
+            <button class="btn-preview" onclick="openModal('screens/14_tab_them_truenest_broker.html', 'Tab Thêm - TrueNest Broker', 'MOBILE', true)">
+          <span class="material-symbols-outlined" style="font-size:18px;">visibility</span>
+          Xem trước
+        </button>
+            <a href="screens/14_tab_them_truenest_broker.html" target="_blank" class="btn-icon" title="Mở trong tab riêng">
+          <span class="material-symbols-outlined" style="font-size:18px;">open_in_new</span>
+        </a>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="card" data-cat="system" data-title="danh sách căn - truenest" data-dev="mobile">
+        <div class="card-thumb" onclick="openModal('screens/15_danh_sach_can_truenest.html', 'Danh sách căn - TrueNest', 'MOBILE', true)">
+          <img src="screenshots/15_danh_sach_can_truenest.png" alt="Danh sách căn - TrueNest" loading="lazy" />
+          <div class="card-idx-badge">#15</div>
+          <div class="card-device-badge mobile">
+            <span class="material-symbols-outlined" style="font-size:14px;">smartphone</span>
+            MOBILE
+          </div>
+          <div class="card-thumb-overlay">
+            <span style="font-size:0.75rem; color:#fff; display:flex; align-items:center; gap:0.35rem;">
+              <span class="material-symbols-outlined" style="font-size:14px; color:var(--secondary)">check_circle</span> HTML Sẵn sàng
+            </span>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span>Hệ thống & Cài đặt</span>
+            <span>•</span>
+            <span>780x3158px</span>
+          </div>
+          <div class="card-title" title="Danh sách căn - TrueNest">Danh sách căn - TrueNest</div>
+          <div class="card-actions">
+            <button class="btn-preview" onclick="openModal('screens/15_danh_sach_can_truenest.html', 'Danh sách căn - TrueNest', 'MOBILE', true)">
+          <span class="material-symbols-outlined" style="font-size:18px;">visibility</span>
+          Xem trước
+        </button>
+            <a href="screens/15_danh_sach_can_truenest.html" target="_blank" class="btn-icon" title="Mở trong tab riêng">
+          <span class="material-symbols-outlined" style="font-size:18px;">open_in_new</span>
+        </a>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="card" data-cat="broker" data-title="match liên broker - truenest" data-dev="mobile">
+        <div class="card-thumb" onclick="openModal('screens/16_match_lien_broker_truenest.html', 'Match liên broker - TrueNest', 'MOBILE', true)">
+          <img src="screenshots/16_match_lien_broker_truenest.png" alt="Match liên broker - TrueNest" loading="lazy" />
+          <div class="card-idx-badge">#16</div>
+          <div class="card-device-badge mobile">
+            <span class="material-symbols-outlined" style="font-size:14px;">smartphone</span>
+            MOBILE
+          </div>
+          <div class="card-thumb-overlay">
+            <span style="font-size:0.75rem; color:#fff; display:flex; align-items:center; gap:0.35rem;">
+              <span class="material-symbols-outlined" style="font-size:14px; color:var(--secondary)">check_circle</span> HTML Sẵn sàng
+            </span>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span>Mạng lưới Broker</span>
+            <span>•</span>
+            <span>780x2916px</span>
+          </div>
+          <div class="card-title" title="Match liên broker - TrueNest">Match liên broker - TrueNest</div>
+          <div class="card-actions">
+            <button class="btn-preview" onclick="openModal('screens/16_match_lien_broker_truenest.html', 'Match liên broker - TrueNest', 'MOBILE', true)">
+          <span class="material-symbols-outlined" style="font-size:18px;">visibility</span>
+          Xem trước
+        </button>
+            <a href="screens/16_match_lien_broker_truenest.html" target="_blank" class="btn-icon" title="Mở trong tab riêng">
+          <span class="material-symbols-outlined" style="font-size:18px;">open_in_new</span>
+        </a>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="card" data-cat="system" data-title="quản lý hoa hồng - truenest" data-dev="mobile">
+        <div class="card-thumb" onclick="openModal('screens/17_quan_ly_hoa_hong_truenest.html', 'Quản lý Hoa hồng - TrueNest', 'MOBILE', true)">
+          <img src="screenshots/17_quan_ly_hoa_hong_truenest.png" alt="Quản lý Hoa hồng - TrueNest" loading="lazy" />
+          <div class="card-idx-badge">#17</div>
+          <div class="card-device-badge mobile">
+            <span class="material-symbols-outlined" style="font-size:14px;">smartphone</span>
+            MOBILE
+          </div>
+          <div class="card-thumb-overlay">
+            <span style="font-size:0.75rem; color:#fff; display:flex; align-items:center; gap:0.35rem;">
+              <span class="material-symbols-outlined" style="font-size:14px; color:var(--secondary)">check_circle</span> HTML Sẵn sàng
+            </span>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span>Hệ thống & Cài đặt</span>
+            <span>•</span>
+            <span>780x1878px</span>
+          </div>
+          <div class="card-title" title="Quản lý Hoa hồng - TrueNest">Quản lý Hoa hồng - TrueNest</div>
+          <div class="card-actions">
+            <button class="btn-preview" onclick="openModal('screens/17_quan_ly_hoa_hong_truenest.html', 'Quản lý Hoa hồng - TrueNest', 'MOBILE', true)">
+          <span class="material-symbols-outlined" style="font-size:18px;">visibility</span>
+          Xem trước
+        </button>
+            <a href="screens/17_quan_ly_hoa_hong_truenest.html" target="_blank" class="btn-icon" title="Mở trong tab riêng">
+          <span class="material-symbols-outlined" style="font-size:18px;">open_in_new</span>
+        </a>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="card" data-cat="broker" data-title="hồ sơ broker & uy tín - truenest" data-dev="mobile">
+        <div class="card-thumb" onclick="openModal('screens/18_ho_so_broker_uy_tin_truenest.html', 'Hồ sơ Broker & Uy tín - TrueNest', 'MOBILE', true)">
+          <img src="screenshots/18_ho_so_broker_uy_tin_truenest.png" alt="Hồ sơ Broker & Uy tín - TrueNest" loading="lazy" />
+          <div class="card-idx-badge">#18</div>
+          <div class="card-device-badge mobile">
+            <span class="material-symbols-outlined" style="font-size:14px;">smartphone</span>
+            MOBILE
+          </div>
+          <div class="card-thumb-overlay">
+            <span style="font-size:0.75rem; color:#fff; display:flex; align-items:center; gap:0.35rem;">
+              <span class="material-symbols-outlined" style="font-size:14px; color:var(--secondary)">check_circle</span> HTML Sẵn sàng
+            </span>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span>Mạng lưới Broker</span>
+            <span>•</span>
+            <span>780x3028px</span>
+          </div>
+          <div class="card-title" title="Hồ sơ Broker & Uy tín - TrueNest">Hồ sơ Broker & Uy tín - TrueNest</div>
+          <div class="card-actions">
+            <button class="btn-preview" onclick="openModal('screens/18_ho_so_broker_uy_tin_truenest.html', 'Hồ sơ Broker & Uy tín - TrueNest', 'MOBILE', true)">
+          <span class="material-symbols-outlined" style="font-size:18px;">visibility</span>
+          Xem trước
+        </button>
+            <a href="screens/18_ho_so_broker_uy_tin_truenest.html" target="_blank" class="btn-icon" title="Mở trong tab riêng">
+          <span class="material-symbols-outlined" style="font-size:18px;">open_in_new</span>
+        </a>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="card" data-cat="broker" data-title="sleek and polished email newsletter header banner for truenest real estate broker ecosystem. clean modern dark-mode aesthetic (#071420 to #101d28 background with vibrant cyan #2aabee glow), featuring stylized minimalist skyline of da nang coastal city integrated with geometric tech nodes, network broker matching lines, and subtle smartphone frame. sophisticated, executive b2b tech newsletter header, elegant typography truenest broker terminal." data-dev="desktop">
+        <div class="card-thumb" onclick="openModal('screenshots/19_sleek_and_polished_email_newsletter_h.png', 'Sleek and polished email newsletter header banner for TrueNest Real Estate Broker Ecosystem. Clean modern dark-mode aesthetic (#071420 to #101d28 background with vibrant cyan #2aabee glow), featuring stylized minimalist skyline of Da Nang coastal city integrated with geometric tech nodes, network broker matching lines, and subtle smartphone frame. Sophisticated, executive B2B tech newsletter header, elegant typography TrueNest Broker Terminal.', 'DESKTOP', false)">
+          <img src="screenshots/19_sleek_and_polished_email_newsletter_h.png" alt="Sleek and polished email newsletter header banner for TrueNest Real Estate Broker Ecosystem. Clean modern dark-mode aesthetic (#071420 to #101d28 background with vibrant cyan #2aabee glow), featuring stylized minimalist skyline of Da Nang coastal city integrated with geometric tech nodes, network broker matching lines, and subtle smartphone frame. Sophisticated, executive B2B tech newsletter header, elegant typography TrueNest Broker Terminal." loading="lazy" />
+          <div class="card-idx-badge">#19</div>
+          <div class="card-device-badge desktop">
+            <span class="material-symbols-outlined" style="font-size:14px;">desktop_windows</span>
+            DESKTOP
+          </div>
+          <div class="card-thumb-overlay">
+            <span style="font-size:0.75rem; color:#fff; display:flex; align-items:center; gap:0.35rem;">
+              <span class="material-symbols-outlined" style="font-size:14px; color:var(--tertiary)">image</span> Ảnh đồ họa
+            </span>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span>Mạng lưới Broker</span>
+            <span>•</span>
+            <span>1376x768px</span>
+          </div>
+          <div class="card-title" title="Sleek and polished email newsletter header banner for TrueNest Real Estate Broker Ecosystem. Clean modern dark-mode aesthetic (#071420 to #101d28 background with vibrant cyan #2aabee glow), featuring stylized minimalist skyline of Da Nang coastal city integrated with geometric tech nodes, network broker matching lines, and subtle smartphone frame. Sophisticated, executive B2B tech newsletter header, elegant typography TrueNest Broker Terminal.">Sleek and polished email newsletter header banner for TrueNest Real Estate Broker Ecosystem. Clean modern dark-mode aesthetic (#071420 to #101d28 background with vibrant cyan #2aabee glow), featuring stylized minimalist skyline of Da Nang coastal city integrated with geometric tech nodes, network broker matching lines, and subtle smartphone frame. Sophisticated, executive B2B tech newsletter header, elegant typography TrueNest Broker Terminal.</div>
+          <div class="card-actions">
+            <button class="btn-preview" onclick="openModal('screenshots/19_sleek_and_polished_email_newsletter_h.png', 'Sleek and polished email newsletter header banner for TrueNest Real Estate Broker Ecosystem. Clean modern dark-mode aesthetic (#071420 to #101d28 background with vibrant cyan #2aabee glow), featuring stylized minimalist skyline of Da Nang coastal city integrated with geometric tech nodes, network broker matching lines, and subtle smartphone frame. Sophisticated, executive B2B tech newsletter header, elegant typography TrueNest Broker Terminal.', 'DESKTOP', false)">
+          <span class="material-symbols-outlined" style="font-size:18px;">visibility</span>
+          Xem trước
+        </button>
+            <a href="screenshots/19_sleek_and_polished_email_newsletter_h.png" target="_blank" class="btn-icon" title="Xem ảnh gốc">
+          <span class="material-symbols-outlined" style="font-size:18px;">open_in_new</span>
+        </a>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="card" data-cat="system" data-title="bộ lọc căn hộ (bottom sheet) - truenest" data-dev="mobile">
+        <div class="card-thumb" onclick="openModal('screens/20_bo_loc_can_ho_bottom_sheet_truenest.html', 'Bộ lọc căn hộ (Bottom Sheet) - TrueNest', 'MOBILE', true)">
+          <img src="screenshots/20_bo_loc_can_ho_bottom_sheet_truenest.png" alt="Bộ lọc căn hộ (Bottom Sheet) - TrueNest" loading="lazy" />
+          <div class="card-idx-badge">#20</div>
+          <div class="card-device-badge mobile">
+            <span class="material-symbols-outlined" style="font-size:14px;">smartphone</span>
+            MOBILE
+          </div>
+          <div class="card-thumb-overlay">
+            <span style="font-size:0.75rem; color:#fff; display:flex; align-items:center; gap:0.35rem;">
+              <span class="material-symbols-outlined" style="font-size:14px; color:var(--secondary)">check_circle</span> HTML Sẵn sàng
+            </span>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span>Hệ thống & Cài đặt</span>
+            <span>•</span>
+            <span>780x3920px</span>
+          </div>
+          <div class="card-title" title="Bộ lọc căn hộ (Bottom Sheet) - TrueNest">Bộ lọc căn hộ (Bottom Sheet) - TrueNest</div>
+          <div class="card-actions">
+            <button class="btn-preview" onclick="openModal('screens/20_bo_loc_can_ho_bottom_sheet_truenest.html', 'Bộ lọc căn hộ (Bottom Sheet) - TrueNest', 'MOBILE', true)">
+          <span class="material-symbols-outlined" style="font-size:18px;">visibility</span>
+          Xem trước
+        </button>
+            <a href="screens/20_bo_loc_can_ho_bottom_sheet_truenest.html" target="_blank" class="btn-icon" title="Mở trong tab riêng">
+          <span class="material-symbols-outlined" style="font-size:18px;">open_in_new</span>
+        </a>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="card" data-cat="system" data-title="nâng cấp gói cước - truenest" data-dev="mobile">
+        <div class="card-thumb" onclick="openModal('screens/21_nang_cap_goi_cuoc_truenest.html', 'Nâng cấp gói cước - TrueNest', 'MOBILE', true)">
+          <img src="screenshots/21_nang_cap_goi_cuoc_truenest.png" alt="Nâng cấp gói cước - TrueNest" loading="lazy" />
+          <div class="card-idx-badge">#21</div>
+          <div class="card-device-badge mobile">
+            <span class="material-symbols-outlined" style="font-size:14px;">smartphone</span>
+            MOBILE
+          </div>
+          <div class="card-thumb-overlay">
+            <span style="font-size:0.75rem; color:#fff; display:flex; align-items:center; gap:0.35rem;">
+              <span class="material-symbols-outlined" style="font-size:14px; color:var(--secondary)">check_circle</span> HTML Sẵn sàng
+            </span>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span>Hệ thống & Cài đặt</span>
+            <span>•</span>
+            <span>780x2934px</span>
+          </div>
+          <div class="card-title" title="Nâng cấp gói cước - TrueNest">Nâng cấp gói cước - TrueNest</div>
+          <div class="card-actions">
+            <button class="btn-preview" onclick="openModal('screens/21_nang_cap_goi_cuoc_truenest.html', 'Nâng cấp gói cước - TrueNest', 'MOBILE', true)">
+          <span class="material-symbols-outlined" style="font-size:18px;">visibility</span>
+          Xem trước
+        </button>
+            <a href="screens/21_nang_cap_goi_cuoc_truenest.html" target="_blank" class="btn-icon" title="Mở trong tab riêng">
+          <span class="material-symbols-outlined" style="font-size:18px;">open_in_new</span>
+        </a>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="card" data-cat="marketing" data-title="marketing kit.md" data-dev="mobile">
+        <div class="card-thumb" onclick="openModal('screens/22_marketing_kitmd.md', 'Marketing Kit.md', 'MOBILE', true)">
+          <img src="https://via.placeholder.com/600x400?text=No+Preview" alt="Marketing Kit.md" loading="lazy" />
+          <div class="card-idx-badge">#22</div>
+          <div class="card-device-badge mobile">
+            <span class="material-symbols-outlined" style="font-size:14px;">smartphone</span>
+            MOBILE
+          </div>
+          <div class="card-thumb-overlay">
+            <span style="font-size:0.75rem; color:#fff; display:flex; align-items:center; gap:0.35rem;">
+              <span class="material-symbols-outlined" style="font-size:14px; color:var(--secondary)">check_circle</span> HTML Sẵn sàng
+            </span>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span>Marketing & Tư liệu</span>
+            <span>•</span>
+            <span>780x1768px</span>
+          </div>
+          <div class="card-title" title="Marketing Kit.md">Marketing Kit.md</div>
+          <div class="card-actions">
+            <button class="btn-preview" onclick="openModal('screens/22_marketing_kitmd.md', 'Marketing Kit.md', 'MOBILE', true)">
+          <span class="material-symbols-outlined" style="font-size:18px;">visibility</span>
+          Xem trước
+        </button>
+            <a href="screens/22_marketing_kitmd.md" target="_blank" class="btn-icon" title="Mở trong tab riêng">
+          <span class="material-symbols-outlined" style="font-size:18px;">open_in_new</span>
+        </a>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="card" data-cat="broker" data-title="digital marketing web banner ad for truenest broker platform, real estate ai-powered telegram mini app. premium dark ui style (#0e1621 dark navy with bright electric cyan #2aabee highlights), featuring modern ui mockup screens floating dynamically, ai matching indicators, cloudflare r2 fast photo badges, telegram mini app native integration badge. high conversion advertising layout with spacious copy area on the left and dynamic 3d app visual on the right. professional b2b saas real estate tech banner." data-dev="desktop">
+        <div class="card-thumb" onclick="openModal('screenshots/23_digital_marketing_web_banner_ad_for_t.png', 'Digital marketing web banner ad for TrueNest Broker Platform, real estate AI-powered Telegram Mini App. Premium dark UI style (#0e1621 dark navy with bright electric cyan #2aabee highlights), featuring modern UI mockup screens floating dynamically, AI Matching indicators, Cloudflare R2 fast photo badges, Telegram Mini App native integration badge. High conversion advertising layout with spacious copy area on the left and dynamic 3D app visual on the right. Professional B2B SaaS real estate tech banner.', 'DESKTOP', false)">
+          <img src="screenshots/23_digital_marketing_web_banner_ad_for_t.png" alt="Digital marketing web banner ad for TrueNest Broker Platform, real estate AI-powered Telegram Mini App. Premium dark UI style (#0e1621 dark navy with bright electric cyan #2aabee highlights), featuring modern UI mockup screens floating dynamically, AI Matching indicators, Cloudflare R2 fast photo badges, Telegram Mini App native integration badge. High conversion advertising layout with spacious copy area on the left and dynamic 3D app visual on the right. Professional B2B SaaS real estate tech banner." loading="lazy" />
+          <div class="card-idx-badge">#23</div>
+          <div class="card-device-badge desktop">
+            <span class="material-symbols-outlined" style="font-size:14px;">desktop_windows</span>
+            DESKTOP
+          </div>
+          <div class="card-thumb-overlay">
+            <span style="font-size:0.75rem; color:#fff; display:flex; align-items:center; gap:0.35rem;">
+              <span class="material-symbols-outlined" style="font-size:14px; color:var(--tertiary)">image</span> Ảnh đồ họa
+            </span>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span>Mạng lưới Broker</span>
+            <span>•</span>
+            <span>1376x768px</span>
+          </div>
+          <div class="card-title" title="Digital marketing web banner ad for TrueNest Broker Platform, real estate AI-powered Telegram Mini App. Premium dark UI style (#0e1621 dark navy with bright electric cyan #2aabee highlights), featuring modern UI mockup screens floating dynamically, AI Matching indicators, Cloudflare R2 fast photo badges, Telegram Mini App native integration badge. High conversion advertising layout with spacious copy area on the left and dynamic 3D app visual on the right. Professional B2B SaaS real estate tech banner.">Digital marketing web banner ad for TrueNest Broker Platform, real estate AI-powered Telegram Mini App. Premium dark UI style (#0e1621 dark navy with bright electric cyan #2aabee highlights), featuring modern UI mockup screens floating dynamically, AI Matching indicators, Cloudflare R2 fast photo badges, Telegram Mini App native integration badge. High conversion advertising layout with spacious copy area on the left and dynamic 3D app visual on the right. Professional B2B SaaS real estate tech banner.</div>
+          <div class="card-actions">
+            <button class="btn-preview" onclick="openModal('screenshots/23_digital_marketing_web_banner_ad_for_t.png', 'Digital marketing web banner ad for TrueNest Broker Platform, real estate AI-powered Telegram Mini App. Premium dark UI style (#0e1621 dark navy with bright electric cyan #2aabee highlights), featuring modern UI mockup screens floating dynamically, AI Matching indicators, Cloudflare R2 fast photo badges, Telegram Mini App native integration badge. High conversion advertising layout with spacious copy area on the left and dynamic 3D app visual on the right. Professional B2B SaaS real estate tech banner.', 'DESKTOP', false)">
+          <span class="material-symbols-outlined" style="font-size:18px;">visibility</span>
+          Xem trước
+        </button>
+            <a href="screenshots/23_digital_marketing_web_banner_ad_for_t.png" target="_blank" class="btn-icon" title="Xem ảnh gốc">
+          <span class="material-symbols-outlined" style="font-size:18px;">open_in_new</span>
+        </a>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="card" data-cat="system" data-title="danh sách khách hàng - truenest" data-dev="mobile">
+        <div class="card-thumb" onclick="openModal('screens/24_danh_sach_khach_hang_truenest.html', 'Danh sách khách hàng - TrueNest', 'MOBILE', true)">
+          <img src="screenshots/24_danh_sach_khach_hang_truenest.png" alt="Danh sách khách hàng - TrueNest" loading="lazy" />
+          <div class="card-idx-badge">#24</div>
+          <div class="card-device-badge mobile">
+            <span class="material-symbols-outlined" style="font-size:14px;">smartphone</span>
+            MOBILE
+          </div>
+          <div class="card-thumb-overlay">
+            <span style="font-size:0.75rem; color:#fff; display:flex; align-items:center; gap:0.35rem;">
+              <span class="material-symbols-outlined" style="font-size:14px; color:var(--secondary)">check_circle</span> HTML Sẵn sàng
+            </span>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span>Hệ thống & Cài đặt</span>
+            <span>•</span>
+            <span>780x2484px</span>
+          </div>
+          <div class="card-title" title="Danh sách khách hàng - TrueNest">Danh sách khách hàng - TrueNest</div>
+          <div class="card-actions">
+            <button class="btn-preview" onclick="openModal('screens/24_danh_sach_khach_hang_truenest.html', 'Danh sách khách hàng - TrueNest', 'MOBILE', true)">
+          <span class="material-symbols-outlined" style="font-size:18px;">visibility</span>
+          Xem trước
+        </button>
+            <a href="screens/24_danh_sach_khach_hang_truenest.html" target="_blank" class="btn-icon" title="Mở trong tab riêng">
+          <span class="material-symbols-outlined" style="font-size:18px;">open_in_new</span>
+        </a>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="card" data-cat="system" data-title="chi tiết khách hàng - truenest" data-dev="mobile">
+        <div class="card-thumb" onclick="openModal('screens/25_chi_tiet_khach_hang_truenest.html', 'Chi tiết khách hàng - TrueNest', 'MOBILE', true)">
+          <img src="screenshots/25_chi_tiet_khach_hang_truenest.png" alt="Chi tiết khách hàng - TrueNest" loading="lazy" />
+          <div class="card-idx-badge">#25</div>
+          <div class="card-device-badge mobile">
+            <span class="material-symbols-outlined" style="font-size:14px;">smartphone</span>
+            MOBILE
+          </div>
+          <div class="card-thumb-overlay">
+            <span style="font-size:0.75rem; color:#fff; display:flex; align-items:center; gap:0.35rem;">
+              <span class="material-symbols-outlined" style="font-size:14px; color:var(--secondary)">check_circle</span> HTML Sẵn sàng
+            </span>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span>Hệ thống & Cài đặt</span>
+            <span>•</span>
+            <span>780x1960px</span>
+          </div>
+          <div class="card-title" title="Chi tiết khách hàng - TrueNest">Chi tiết khách hàng - TrueNest</div>
+          <div class="card-actions">
+            <button class="btn-preview" onclick="openModal('screens/25_chi_tiet_khach_hang_truenest.html', 'Chi tiết khách hàng - TrueNest', 'MOBILE', true)">
+          <span class="material-symbols-outlined" style="font-size:18px;">visibility</span>
+          Xem trước
+        </button>
+            <a href="screens/25_chi_tiet_khach_hang_truenest.html" target="_blank" class="btn-icon" title="Mở trong tab riêng">
+          <span class="material-symbols-outlined" style="font-size:18px;">open_in_new</span>
+        </a>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="empty-state" id="emptyState">
+        <span class="material-symbols-outlined">filter_list_off</span>
+        <div style="font-size:1.1rem; font-weight:600; color:#fff;">Không tìm thấy màn hình phù hợp</div>
+        <div style="font-size:0.85rem; margin-top:0.25rem;">Thử tìm kiếm với từ khóa khác hoặc chuyển danh mục.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL PREVIEW -->
+  <div class="modal-backdrop" id="modalBackdrop" onclick="handleBackdropClick(event)">
+    <div class="modal-window">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <span class="material-symbols-outlined" style="color:var(--primary); font-size:22px;">devices</span>
+          <div class="modal-title" id="modalTitle">Xem trước màn hình</div>
+        </div>
+        <div class="modal-controls">
+          <button class="view-btn" id="btnMobile" onclick="setFrameView('mobile')">
+            <span class="material-symbols-outlined" style="font-size:16px;">smartphone</span> Mobile (390px)
+          </button>
+          <button class="view-btn" id="btnDesktop" onclick="setFrameView('desktop')">
+            <span class="material-symbols-outlined" style="font-size:16px;">desktop_windows</span> 100% Rộng
+          </button>
+          <a href="#" id="modalOpenExternal" target="_blank" class="btn-icon" title="Mở trang trong tab riêng">
+            <span class="material-symbols-outlined" style="font-size:18px;">open_in_new</span>
+          </a>
+          <button class="modal-close" onclick="closeModal()">
+            <span class="material-symbols-outlined">close</span>
+          </button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div class="frame-container mobile" id="frameContainer">
+          <iframe id="previewFrame" src="about:blank"></iframe>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const searchInput = document.getElementById('searchInput');
+    const chips = document.querySelectorAll('.chip');
+    const cards = document.querySelectorAll('.card');
+    const emptyState = document.getElementById('emptyState');
+
+    let currentCat = 'all';
+
+    function filterCards() {
+      const q = searchInput.value.toLowerCase().trim();
+      let visibleCount = 0;
+
+      cards.forEach(card => {
+        const title = card.getAttribute('data-title');
+        const cat = card.getAttribute('data-cat');
+        const matchSearch = !q || title.includes(q);
+        const matchCat = currentCat === 'all' || cat === currentCat;
+
+        if (matchSearch && matchCat) {
+          card.style.display = 'flex';
+          visibleCount++;
+        } else {
+          card.style.display = 'none';
+        }
+      });
+
+      emptyState.style.display = visibleCount === 0 ? 'block' : 'none';
+    }
+
+    searchInput.addEventListener('input', filterCards);
+
+    chips.forEach(chip => {
+      chip.addEventListener('click', () => {
+        chips.forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        currentCat = chip.getAttribute('data-cat');
+        filterCards();
+      });
+    });
+
+    // Modal
+    const modal = document.getElementById('modalBackdrop');
+    const modalTitle = document.getElementById('modalTitle');
+    const previewFrame = document.getElementById('previewFrame');
+    const frameContainer = document.getElementById('frameContainer');
+    const modalOpenExternal = document.getElementById('modalOpenExternal');
+    const btnMobile = document.getElementById('btnMobile');
+    const btnDesktop = document.getElementById('btnDesktop');
+
+    function openModal(url, title, devType, isHtml) {
+      modalTitle.textContent = title;
+      previewFrame.src = url;
+      modalOpenExternal.href = url;
+
+      if (devType === 'MOBILE') {
+        setFrameView('mobile');
+      } else {
+        setFrameView('desktop');
+      }
+
+      modal.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeModal() {
+      modal.classList.remove('open');
+      previewFrame.src = 'about:blank';
+      document.body.style.overflow = '';
+    }
+
+    function handleBackdropClick(e) {
+      if (e.target === modal) {
+        closeModal();
+      }
+    }
+
+    function setFrameView(type) {
+      if (type === 'mobile') {
+        frameContainer.className = 'frame-container mobile';
+        btnMobile.classList.add('active');
+        btnDesktop.classList.remove('active');
+      } else {
+        frameContainer.className = 'frame-container desktop';
+        btnDesktop.classList.add('active');
+        btnMobile.classList.remove('active');
+      }
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && modal.classList.contains('open')) {
+        closeModal();
+      }
+    });
+  </script>
+</body>
+</html>

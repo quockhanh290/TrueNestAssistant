@@ -1,0 +1,426 @@
+<!DOCTYPE html><html class="dark" lang="vi"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"><meta content="mobile_stack" name="shell-type"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"><link href="https://fonts.googleapis.com" rel="preconnect"><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"><link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"><style>@layer base{html,body{width:100%;min-height:100vh;margin:0;padding:0;background-color:#071420;color:#d7e4f4;overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent;}body{display:flex;justify-content:center;}.pb-safe{padding-bottom:calc(env(safe-area-inset-bottom, 0px) + 1rem);}.pt-safe{padding-top:env(safe-area-inset-top, 0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "surface-variant": "#293643", "primary": "#89ceff", "on-tertiary": "#432c00", "primary-fixed-dim": "#89ceff", "error-container": "#93000a", "tertiary-container": "#d09729", "inverse-primary": "#006591", "on-secondary-fixed": "#002203", "outline": "#88929b", "on-primary-container": "#003c58", "on-surface": "#d7e4f4", "on-error-container": "#ffdad6", "surface": "#071420", "on-primary": "#00344d", "surface-container-highest": "#293643", "tertiary-fixed": "#ffdeac", "on-error": "#690005", "primary-container": "#2aabee", "surface-container-lowest": "#030f1b", "surface-bright": "#2e3a47", "surface-container-low": "#101d28", "on-tertiary-fixed": "#281900", "secondary-fixed": "#97f98f", "secondary-fixed-dim": "#7bdc75", "error": "#ffb4ab", "on-primary-fixed-variant": "#004c6e", "background": "#071420", "tertiary-fixed-dim": "#fabc4c", "on-secondary-fixed-variant": "#00530f", "surface-container": "#14212d", "surface-tint": "#89ceff", "inverse-surface": "#d7e4f4", "outline-variant": "#3e4850", "on-tertiary-fixed-variant": "#604100", "secondary-container": "#007119", "inverse-on-surface": "#25323e", "on-background": "#d7e4f4", "surface-container-high": "#1f2b37", "on-primary-fixed": "#001e2f", "on-tertiary-container": "#4c3300", "on-secondary": "#003908", "primary-fixed": "#c9e6ff", "tertiary": "#fabc4c", "on-secondary-container": "#91f389", "on-surface-variant": "#bec8d2", "secondary": "#7bdc75", "surface-dim": "#071420" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "margin-desktop": "2rem", "gutter-tablet": "1rem", "space-xl": "1.5rem", "space-lg": "1rem", "space-md": "0.75rem", "space-sm": "0.5rem", "margin-tablet": "1.5rem", "gutter": "0.75rem", "space-xs": "0.25rem", "gutter-desktop": "1.25rem", "margin": "1rem" }, "fontFamily": { "label-sm": [ "JetBrains Mono" ], "headline-md": [ "Space Grotesk" ], "label-md": [ "JetBrains Mono" ], "headline-lg": [ "Space Grotesk" ], "body-lg": [ "Geist" ], "headline-lg-mobile": [ "Space Grotesk" ], "body-sm": [ "Geist" ], "headline-sm": [ "Space Grotesk" ], "body-md": [ "Geist" ], "label-lg": [ "JetBrains Mono" ] }, "fontSize": { "label-sm": [ "10px", { "lineHeight": "14px", "fontWeight": "600" } ], "headline-md": [ "22px", { "lineHeight": "28px", "fontWeight": "600" } ], "label-md": [ "12px", { "lineHeight": "16px", "fontWeight": "500" } ], "headline-lg": [ "32px", { "lineHeight": "40px", "fontWeight": "700" } ], "body-lg": [ "16px", { "lineHeight": "24px", "fontWeight": "400" } ], "headline-lg-mobile": [ "26px", { "lineHeight": "32px", "fontWeight": "700" } ], "body-sm": [ "13px", { "lineHeight": "18px", "fontWeight": "400" } ], "headline-sm": [ "18px", { "lineHeight": "24px", "fontWeight": "600" } ], "body-md": [ "14px", { "lineHeight": "20px", "fontWeight": "400" } ], "label-lg": [ "14px", { "lineHeight": "18px", "fontWeight": "500" } ] } } } };</script></head><body class="bg-surface font-body-md text-on-surface antialiased"><div class="w-full max-w-[420px] min-h-screen relative flex flex-col bg-surface shadow-2xl"><header class="fixed top-0 w-full max-w-[420px] z-50 bg-surface-container shadow-md pt-safe"><div class="h-12 px-space-md flex items-center justify-between gap-space-xs"><div class="flex items-center gap-space-xs min-w-0 flex-1"><button type="button" onclick="if(window.Telegram?.WebApp?.BackButton){window.Telegram.WebApp.close();}else{history.back();}" class="w-8 h-8 rounded-full flex items-center justify-center text-primary active:bg-surface-variant transition-colors" title="Đóng Mini App"><span class="material-symbols-outlined text-[20px]">arrow_back</span></button><div class="flex items-center gap-1.5 min-w-0"><img src="https://lh3.googleusercontent.com/aida-public/AB6AXuA_M9_S9ZRzzAC9V6TMVuUCLQzfm5XlNK1UZ7hK49japPIB17NSyR2V6dKKt-aKiVJxPdfog0ivICmVb74qLbACmF7JnAtgoKD6hKtcGnKrNIFToQUT2geHM0Jn-CVz3rBeWGzNTNMvMxjFQSsieyCK0sLv7rkPedzicdEaP1feKKsXsx3_VpdgFIXnahlBqUuqBIltqKk1s4hX0LQs2dYh-E-yBS17Xitxd1lQstOuMlMHeJ122ERSjQ" alt="TrueNest" class="h-6 w-auto object-contain flex-shrink-0"><span class="font-headline-sm text-[16px] text-on-surface font-semibold truncate">#TN-204 · Chi Tiết</span></div></div><div class="flex items-center gap-space-xs"><span class="px-2 py-0.5 rounded-full bg-primary/10 text-primary font-label-sm text-[11px] font-medium flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>TMA Live</span></div></div></header><main class="flex-1 w-full pb-safe px-margin bg-surface pt-12"><div class="flex flex-col w-full pb-28">
+<!-- Top Utility Context Bar -->
+<div class="flex items-center justify-between py-space-xs px-space-xs mb-space-xs"><span class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider flex items-center gap-1"><span class="material-symbols-outlined text-[15px] text-primary">apartment</span> Mã căn: TN-204</span><div class="flex items-center gap-space-xs"><button id="shareBtn" type="button" onclick="copyMarketingPost()" class="px-space-sm py-1 rounded-lg bg-surface-container flex items-center gap-1 text-primary text-label-sm font-label-sm active:bg-surface-variant transition-colors" title="Copy tóm tắt Telegram"><span class="material-symbols-outlined text-[15px]">content_copy</span><span class="">Copy Telegram</span></button></div></div>
+<!-- Hero Media Carousel Box -->
+<div class="relative w-full aspect-[16/10] rounded-xl overflow-hidden shadow-lg bg-surface-container-low group">
+<div class="w-full h-full relative" id="carouselWrapper">
+<img class="w-full h-full object-cover transition-all duration-300" data-alt="Stunning modern living room of luxury high-rise apartment in Da Nang overlooking My Khe beach and azure sea. Bright sunlight filtering through floor-to-ceiling glass doors, minimalist scandinavian wooden furniture, stylish turquoise cushions, potted tropical monstera plant, 4k ultra-detailed interior architectural photography." id="activeSlide" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDtMFgizqnKDsYFdJYIJChDykaALgxX9HdmACZkSHNpsTgEs8ODW-ksMOOjcZR4PDN-bZTHCqXV17MmflKzQtMTewBBxOM0kAs5iZmZ1-GA-U-RALPRNgkdj1uCIg1VxPEbpApReglAJT2GbZwtFLr1CKO-zsQdyrC7bCn0FwbFC0HoQTks9V8B_7p4ig40vhac3RuMQrvA2BTjmMXf0g6csr64Kdp1tddix7AmESNd4eG9X5_2WHWvRg">
+<div class="absolute inset-0 bg-gradient-to-t from-surface-container-lowest/80 via-transparent to-transparent"></div>
+</div>
+<!-- Floating Counter & 360 Badge -->
+<div class="absolute top-space-md left-space-md flex items-center gap-space-xs">
+<span class="px-space-sm py-[2px] rounded bg-surface-container-lowest/80 backdrop-blur-md text-on-surface font-label-sm text-label-sm uppercase tracking-wide">
+        Verified
+      </span>
+<button class="px-space-sm py-[2px] rounded bg-primary-container text-on-primary font-label-sm text-label-sm flex items-center gap-1 active:scale-95 transition-transform" type="button">
+<span class="material-symbols-outlined text-[12px]">360</span>
+<span class="">View 360°</span>
+</button>
+</div>
+<div class="absolute top-space-md right-space-md">
+<span class="px-space-sm py-space-xs rounded-full bg-surface-container-lowest/80 backdrop-blur-md font-label-sm text-label-sm text-on-surface" id="slideCounter">
+        1 / 6
+      </span>
+</div>
+<!-- Pagination Dots & Quick Toggles -->
+<div class="absolute bottom-space-md left-0 right-0 flex items-center justify-center gap-1.5">
+<div class="w-5 h-1.5 rounded-full bg-primary transition-all"></div>
+<div class="w-1.5 h-1.5 rounded-full bg-outline-variant transition-all"></div>
+<div class="w-1.5 h-1.5 rounded-full bg-outline-variant transition-all"></div>
+<div class="w-1.5 h-1.5 rounded-full bg-outline-variant transition-all"></div>
+<div class="w-1.5 h-1.5 rounded-full bg-outline-variant transition-all"></div>
+<div class="w-1.5 h-1.5 rounded-full bg-outline-variant transition-all"></div>
+</div>
+</div>
+<!-- Primary Identity & Interactive Status Header -->
+<div class="flex flex-col gap-space-sm mt-space-md bg-surface-container p-space-md rounded-xl">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex flex-wrap items-center gap-space-xs">
+<!-- Interactive Status Badge with Popup trigger -->
+<button class="px-space-sm py-[3px] rounded-md bg-secondary-container text-on-secondary-container font-label-sm text-label-sm flex items-center gap-1 active:scale-95 transition-all" id="statusPickerToggle" type="button">
+<span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
+<span id="currentStatusText" class="">Còn trống</span>
+<span class="material-symbols-outlined text-[14px]">expand_more</span>
+</button>
+<span class="px-space-sm py-[3px] rounded-md bg-primary/10 text-primary font-label-sm text-label-sm uppercase">
+          MỚI
+        </span>
+<span class="px-space-sm py-[3px] rounded-md bg-surface-variant text-on-surface-variant font-label-sm text-label-sm">
+          Độc quyền
+        </span>
+</div>
+<div class="text-right">
+<span class="font-headline-md text-headline-md text-primary font-bold tracking-tight">12.5M</span>
+<span class="block font-label-sm text-label-sm text-on-surface-variant">/ tháng</span>
+</div>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-semibold leading-snug">
+      Căn hộ 2PN An Thượng - View Biển Mỹ Khê
+    </h2>
+<div class="flex items-start gap-1.5 text-on-surface-variant font-body-sm text-body-sm">
+<span class="material-symbols-outlined text-[16px] text-tertiary flex-shrink-0 mt-0.5">location_on</span>
+<span class="line-clamp-2">Số 123 Trần Hưng Đạo, P. An Hải Bắc, Q. Sơn Trà, Đà Nẵng</span>
+</div>
+</div>
+<!-- Status Picker Bottom-Sheet Modal (Hidden initially) -->
+<div class="hidden fixed inset-0 z-50 flex items-end justify-center bg-surface-container-lowest/70 backdrop-blur-sm p-margin" id="statusModal">
+<div class="w-full max-w-[400px] bg-surface-container-high rounded-xl p-space-md shadow-2xl flex flex-col gap-space-md mb-space-lg">
+<div class="flex items-center justify-between pb-space-xs">
+<span class="font-headline-sm text-headline-sm text-on-surface">Đổi trạng thái căn hộ</span>
+<button class="text-on-surface-variant hover:text-on-surface" id="closeStatusModal" type="button">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+<div class="flex flex-col gap-space-xs">
+<button class="flex items-center justify-between p-space-md rounded-lg bg-surface-container hover:bg-surface-variant text-left transition-colors" onclick="selectStatus('available')" type="button">
+<div class="flex items-center gap-space-sm">
+<span class="w-3 h-3 rounded-full bg-secondary"></span>
+<div>
+<p class="font-body-md text-body-md text-on-surface font-medium">Còn trống</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Hiển thị cho thuê ngay lập tức</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-secondary text-[20px]">check</span>
+</button>
+<button class="flex items-center justify-between p-space-md rounded-lg bg-surface-container hover:bg-surface-variant text-left transition-colors" onclick="selectStatus('reserved')" type="button">
+<div class="flex items-center gap-space-sm">
+<span class="w-3 h-3 rounded-full bg-tertiary"></span>
+<div>
+<p class="font-body-md text-body-md text-on-surface font-medium">Giữ chỗ (Deposit)</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Khách đang cọc giữ slot</p>
+</div>
+</div>
+</button>
+<button class="flex items-center justify-between p-space-md rounded-lg bg-surface-container hover:bg-surface-variant text-left transition-colors" onclick="selectStatus('rented')" type="button">
+<div class="flex items-center gap-space-sm">
+<span class="w-3 h-3 rounded-full bg-outline"></span>
+<div>
+<p class="font-body-md text-body-md text-on-surface font-medium">Đã cho thuê</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Đã ký hợp đồng dài hạn</p>
+</div>
+</div>
+</button>
+</div>
+</div>
+</div>
+<!-- Segmented Tabs Navigation -->
+<div class="flex items-center mt-space-md bg-surface-container-low p-1 rounded-xl">
+<button class="flex-1 py-space-sm text-center font-headline-sm text-[13px] rounded-lg transition-all bg-primary-container text-on-primary font-medium" id="tabInfoBtn" onclick="switchMainTab('info')" type="button">
+      Thông tin
+    </button>
+<button class="flex-1 py-space-sm text-center font-headline-sm text-[13px] rounded-lg transition-all text-on-surface-variant hover:text-on-surface" id="tabMarketingBtn" onclick="switchMainTab('marketing')" type="button">
+      Bài đăng marketing (5 ngôn ngữ)
+    </button>
+</div>
+<!-- TAB 1: Specs & Overview Section -->
+<div class="flex flex-col gap-space-md mt-space-md" id="tabInfoSection">
+<!-- Fast Specs Bento Grid -->
+<div class="grid grid-cols-2 gap-space-xs">
+<div class="bg-surface-container p-space-md rounded-xl flex items-center gap-space-sm">
+<div class="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center text-primary flex-shrink-0">
+<span class="material-symbols-outlined text-[20px]">payments</span>
+</div>
+<div class="min-w-0">
+<span class="block font-label-sm text-label-sm text-on-surface-variant">Tiền cọc</span>
+<span class="font-body-md text-body-md text-on-surface font-medium truncate">2T (25.0M)</span>
+</div>
+</div>
+<div class="bg-surface-container p-space-md rounded-xl flex items-center gap-space-sm">
+<div class="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center text-primary flex-shrink-0">
+<span class="material-symbols-outlined text-[20px]">square_foot</span>
+</div>
+<div class="min-w-0">
+<span class="block font-label-sm text-label-sm text-on-surface-variant">Diện tích</span>
+<span class="font-body-md text-body-md text-on-surface font-medium">78 m²</span>
+</div>
+</div>
+<div class="bg-surface-container p-space-md rounded-xl flex items-center gap-space-sm">
+<div class="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center text-primary flex-shrink-0">
+<span class="material-symbols-outlined text-[20px]">bed</span>
+</div>
+<div class="min-w-0">
+<span class="block font-label-sm text-label-sm text-on-surface-variant">Phòng ngủ</span>
+<span class="font-body-md text-body-md text-on-surface font-medium truncate">2 PN</span>
+</div>
+</div>
+<div class="bg-surface-container p-space-md rounded-xl flex items-center gap-space-sm">
+<div class="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center text-primary flex-shrink-0">
+<span class="material-symbols-outlined text-[20px]">bathtub</span>
+</div>
+<div class="min-w-0">
+<span class="block font-label-sm text-label-sm text-on-surface-variant">Phòng tắm</span>
+<span class="font-body-md text-body-md text-on-surface font-medium">2 WC</span>
+</div>
+</div>
+<div class="col-span-2 bg-surface-container p-space-md rounded-xl flex items-center gap-space-sm">
+<div class="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center text-primary flex-shrink-0">
+<span class="material-symbols-outlined text-[20px]">apartment</span>
+</div>
+<div class="min-w-0 flex-1">
+<span class="block font-label-sm text-label-sm text-on-surface-variant">Dự án / Tòa nhà</span>
+<span class="font-body-md text-body-md text-on-surface font-medium truncate">An Thuong Ocean Vista (Tầng 14)</span>
+</div>
+</div>
+</div>
+<!-- Interior, Policies & Utility Costs Container -->
+<div class="bg-surface-container rounded-xl p-space-md flex flex-col gap-space-md">
+<div>
+<div class="flex items-center gap-space-xs mb-space-xs text-on-surface">
+<span class="material-symbols-outlined text-primary text-[18px]">chair</span>
+<h3 class="font-headline-sm text-[15px] font-semibold">Nội thất bàn giao</h3>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
+          Full nội thất cao cấp: TV 55" 4K Smart, tủ lạnh Inverter 400L, máy giặt sấy riêng, bếp điện từ đôi, điều hòa 2 chiều các phòng.
+        </p>
+</div>
+<div class="pt-space-xs">
+<div class="flex items-center gap-space-xs mb-space-xs text-on-surface">
+<span class="material-symbols-outlined text-tertiary text-[18px]">pets</span>
+<h3 class="font-headline-sm text-[15px] font-semibold">Chính sách thú cưng</h3>
+</div>
+<div class="inline-flex items-center gap-space-xs px-space-sm py-1 rounded bg-surface-variant font-body-sm text-body-sm text-on-surface">
+<span class="">🐶 Cho phép nuôi pet (Thỏa thuận cam kết vệ sinh)</span>
+</div>
+</div>
+<div class="pt-space-xs">
+<div class="flex items-center gap-space-xs mb-space-xs text-on-surface">
+<span class="material-symbols-outlined text-secondary text-[18px]">bolt</span>
+<h3 class="font-headline-sm text-[15px] font-semibold">Biểu phí dịch vụ &amp; tiện ích</h3>
+</div>
+<div class="grid grid-cols-3 gap-space-xs text-center">
+<div class="bg-surface-container-low p-space-xs rounded-lg">
+<span class="block font-label-sm text-label-sm text-on-surface-variant">Điện</span>
+<span class="font-label-md text-label-md text-on-surface font-semibold">3.8k/kWh</span>
+</div>
+<div class="bg-surface-container-low p-space-xs rounded-lg">
+<span class="block font-label-sm text-label-sm text-on-surface-variant">Nước</span>
+<span class="font-label-md text-label-md text-on-surface font-semibold">100k/người</span>
+</div>
+<div class="bg-surface-container-low p-space-xs rounded-lg">
+<span class="block font-label-sm text-label-sm text-on-surface-variant">Wifi cáp quang</span>
+<span class="font-label-md text-label-md text-secondary font-semibold">Miễn phí</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Expandable Long Description -->
+<div class="bg-surface-container rounded-xl p-space-md flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<h3 class="font-headline-sm text-[15px] font-semibold text-on-surface">Mô tả chi tiết</h3>
+<span class="font-label-sm text-label-sm text-primary">Tiếng Việt</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant leading-relaxed line-clamp-3" id="descText">
+        Căn hộ tầng cao thoáng mát, ban công đón gió biển trong lành. Cách bãi tắm Mỹ Khê chỉ 300m đi bộ, tọa lạc tại trung tâm khu phố Tây An Thượng sầm uất với nhiều quán cafe sang trọng, chuỗi nhà hàng ẩm thực quốc tế và siêu thị tiện lợi mở cửa 24/7. Tòa nhà trang bị hệ thống an ninh đa lớp camera 24/24, thang máy thẻ từ, hầm để xe máy rộng rãi. Rất lý tưởng cho chuyên gia nước ngoài, digital nomad hoặc gia đình trẻ cần không gian sống chuẩn tiện nghi dài hạn.
+      </p>
+<button class="self-start text-primary font-body-sm text-body-sm font-medium mt-1 flex items-center gap-0.5 active:opacity-75" id="toggleDescBtn" onclick="toggleDescription()" type="button">
+<span class="">Xem thêm</span>
+<span class="material-symbols-outlined text-[16px]">expand_more</span>
+</button>
+</div>
+<!-- Mini Map Location Teaser -->
+<div class="bg-surface-container rounded-xl p-space-md flex flex-col gap-space-sm"><div class="flex items-center justify-between"><div class="flex items-center gap-1.5"><span class="material-symbols-outlined text-primary text-[18px]">map</span><h3 class="font-headline-sm text-[15px] font-semibold text-on-surface">Vị trí căn hộ</h3></div><span class="font-label-sm text-label-sm text-on-surface-variant">P. An Hải Bắc, Sơn Trà</span></div><div class="w-full rounded-lg bg-surface-container-low p-space-md flex items-center justify-between gap-space-sm border border-outline-variant/30"><div class="flex items-center gap-space-sm min-w-0"><div class="w-10 h-10 rounded-lg bg-primary-container/20 flex items-center justify-center text-primary flex-shrink-0"><span class="material-symbols-outlined text-[22px]">location_on</span></div><div class="min-w-0"><p class="font-body-md text-body-md text-on-surface font-medium truncate">123 Trần Hưng Đạo</p><p class="font-label-sm text-label-sm text-on-surface-variant truncate">16.0678° N, 108.2208° E · Cách biển 300m</p></div></div><button type="button" onclick="alert('Đang mở tọa độ vị trí trong Telegram Chat / Bản đồ...');" class="px-space-sm py-1.5 rounded-lg bg-primary/10 text-primary font-label-sm text-label-sm font-medium flex items-center gap-1 flex-shrink-0 active:scale-95"><span class="material-symbols-outlined text-[16px]">near_me</span><span class="">Gửi vị trí</span></button></div></div>
+</div>
+<!-- TAB 2: Multilingual Marketing Section (Hidden by default) -->
+<div class="hidden flex flex-col gap-space-md mt-space-md" id="tabMarketingSection">
+<!-- Language Chips Bar -->
+<div class="flex items-center gap-space-xs overflow-x-auto pb-1 scrollbar-none">
+<button class="lang-tab px-space-md py-1.5 rounded-full bg-primary-container text-on-primary font-label-sm text-label-sm font-medium flex-shrink-0" id="lang-vi" onclick="selectLang('vi')" type="button">
+        🇻🇳 Tiếng Việt
+      </button>
+<button class="lang-tab px-space-md py-1.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm flex-shrink-0" id="lang-en" onclick="selectLang('en')" type="button">
+        🇬🇧 English
+      </button>
+<button class="lang-tab px-space-md py-1.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm flex-shrink-0" id="lang-ko" onclick="selectLang('ko')" type="button">
+        🇰🇷 한국어
+      </button>
+<button class="lang-tab px-space-md py-1.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm flex-shrink-0" id="lang-ja" onclick="selectLang('ja')" type="button">
+        🇯🇵 日本語
+      </button>
+<button class="lang-tab px-space-md py-1.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm flex-shrink-0" id="lang-zh" onclick="selectLang('zh')" type="button">
+        🇨🇳 中文
+      </button>
+</div>
+<!-- Marketing Card Content -->
+<div class="bg-surface-container rounded-xl p-space-md flex flex-col gap-space-sm relative">
+<div class="flex items-center justify-between pb-space-xs">
+<span class="font-label-sm text-label-sm text-secondary flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">auto_awesome</span>
+          AI Tối ưu hóa chuyển đổi
+        </span>
+<button class="flex items-center gap-1 text-primary font-body-sm text-body-sm hover:underline" onclick="copyMarketingPost()" type="button">
+<span class="material-symbols-outlined text-[16px]">content_copy</span>
+<span id="copyBtnText" class="">Sao chép</span>
+</button>
+</div>
+<div class="p-space-md bg-surface-container-low rounded-lg font-body-sm text-body-sm text-on-surface whitespace-pre-line leading-relaxed font-mono" id="marketingCopyArea">
+🏖️ [FOR RENT] LUXURY 2-BEDROOM APARTMENT - 300M TO MY KHE BEACH!
+📍 Location: An Thuong Tourist Hub, Da Nang
+
+✨ Features:
+- Modern 78 sqm with spacious ocean breeze balcony
+- 2 Bedrooms, 2 Bathrooms, high floor
+- Fully furnished: 55" TV, washer, inverter fridge
+- Pet-friendly (by contract agreement)
+
+💰 Rent: 12.5M VND / month (~$500 USD)
+⚡ Low utility bills, Free fiber-optic Wifi
+📲 Contact agent instantly via Telegram / WhatsApp for instant private tour!
+      </div>
+<div class="flex items-center justify-between pt-space-xs">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Sẵn sàng đăng vào nhóm Telegram &amp; Zalo</span>
+<button class="px-space-md py-1.5 rounded-lg bg-surface-variant text-on-surface font-body-sm text-body-sm flex items-center gap-1 active:scale-95" type="button">
+<span class="material-symbols-outlined text-[16px]">send</span>
+          Đăng tự động
+        </button>
+</div>
+</div>
+</div>
+<!-- Sticky Bottom HUD Navigation / Fast Action Bar -->
+<div class="fixed bottom-0 left-0 right-0 z-40 flex justify-center pb-safe bg-surface-container-high border-t border-outline-variant/30 shadow-2xl"><div class="w-full max-w-[420px] p-space-sm flex items-center gap-space-xs"><button type="button" class="w-11 h-11 rounded-xl bg-surface-variant hover:bg-surface-bright text-on-surface flex items-center justify-center active:scale-95 transition-transform flex-shrink-0" title="Sửa thông tin"><span class="material-symbols-outlined text-[18px]">edit</span></button><button type="button" onclick="confirmDelete()" class="w-11 h-11 rounded-xl bg-error-container/40 text-error hover:bg-error-container/60 flex items-center justify-center active:scale-90 transition-transform flex-shrink-0" title="Xóa căn"><span class="material-symbols-outlined text-[18px]">delete</span></button><button type="button" onclick="openStatusSheet()" class="flex-1 h-11 rounded-xl bg-primary-container text-on-primary font-headline-sm text-[15px] font-semibold flex items-center justify-center gap-2 active:scale-95 shadow-md transition-transform"><span class="material-symbols-outlined text-[18px]">sync_alt</span><span class="">ĐỔI TRẠNG THÁI (TMA)</span></button></div></div>
+</div>
+<script>
+  function switchMainTab(tab) {
+    const infoSec = document.getElementById('tabInfoSection');
+    const mktSec = document.getElementById('tabMarketingSection');
+    const infoBtn = document.getElementById('tabInfoBtn');
+    const mktBtn = document.getElementById('tabMarketingBtn');
+
+    if (tab === 'info') {
+      infoSec.classList.remove('hidden');
+      mktSec.classList.add('hidden');
+      infoBtn.className = "flex-1 py-space-sm text-center font-headline-sm text-[13px] rounded-lg transition-all bg-primary-container text-on-primary font-medium";
+      mktBtn.className = "flex-1 py-space-sm text-center font-headline-sm text-[13px] rounded-lg transition-all text-on-surface-variant hover:text-on-surface";
+    } else {
+      infoSec.classList.add('hidden');
+      mktSec.classList.remove('hidden');
+      mktBtn.className = "flex-1 py-space-sm text-center font-headline-sm text-[13px] rounded-lg transition-all bg-primary-container text-on-primary font-medium";
+      infoBtn.className = "flex-1 py-space-sm text-center font-headline-sm text-[13px] rounded-lg transition-all text-on-surface-variant hover:text-on-surface";
+    }
+  }
+
+  function toggleDescription() {
+    const desc = document.getElementById('descText');
+    const btn = document.getElementById('toggleDescBtn');
+    if (desc.classList.contains('line-clamp-3')) {
+      desc.classList.remove('line-clamp-3');
+      btn.innerHTML = '<span>Thu gọn</span><span class="material-symbols-outlined text-[16px]">expand_less</span>';
+    } else {
+      desc.classList.add('line-clamp-3');
+      btn.innerHTML = '<span>Xem thêm</span><span class="material-symbols-outlined text-[16px]">expand_more</span>';
+    }
+  }
+
+  function openStatusSheet() {
+    document.getElementById('statusModal').classList.remove('hidden');
+  }
+
+  const statusToggle = document.getElementById('statusPickerToggle');
+  if (statusToggle) {
+    statusToggle.addEventListener('click', openStatusSheet);
+  }
+
+  const closeStatus = document.getElementById('closeStatusModal');
+  if (closeStatus) {
+    closeStatus.addEventListener('click', () => {
+      document.getElementById('statusModal').classList.add('hidden');
+    });
+  }
+
+  function selectStatus(status) {
+    const textLabel = document.getElementById('currentStatusText');
+    const statusBtn = document.getElementById('statusPickerToggle');
+    
+    if (status === 'available') {
+      textLabel.innerText = 'Còn trống';
+      statusBtn.className = "px-space-sm py-[3px] rounded-md bg-secondary-container text-on-secondary-container font-label-sm text-label-sm flex items-center gap-1 active:scale-95 transition-all";
+    } else if (status === 'reserved') {
+      textLabel.innerText = 'Giữ chỗ';
+      statusBtn.className = "px-space-sm py-[3px] rounded-md bg-tertiary-container text-on-tertiary-container font-label-sm text-label-sm flex items-center gap-1 active:scale-95 transition-all";
+    } else if (status === 'rented') {
+      textLabel.innerText = 'Đã thuê';
+      statusBtn.className = "px-space-sm py-[3px] rounded-md bg-surface-variant text-outline font-label-sm text-label-sm flex items-center gap-1 active:scale-95 transition-all";
+    }
+    document.getElementById('statusModal').classList.add('hidden');
+  }
+
+  const copyTemplates = {
+    vi: `🌊 [CHO THUÊ CĂN HỘ CAO CẤP] 2PN VIEW BIỂN MỸ KHÊ - ĐÀ NẴNG
+📍 Vị trí: Khu phố Tây An Thượng, Sơn Trà
+✨ Diện tích 78m², 2 phòng ngủ, 2WC, nội thất full cao cấp (Smart TV 55", máy giặt, bếp từ).
+🐶 Cho phép nuôi pet (có cam kết).
+💰 Giá: 12.5 triệu / tháng (Cọc 2 tháng)
+⚡ Điện nước giá chuẩn. Miễn phí Wifi tốc độ cao.
+📲 Nhắn tin ngay để đặt lịch xem phòng trực tiếp!`,
+    en: `🏖️ [FOR RENT] LUXURY 2-BEDROOM APARTMENT - 300M TO MY KHE BEACH!
+📍 Location: An Thuong Tourist Hub, Da Nang
+
+✨ Features:
+- Modern 78 sqm with spacious ocean breeze balcony
+- 2 Bedrooms, 2 Bathrooms, high floor
+- Fully furnished: 55" TV, washer, inverter fridge
+- Pet-friendly (by contract agreement)
+
+💰 Rent: 12.5M VND / month (~$500 USD)
+⚡ Low utility bills, Free fiber-optic Wifi
+📲 Contact agent instantly via Telegram / WhatsApp for instant private tour!`,
+    ko: `🌊 [다낭 아파트 임대] 미케비치 도보 5분거리 안트엉 투룸 (2Bed/2Bath)
+📍 위치: 선짜 군 안트엉 여행자거리 중심
+✨ 면적 78m², 풀옵션 고급 가구, 55인치 TV, 세탁기 구비.
+🐶 반려동물 협의 가능
+💰 월세: 12,500,000 VND (보증금 2개월)
+📲 지금 바로 카카오톡/텔레그램으로 편하게 문의주세요!`,
+    ja: `🌊【ダナン高級賃貸】ミーケビーチ徒歩3分 2LDK オーシャンビュー
+📍 場所: ソンチャ区 アントゥオン外国人街
+✨ 広さ 78㎡、2ベッドルーム・2バスルーム、家具家電完備（55型TV、洗濯機、冷蔵庫）。
+🐶 ペット相談可
+💰 賃料: 12,500,000 VND / 月（敷金2ヶ月）
+📲 お気軽にダイレクトメッセージでお問い合わせください。`,
+    zh: `🏖️【岘港海景公寓出租】美溪海滩步行300米 精品两室两厅 (2PN)
+📍 地址: 山茶郡 安上旅游步行街
+✨ 面积: 78平米，高层海景阳台，豪华全配家具家电。
+🐶 允许饲养宠物（协议约定）
+💰 租金: 1250万 越南盾/月（押二付一）
+📲 欢迎随时联络预约实地看房！`
+  };
+
+  function selectLang(lang) {
+    document.querySelectorAll('.lang-tab').forEach(el => {
+      el.className = "lang-tab px-space-md py-1.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm flex-shrink-0";
+    });
+    const currentBtn = document.getElementById('lang-' + lang);
+    if (currentBtn) {
+      currentBtn.className = "lang-tab px-space-md py-1.5 rounded-full bg-primary-container text-on-primary font-label-sm text-label-sm font-medium flex-shrink-0";
+    }
+    document.getElementById('marketingCopyArea').innerText = copyTemplates[lang] || copyTemplates.vi;
+  }
+
+  function copyMarketingPost() {
+    const text = document.getElementById('marketingCopyArea').innerText;
+    navigator.clipboard?.writeText(text).then(() => {
+      const copyBtn = document.getElementById('copyBtnText');
+      copyBtn.innerText = 'Đã sao chép!';
+      setTimeout(() => { copyBtn.innerText = 'Sao chép'; }, 2000);
+    });
+  }
+
+  function confirmDelete() {
+    if (confirm("Bạn có chắc chắn muốn xóa căn hộ #TN-204 khỏi kho dữ liệu?")) {
+      alert("Căn hộ đã được lưu vào lưu trữ!");
+    }
+  }
+
+  document.getElementById('shareBtn')?.addEventListener('click', () => {
+    if (navigator.share) {
+      navigator.share({
+        title: 'Căn hộ 2PN An Thượng - TrueNest',
+        text: 'Căn hộ 2PN view biển Mỹ Khê 12.5tr/tháng',
+        url: window.location.href,
+      }).catch(() => {});
+    } else {
+      copyMarketingPost();
+    }
+  });
+</script></main></div>
+
+</body></html>
