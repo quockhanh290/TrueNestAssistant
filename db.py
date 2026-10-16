@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS tg_listings (
     status         TEXT NOT NULL DEFAULT 'draft',
     view_count     INTEGER NOT NULL DEFAULT 0,
     inquiry_count  INTEGER NOT NULL DEFAULT 0,
+    duplicate_of   TEXT,
     created_at     REAL NOT NULL,
     updated_at     REAL NOT NULL
 );
@@ -215,6 +216,7 @@ def init_db(path=None):
     _migrate_viewings(conn)
     _migrate_match_requests(conn)
     _migrate_match_responses(conn)
+    _migrate_listings_duplicate_of(conn)
     _migrate_updated_at(conn)
     conn.commit()
     conn.close()
@@ -346,6 +348,15 @@ def _migrate_match_responses(conn):
         )
 
 
+def _migrate_listings_duplicate_of(conn):
+    """Add duplicate_of to tg_listings (nullable, no backfill needed)."""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(tg_listings)")}
+    if "duplicate_of" not in cols:
+        conn.execute(
+            "ALTER TABLE tg_listings ADD COLUMN duplicate_of TEXT"
+        )
+
+
 def _now():
     return time.time()
 
@@ -405,7 +416,10 @@ def get_broker(user_id, path=None):
 
 # ---------------------------------------------------------------- tiers
 
-TIER_ORDER = {"free": 0, "pro": 1, "max": 2}
+TIER_ORDER = {"free": 0, "pro": 1, "max": 2, "enterprise": 3}
+
+# Brokers managing more than this many active listings need Enterprise tier.
+ENTERPRISE_LISTING_THRESHOLD = 300
 
 
 def get_tier(broker_id, path=None):
@@ -443,6 +457,17 @@ def tier_allows(broker_id, min_tier, path=None):
 def is_premium(broker_id, path=None):
     """True if broker has an active paid tier."""
     return tier_allows(broker_id, "pro", path=path)
+
+
+def requires_enterprise_tier(broker_id, path=None):
+    """True if the broker manages >300 active listings but isn't Enterprise.
+
+    Wholesalers (đầu nậu) with huge inventories must be on Enterprise tier.
+    """
+    if tier_allows(broker_id, "enterprise", path=path):
+        return False
+    return active_listing_count(broker_id, path=path) > \
+        ENTERPRISE_LISTING_THRESHOLD
 
 
 def active_listing_count(broker_id, path=None):
@@ -595,7 +620,7 @@ def get_listing(listing_id, path=None):
 
 def update_listing(listing_id, path=None, **fields):
     allowed = {"raw_text", "photo_file_ids", "parsed", "missing_fields",
-               "status", "view_count", "inquiry_count"}
+               "status", "view_count", "inquiry_count", "duplicate_of"}
     json_fields = {"photo_file_ids", "parsed", "missing_fields"}
     sets, vals = [], []
     for k, v in fields.items():
@@ -962,6 +987,73 @@ def stale_listings(older_than_days=7, statuses=("submitted",), path=None):
         d["photo_file_ids"] = json.loads(d["photo_file_ids"])
         d["parsed"] = json.loads(d["parsed"])
         out.append(d)
+    return out
+
+
+def find_potential_duplicates(broker_id, parsed, exclude_id=None, path=None):
+    """Find existing listings that look like duplicates of a new one.
+
+    Match criteria (all must hold):
+      - same broker, status in (submitted, uncertain), not deleted
+      - bedrooms equal (both known)
+      - price within ±10% (both known)
+      - district equal (both known), OR building_name equal (both known)
+
+    Returns list of listing dicts (newest first). Never auto-merges —
+    caller must ask the broker to confirm.
+    """
+    conn = connect(path)
+    rows = conn.execute(
+        "SELECT * FROM tg_listings WHERE broker_id = ?"
+        " AND status IN ('submitted', 'uncertain')"
+        " AND (duplicate_of IS NULL OR duplicate_of = '')",
+        (broker_id,),
+    ).fetchall()
+    conn.close()
+
+    br = parsed.get("bedrooms")
+    price = parsed.get("price_vnd")
+    district = (parsed.get("district") or "").strip().lower()
+    building = (parsed.get("building_name") or "").strip().lower()
+
+    out = []
+    for r in rows:
+        if exclude_id and r["id"] == exclude_id:
+            continue
+        try:
+            op = json.loads(r["parsed"])
+        except (TypeError, ValueError):
+            continue
+        obr = op.get("bedrooms")
+        oprice = op.get("price_vnd")
+        odistrict = (op.get("district") or "").strip().lower()
+        obuilding = (op.get("building_name") or "").strip().lower()
+
+        # bedrooms must match when both known
+        if br is not None and obr is not None and float(br) != float(obr):
+            continue
+        # price within ±10% when both known
+        if price and oprice:
+            if abs(float(price) - float(oprice)) / float(oprice) > 0.10:
+                continue
+        # location: same building OR same district (both known)
+        loc_match = False
+        if building and obuilding and building == obuilding:
+            loc_match = True
+        elif district and odistrict and district == odistrict:
+            loc_match = True
+        if not loc_match:
+            continue
+        # need at least bedrooms or price to agree to avoid over-matching
+        if br is None and not price:
+            continue
+
+        d = dict(r)
+        d["photo_file_ids"] = json.loads(d["photo_file_ids"])
+        d["parsed"] = op
+        d["missing_fields"] = json.loads(d["missing_fields"])
+        out.append(d)
+    out.sort(key=lambda x: x["created_at"], reverse=True)
     return out
 
 

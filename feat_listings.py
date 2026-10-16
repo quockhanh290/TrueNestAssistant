@@ -310,6 +310,10 @@ def _detail_content(l, page, filt):
         f"Trạng thái: {STATUS_EMOJI.get(l['status'], '')} "
         f"{STATUS_LABEL.get(l['status'], l['status'])}",
     ]
+    if l.get("status") == "uncertain":
+        lines.append("⚠️ <i>Tin này cần xác nhận lại tình trạng</i>")
+    if l.get("duplicate_of"):
+        lines.append("🔗 <i>Tin trùng (tham khảo)</i>")
     if p.get("area_m2"):
         lines.append(f"Diện tích: {p['area_m2']:g}m²")
     if p.get("furnishing"):
