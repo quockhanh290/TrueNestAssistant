@@ -515,12 +515,7 @@
     });
   };
 
-  // ---------- placeholder tabs ----------
-  ["tab-soon1", "tab-soon2", "tab-soon3"].forEach(function (id) {
-    document.getElementById(id).onclick = function () {
-      toast("Tính năng đang phát triển 🚧");
-    };
-  });
+  // ---------- bottom nav is wired in the new-views section ----------
 
   // ---------- init ----------
   if (tg) {
@@ -1140,4 +1135,905 @@
         '<div class="empty"><div class="big">⚠️</div>Không tải được dữ liệu.</div>';
     });
   }
+
+  // ============================================================
+  // NEW VIEWS (2026-10-16): navigation, filter sheet, clients,
+  // suggest, share-create, profile, upgrade, commission, notify
+  // ============================================================
+
+  // ---------- bottom nav ----------
+  function navTo(view) {
+    ["nav-listings", "nav-clients", "nav-more"].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.classList.remove("active");
+    });
+    if (view === "view-list") {
+      document.getElementById("nav-listings").classList.add("active");
+      show("view-list");
+      loadListings();
+    } else if (view === "view-clients") {
+      document.getElementById("nav-clients").classList.add("active");
+      openClients();
+    }
+  }
+  document.getElementById("nav-listings").onclick = function () { navTo("view-list"); };
+  document.getElementById("nav-clients").onclick = function () { navTo("view-clients"); };
+  document.getElementById("nav-more").onclick = function () {
+    document.getElementById("more-menu").style.display = "flex";
+  };
+  document.getElementById("menu-close").onclick = function () {
+    document.getElementById("more-menu").style.display = "none";
+  };
+  document.getElementById("more-menu").onclick = function (e) {
+    if (e.target === this) this.style.display = "none";
+  };
+  document.getElementById("avatar-btn").onclick = function () { openProfile(); };
+  function closeMore() {
+    document.getElementById("more-menu").style.display = "none";
+  }
+
+  // ---------- ⋯ menu wiring ----------
+  document.getElementById("menu-commission").onclick = function () {
+    closeMore(); openCommission();
+  };
+  document.getElementById("menu-xbroker").onclick = function () {
+    closeMore();
+    document.getElementById("nav-more").classList.add("active");
+    openXbroker();
+  };
+  document.getElementById("menu-upgrade").onclick = function () {
+    closeMore(); openUpgrade();
+  };
+  document.getElementById("menu-notify").onclick = function () {
+    closeMore(); openNotifySettings();
+  };
+  document.getElementById("menu-profile").onclick = function () {
+    closeMore(); openProfile();
+  };
+
+  // ---------- filter bottom sheet ----------
+  var advFilters = {
+    min_price: null, max_price: null, bedrooms: [],
+    district: "", furnishing: "", pet: false,
+    min_area: null, min_score: null, status: "",
+  };
+
+  var FILTER_GROUPS = [
+    { key: "price", icon: "💰", title: "Giá thuê (triệu/tháng)", type: "range",
+      fields: ["min_price", "max_price"], placeholders: ["Từ", "Đến"] },
+    { key: "rooms", icon: "🛏️", title: "Phòng ngủ", type: "chips",
+      field: "bedrooms",
+      options: [["0", "Studio"], ["1", "1PN"], ["2", "2PN"],
+                ["3", "3PN"], ["4", "4PN+"]] },
+    { key: "location", icon: "📍", title: "Quận", type: "select",
+      field: "district",
+      options: [["", "—"], ["Ngũ Hành Sơn", "Ngũ Hành Sơn"],
+                ["Sơn Trà", "Sơn Trà"], ["Hải Châu", "Hải Châu"],
+                ["Thanh Khê", "Thanh Khê"], ["Liên Chiểu", "Liên Chiểu"],
+                ["Cẩm Lệ", "Cẩm Lệ"]] },
+    { key: "amenities", icon: "✨", title: "Tiện ích", type: "amenities" },
+    { key: "quality", icon: "🤖", title: "Chất lượng AI", type: "chips",
+      field: "min_score",
+      options: [["", "Tất cả"], ["50", "≥50đ"], ["70", "≥70đ"], ["80", "≥80đ"]] },
+    { key: "status", icon: "📊", title: "Trạng thái", type: "chips",
+      field: "status",
+      options: [["", "Tất cả"], ["submitted", "Còn trống"],
+                ["rented", "Đã cho thuê"]] },
+  ];
+
+  function renderFilterGroups() {
+    var el = document.getElementById("filter-groups");
+    el.innerHTML = FILTER_GROUPS.map(function (g) {
+      var body = "";
+      if (g.type === "range") {
+        body = '<div class="frange">' +
+          '<input type="number" inputmode="decimal" id="ff-min_price" ' +
+          'placeholder="' + g.placeholders[0] + '" value="' +
+          (advFilters.min_price || "") + '">' +
+          '<span>—</span>' +
+          '<input type="number" inputmode="decimal" id="ff-max_price" ' +
+          'placeholder="' + g.placeholders[1] + '" value="' +
+          (advFilters.max_price || "") + '">' +
+          "</div>";
+      } else if (g.type === "chips") {
+        body = '<div class="fchips">' + g.options.map(function (o) {
+          var active;
+          if (g.field === "bedrooms") {
+            active = advFilters.bedrooms.indexOf(o[0]) >= 0;
+          } else {
+            active = String(advFilters[g.field] || "") === o[0];
+          }
+          return '<button class="fchip' + (active ? " active" : "") +
+            '" data-fgroup="' + g.key + '" data-fval="' + esc(o[0]) + '">' +
+            esc(o[1]) + "</button>";
+        }).join("") + "</div>";
+      } else if (g.type === "select") {
+        body = '<select id="ff-district" class="fselect">' +
+          g.options.map(function (o) {
+            return '<option value="' + esc(o[0]) + '"' +
+              (advFilters.district === o[0] ? " selected" : "") + ">" +
+              esc(o[1]) + "</option>";
+          }).join("") + "</select>";
+      } else if (g.type === "amenities") {
+        body = '<div class="fchips">' +
+          '<button class="fchip' + (advFilters.furnishing === "full" ? " active" : "") +
+          '" data-fgroup="amenities" data-fval="furn_full">Full nội thất</button>' +
+          '<button class="fchip' + (advFilters.pet ? " active" : "") +
+          '" data-fgroup="amenities" data-fval="pet">Cho nuôi pet</button>' +
+          '<button class="fchip' + (advFilters.min_area === 50 ? " active" : "") +
+          '" data-fgroup="amenities" data-fval="area50">≥50m²</button>' +
+          "</div>";
+      }
+      return '<div class="fgroup"><div class="fgroup-title">' + g.icon +
+        " " + g.title + "</div>" + body + "</div>";
+    }).join("");
+  }
+
+  document.getElementById("open-filter").onclick = function () {
+    renderFilterGroups();
+    document.getElementById("filter-sheet").style.display = "flex";
+  };
+  document.getElementById("filter-sheet").onclick = function (e) {
+    if (e.target === this) this.style.display = "none";
+    var chip = e.target.closest(".fchip");
+    if (!chip) return;
+    var gv = chip.getAttribute("data-fval");
+    var gk = chip.getAttribute("data-fgroup");
+    if (gk === "rooms") {
+      var ix = advFilters.bedrooms.indexOf(gv);
+      if (ix >= 0) advFilters.bedrooms.splice(ix, 1);
+      else advFilters.bedrooms.push(gv);
+    } else if (gk === "amenities") {
+      if (gv === "furn_full") {
+        advFilters.furnishing = advFilters.furnishing === "full" ? "" : "full";
+      } else if (gv === "pet") {
+        advFilters.pet = !advFilters.pet;
+      } else if (gv === "area50") {
+        advFilters.min_area = advFilters.min_area === 50 ? null : 50;
+      }
+    } else if (gk === "quality") {
+      advFilters.min_score = gv === "" ? null : parseFloat(gv);
+    } else if (gk === "status") {
+      advFilters.status = gv;
+    }
+    renderFilterGroups();
+  };
+  document.getElementById("filter-clear").onclick = function () {
+    advFilters = { min_price: null, max_price: null, bedrooms: [],
+      district: "", furnishing: "", pet: false,
+      min_area: null, min_score: null, status: "" };
+    renderFilterGroups();
+  };
+  document.getElementById("filter-apply").onclick = function () {
+    var mp = document.getElementById("ff-min_price");
+    var xp = document.getElementById("ff-max_price");
+    var dd = document.getElementById("ff-district");
+    advFilters.min_price = mp && mp.value ? parseFloat(mp.value) * 1000000 : null;
+    advFilters.max_price = xp && xp.value ? parseFloat(xp.value) * 1000000 : null;
+    advFilters.district = dd ? dd.value : "";
+    document.getElementById("filter-sheet").style.display = "none";
+    updateFilterCount();
+    loadListings();
+  };
+  function updateFilterCount() {
+    var n = 0;
+    if (advFilters.min_price || advFilters.max_price) n++;
+    if (advFilters.bedrooms.length) n++;
+    if (advFilters.district) n++;
+    if (advFilters.furnishing || advFilters.pet || advFilters.min_area) n++;
+    if (advFilters.min_score) n++;
+    if (advFilters.status) n++;
+    var badge = document.getElementById("filter-count");
+    badge.style.display = n ? "" : "none";
+    badge.textContent = n;
+  }
+  // hook advanced filters into loadListings
+  var _origLoadListings = loadListings;
+  loadListings = function () {
+    var params = "?limit=100";
+    if (state.bedrooms) params += "&bedrooms=" + encodeURIComponent(state.bedrooms);
+    if (state.status) params += "&status=" + encodeURIComponent(state.status);
+    if (advFilters.min_price) params += "&min_price=" + advFilters.min_price;
+    if (advFilters.max_price) params += "&max_price=" + advFilters.max_price;
+    if (advFilters.bedrooms.length) params += "&bedrooms=" +
+      advFilters.bedrooms.map(encodeURIComponent).join(",");
+    if (advFilters.district) params += "&district=" +
+      encodeURIComponent(advFilters.district);
+    if (advFilters.furnishing) params += "&furnishing=" +
+      encodeURIComponent(advFilters.furnishing);
+    if (advFilters.pet) params += "&pet_friendly=true";
+    if (advFilters.min_area) params += "&min_area=" + advFilters.min_area;
+    if (advFilters.min_score) params += "&min_score=" + advFilters.min_score;
+    if (advFilters.status) params += "&status=" +
+      encodeURIComponent(advFilters.status);
+    document.getElementById("listing-list").innerHTML =
+      '<div class="loading">Đang tải...</div>';
+    api("/api/listings" + params).then(function (data) {
+      state.items = data.items || [];
+      renderList();
+    }).catch(function () {
+      document.getElementById("listing-list").innerHTML =
+        '<div class="empty"><div class="big">⚠️</div>Không tải được dữ liệu.</div>';
+    });
+  };
+
+  // ---------- clients ----------
+  var CLIENT_STATUS_EMOJI = {
+    new: "🆕", contacted: "📞", searching: "🔍", sent: "📤",
+    viewed: "👀", negotiating: "🤝", closed: "✅", cancelled: "❌",
+  };
+
+  function openClients() {
+    document.getElementById("client-list").innerHTML =
+      '<div class="loading">Đang tải...</div>';
+    show("view-clients");
+    api("/api/clients").then(function (d) {
+      var cs = d.clients || [];
+      if (!cs.length) {
+        document.getElementById("client-list").innerHTML =
+          '<div class="empty"><div class="big">👥</div>' +
+          "Chưa có khách nào.<br>Bấm + Thêm để thêm khách mới.</div>";
+        return;
+      }
+      document.getElementById("client-list").innerHTML = cs.map(function (c) {
+        var em = CLIENT_STATUS_EMOJI[c.status] || "•";
+        return '<div class="card" data-cid="' + esc(c.id) + '">' +
+          '<div class="card-body">' +
+          '<div class="card-title">' + esc(c.name) + "</div>" +
+          '<div class="card-meta">Cần: ' + esc(c.req_summary) + "</div>" +
+          '<div class="card-meta">' + em + " " + esc(c.status_vi) +
+          (c.phone ? " · 📞 " + esc(c.phone) : "") + "</div>" +
+          "</div></div>";
+      }).join("");
+      document.getElementById("client-list").querySelectorAll(".card")
+        .forEach(function (card) {
+          card.onclick = function () {
+            openClientDetail(card.getAttribute("data-cid"));
+          };
+        });
+    }).catch(function () {
+      document.getElementById("client-list").innerHTML =
+        '<div class="empty"><div class="big">⚠️</div>Không tải được dữ liệu.</div>';
+    });
+  }
+  document.getElementById("client-add").onclick = function () {
+    ["cf-name", "cf-phone", "cf-budget", "cf-notes"].forEach(function (id) {
+      document.getElementById(id).value = "";
+    });
+    document.getElementById("cf-bedrooms").value = "";
+    document.getElementById("cf-district").value = "";
+    show("view-client-form");
+  };
+  document.getElementById("client-form-back").onclick = function () {
+    openClients();
+  };
+  document.getElementById("client-form-save").onclick = function () {
+    var name = document.getElementById("cf-name").value.trim();
+    if (!name) { toast("Nhập tên khách đã nhé"); return; }
+    var bval = parseFloat(document.getElementById("cf-budget").value);
+    var body = {
+      name: name,
+      phone: document.getElementById("cf-phone").value.trim(),
+      requirements_raw: document.getElementById("cf-notes").value.trim(),
+    };
+    var br = document.getElementById("cf-bedrooms").value;
+    if (br !== "") body.bedrooms = parseFloat(br);
+    if (!isNaN(bval)) body.budget_max = Math.round(bval * 1000000);
+    var dt = document.getElementById("cf-district").value;
+    if (dt) body.district = dt;
+    api("/api/clients", { method: "POST", body: body }).then(function (d) {
+      if (d.error) { toast(d.error_vi || "Lỗi lưu khách"); return; }
+      toast("Đã thêm khách ✅");
+      openClients();
+    }).catch(function () { toast("Lỗi lưu khách"); });
+  };
+  document.getElementById("client-detail-back").onclick = function () {
+    openClients();
+  };
+
+  var currentClientId = null;
+  function openClientDetail(cid) {
+    currentClientId = cid;
+    document.getElementById("client-detail-body").innerHTML =
+      '<div class="loading">Đang tải...</div>';
+    show("view-client-detail");
+    api("/api/client/" + encodeURIComponent(cid)).then(function (c) {
+      if (c.error) { toast("Không tìm thấy khách"); openClients(); return; }
+      document.getElementById("client-detail-title").textContent = c.name;
+      var em = CLIENT_STATUS_EMOJI[c.status] || "•";
+      var html = '<div class="detail-body">' +
+        '<div class="detail-title">' + esc(c.name) + "</div>" +
+        '<div class="card-meta">' + em + " " + esc(c.status_vi) + "</div>" +
+        (c.phone ? '<div class="spec"><span class="k">📞 SĐT</span>' +
+          '<span class="v">' + esc(c.phone) + "</span></div>" : "") +
+        '<div class="section-title">Nhu cầu</div>' +
+        '<div class="card-meta">' + esc(c.req_summary) + "</div>" +
+        (c.requirements_raw ?
+          '<div class="desc">' + esc(c.requirements_raw) + "</div>" : "") +
+        '<div style="display:flex;gap:8px;margin:16px 0;flex-wrap:wrap">' +
+        '<button class="btn btn-primary" id="cd-suggest">🏠 Gợi ý tin</button>' +
+        '<button class="btn" id="cd-viewing">📅 Đặt lịch xem</button>' +
+        "</div>";
+      // sent listings
+      if (c.sent_listings && c.sent_listings.length) {
+        html += '<div class="section-title">Đã gửi ' + c.sent_listings.length +
+          " tin</div>";
+      }
+      // notes
+      html += '<div class="section-title">📝 Ghi chú</div>' +
+        (c.notes ? '<div class="desc">' + esc(c.notes) + "</div>" :
+          '<div class="card-meta">Chưa có ghi chú</div>') +
+        '<div style="display:flex;gap:8px;margin-top:8px">' +
+        '<input id="cd-note-input" type="text" placeholder="Thêm ghi chú..." ' +
+        'style="flex:1;padding:10px;border:none;border-radius:10px;' +
+        'background:var(--card2);color:var(--text)">' +
+        '<button class="btn" id="cd-note-add" style="flex:0 0 auto">+</button>' +
+        "</div>";
+      // viewing history
+      var vws = c.viewings || [];
+      html += '<div class="section-title">📅 Lịch xem (' + vws.length + ")</div>";
+      if (!vws.length) {
+        html += '<div class="card-meta">Chưa có lịch xem nào</div>';
+      } else {
+        html += vws.map(function (v) {
+          var dt = v.scheduled_at ?
+            new Date(v.scheduled_at * 1000).toLocaleString("vi-VN",
+              { day: "2-digit", month: "2-digit", hour: "2-digit",
+                minute: "2-digit" }) : "—";
+          return '<div class="spec"><span class="k">' + esc(dt) + "</span>" +
+            '<span class="v">' + esc(v.status || "") +
+            (v.listing_ids && v.listing_ids.length ?
+              " · " + v.listing_ids.length + " tin" : "") + "</span></div>";
+        }).join("");
+      }
+      html += "</div>";
+      document.getElementById("client-detail-body").innerHTML = html;
+      document.getElementById("cd-suggest").onclick = function () {
+        openSuggest(cid);
+      };
+      document.getElementById("cd-viewing").onclick = function () {
+        openViewingForm(cid, c.name, []);
+      };
+      document.getElementById("cd-note-add").onclick = function () {
+        var inp = document.getElementById("cd-note-input");
+        var note = inp.value.trim();
+        if (!note) return;
+        api("/api/client/" + encodeURIComponent(cid) + "/notes",
+            { method: "POST", body: { note: note } }).then(function () {
+          toast("Đã thêm ghi chú ✅");
+          openClientDetail(cid);
+        }).catch(function () { toast("Lỗi"); });
+      };
+    }).catch(function () { toast("Không tải được"); });
+  }
+
+  // ---------- suggest listings for client ----------
+  var suggestState = null;
+  function openSuggest(cid) {
+    suggestState = { clientId: cid, client: null, items: [], selected: {} };
+    document.getElementById("suggest-body").innerHTML =
+      '<div class="loading">Đang tải...</div>';
+    show("view-suggest");
+    api("/api/client/" + encodeURIComponent(cid)).then(function (c) {
+      suggestState.client = c;
+      // build filter params from client requirements
+      var params = "?limit=100&status=submitted";
+      if (c.bedrooms != null) params += "&bedrooms=" + c.bedrooms;
+      if (c.budget_max) params += "&max_price=" + c.budget_max;
+      if (c.district) params += "&district=" + encodeURIComponent(c.district);
+      return api("/api/listings" + params);
+    }).then(function (d) {
+      suggestState.items = d.items || [];
+      renderSuggest();
+    }).catch(function () {
+      document.getElementById("suggest-body").innerHTML =
+        '<div class="empty"><div class="big">⚠️</div>Không tải được.</div>';
+    });
+  }
+  document.getElementById("suggest-back").onclick = function () {
+    openClientDetail(suggestState ? suggestState.clientId : null);
+  };
+
+  function matchPct(l, c) {
+    // simple client-side match estimate for display
+    var s = 50;
+    if (c.bedrooms != null && l.bedrooms === c.bedrooms) s += 20;
+    if (c.budget_max && l.price_vnd && l.price_vnd <= c.budget_max) s += 20;
+    if (c.district && l.district === c.district) s += 10;
+    return Math.min(99, s);
+  }
+
+  function renderSuggest() {
+    var st = suggestState;
+    var c = st.client;
+    var body = document.getElementById("suggest-body");
+    document.getElementById("suggest-title").textContent =
+      "Gợi ý cho " + (c ? c.name : "");
+    var html = '<div class="propose-head">' +
+      '<div class="propose-req">Cần: ' + esc(c ? c.req_summary : "—") + "</div>" +
+      "</div>";
+    trialCheck("send2client").then(function (trial) {
+      html += trialBadgeHtml(trial);
+      if (!st.items.length) {
+        html += '<div class="empty"><div class="big">😔</div>' +
+          "<b>Bạn không có căn nào thỏa yêu cầu</b></div>" +
+          '<div style="padding:0 16px;display:flex;flex-direction:column;gap:8px">' +
+          '<button class="btn btn-primary" id="sg-xbroker">🔗 Match broker khác</button>' +
+          '<button class="btn" id="sg-addnew">➕ Thêm tin mới</button>' +
+          "</div>";
+      } else {
+        html += '<div class="section-title" style="padding:0 16px">🎯 Tin phù hợp (' +
+          st.items.length + ")</div>";
+        html += st.items.map(function (l) {
+          var sel = st.selected[l.id];
+          var pct = matchPct(l, c);
+          var img = (l.photo_urls && l.photo_urls.length)
+            ? '<img class="propose-img" src="' + esc(l.photo_urls[0]) +
+              '" loading="lazy">'
+            : '<div class="propose-img-ph">🏢</div>';
+          return '<div class="propose-card' + (sel ? " selected" : "") +
+            '" data-id="' + esc(l.id) + '">' +
+            '<div class="propose-check">' + (sel ? "☑️" : "☐") + "</div>" +
+            img +
+            '<div class="propose-info">' +
+            '<div class="propose-title">' + esc(l.title) + "</div>" +
+            '<div class="propose-meta">' + esc(l.price) + "/tháng</div>" +
+            '<div class="propose-scores">🎯 Match ' + pct + "% · 🤖 " +
+            (l.quality_score || 0) + "đ</div>" +
+            "</div></div>";
+        }).join("");
+        html += '<div class="propose-bar">' +
+          '<div class="propose-count">Đã chọn ' +
+          Object.keys(st.selected).length + " tin</div>" +
+          '<button class="btn btn-primary" id="sg-create"' +
+          (Object.keys(st.selected).length ? "" : " disabled") +
+          ">📤 Tạo trang chia sẻ</button></div>";
+      }
+      body.innerHTML = html;
+      body.querySelectorAll(".propose-card").forEach(function (card) {
+        card.onclick = function () {
+          var id = card.getAttribute("data-id");
+          if (st.selected[id]) delete st.selected[id];
+          else st.selected[id] = true;
+          renderSuggest();
+        };
+      });
+      var xb = document.getElementById("sg-xbroker");
+      if (xb) xb.onclick = function () { openXbroker(); };
+      var an = document.getElementById("sg-addnew");
+      if (an) an.onclick = function () { toast("Gửi tin mới qua bot nhé 📝"); };
+      var cr = document.getElementById("sg-create");
+      if (cr) cr.onclick = function () {
+        trialGate("send2client", function () {
+          openShareCreate(st.clientId, Object.keys(st.selected));
+        });
+      };
+    });
+  }
+
+  // ---------- share page creation ----------
+  function openShareCreate(clientId, listingIds) {
+    document.getElementById("share-create-body").innerHTML =
+      '<div class="loading">Đang tải...</div>';
+    show("view-share-create");
+    api("/api/listings?limit=100&ids=" + encodeURIComponent(listingIds.join(",")))
+      .then(function (d) {
+        var items = d.items || [];
+        var html = '<div class="form">' +
+          '<div class="field"><label>Tiêu đề trang</label>' +
+          '<input id="sc-title" type="text" placeholder="Gợi ý cho khách"></div>' +
+          '<div class="section-title">Đã chọn ' + items.length + " tin</div>" +
+          items.map(function (l) {
+            return '<div class="spec"><span class="k">' + esc(l.title) +
+              "</span><span class='v'>" + esc(l.price) + "</span></div>";
+          }).join("") +
+          '<button class="btn btn-primary btn-block" id="sc-create">' +
+          "🔗 Tạo link chia sẻ</button>" +
+          '<div id="sc-result"></div>' +
+          "</div>";
+        document.getElementById("share-create-body").innerHTML = html;
+        document.getElementById("sc-create").onclick = function () {
+          var btn = this;
+          btn.disabled = true;
+          btn.textContent = "Đang tạo...";
+          trialUse("send2client").then(function () {
+            return api("/api/share", {
+              method: "POST",
+              body: {
+                listing_ids: listingIds,
+                title: document.getElementById("sc-title").value.trim(),
+                client_id: clientId,
+              },
+            });
+          }).then(function (r) {
+            if (r.error) {
+              toast(r.error_vi || "Tạo thất bại");
+              btn.disabled = false;
+              btn.textContent = "🔗 Tạo link chia sẻ";
+              return;
+            }
+            document.getElementById("sc-result").innerHTML =
+              '<div class="propose-done"><div class="big">✅</div>' +
+              "<h3>Xong!</h3>" +
+              '<div class="post-text" style="margin:12px 0">' +
+              esc(r.url) + "</div>" +
+              '<button class="btn btn-primary" id="sc-copy">📋 Copy link</button>' +
+              '<div class="card-meta" style="margin-top:8px">👀 0 lượt xem</div>' +
+              "</div>";
+            document.getElementById("sc-copy").onclick = function () {
+              copyText(r.url);
+            };
+            trialRefresh("send2client");
+          }).catch(function () {
+            toast("Tạo thất bại");
+            btn.disabled = false;
+            btn.textContent = "🔗 Tạo link chia sẻ";
+          });
+        };
+      }).catch(function () {
+        document.getElementById("share-create-body").innerHTML =
+          '<div class="empty"><div class="big">⚠️</div>Không tải được.</div>';
+      });
+  }
+  document.getElementById("share-create-back").onclick = function () {
+    if (suggestState) openSuggest(suggestState.clientId);
+    else openClients();
+  };
+  function copyText(t) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(t).then(function () {
+        toast("Đã copy ✅");
+      }).catch(function () { toast(t); });
+    } else {
+      toast(t);
+    }
+  }
+
+  // ---------- viewing form ----------
+  var viewingCtx = null;
+  function openViewingForm(clientId, clientName, listingIds) {
+    viewingCtx = { clientId: clientId, clientName: clientName,
+                   listingIds: listingIds };
+    document.getElementById("vf-datetime").value = "";
+    document.getElementById("vf-notes").value = "";
+    show("view-viewing-form");
+  }
+  document.getElementById("viewing-form-back").onclick = function () {
+    if (viewingCtx && viewingCtx.clientId) openClientDetail(viewingCtx.clientId);
+    else show("view-list");
+  };
+  document.getElementById("viewing-form-save").onclick = function () {
+    var dt = document.getElementById("vf-datetime").value;
+    if (!dt) { toast("Chọn ngày giờ đã nhé"); return; }
+    var ts = Math.floor(new Date(dt).getTime() / 1000);
+    api("/api/viewings", {
+      method: "POST",
+      body: {
+        client_id: viewingCtx.clientId,
+        client_name: viewingCtx.clientName,
+        listing_ids: viewingCtx.listingIds,
+        scheduled_at: ts,
+        notes: document.getElementById("vf-notes").value.trim(),
+      },
+    }).then(function () {
+      toast("Đã đặt lịch ✅");
+      openClientDetail(viewingCtx.clientId);
+    }).catch(function () { toast("Lỗi đặt lịch"); });
+  };
+
+  // ---------- broker profile ----------
+  function openProfile() {
+    document.getElementById("profile-body").innerHTML =
+      '<div class="loading">Đang tải...</div>';
+    show("view-profile");
+    api("/api/profile").then(function (p) {
+      if (p.error) { toast("Không tải được hồ sơ"); return; }
+      var score = p.score;
+      var scls = score == null ? "" :
+        (score >= 80 ? "q-high" : score >= 50 ? "q-mid" : "q-low");
+      var scol = score == null ? "var(--muted)" :
+        (score >= 80 ? "var(--green)" : score >= 50 ? "#ffab00" : "var(--red)");
+      var tierLabel = { free: "Free", pro: "Pro 💎", max: "Max 💎💎" }[p.tier] || p.tier;
+      var html = '<div class="detail-body">' +
+        '<div style="display:flex;gap:14px;align-items:center;margin-bottom:16px">' +
+        '<div class="profile-avatar">👤</div>' +
+        '<div><div class="detail-title">' + esc(p.name || "Broker") + "</div>" +
+        '<div class="card-meta">' + (p.phone ? "📞 " + esc(p.phone) + " · " : "") +
+        "Gói: <b>" + esc(tierLabel) + "</b></div></div></div>" +
+        '<div class="section-title">🤖 Điểm uy tín ' +
+        (score == null ? '<span class="qscore">—</span>' :
+          '<span class="qscore ' + scls + '">' + score + "đ</span>") +
+        "</div>";
+      if (score != null) {
+        html += '<div class="qbar"><div style="width:' + score +
+          '%;background:' + scol + '"></div></div>' +
+          '<div class="card-meta">📝 Chất lượng tin: ' +
+          (p.completeness == null ? "—" : p.completeness + "/100") +
+          " (" + p.complete_listings + " tin đầy đủ)</div>" +
+          '<div class="card-meta">🔄 Độ tươi: ' +
+          (p.freshness == null ? "—" : p.freshness + "/100") +
+          " (" + p.fresh_listings + " tin mới)</div>";
+        if (p.false_refresh_reports > 0) {
+          html += '<div class="propose-warn">⚠️ Báo sai trạng thái: ' +
+            p.false_refresh_reports + " lần (-" +
+            (p.false_refresh_reports * 10) + "đ uy tín)</div>";
+        }
+      } else {
+        html += '<div class="card-meta">Gửi tin đầu tiên để bắt đầu tích điểm 📝</div>';
+      }
+      var st = p.stats || {};
+      html += '<div class="section-title">📊 Thống kê</div>' +
+        '<div class="spec"><span class="k">Tổng tin</span><span class="v">' +
+        (st.total_listings || 0) + "</span></div>" +
+        '<div class="spec"><span class="k">Còn trống</span><span class="v">' +
+        (st.active_listings || 0) + "</span></div>" +
+        '<div class="spec"><span class="k">Đã cho thuê</span><span class="v">' +
+        (st.rented_listings || 0) + "</span></div>" +
+        '<div class="spec"><span class="k">Lượt xem trang share</span><span class="v">' +
+        (st.share_views || 0) + "</span></div>" +
+        '<div class="section-title">🎁 Mời bạn bè</div>' +
+        '<div id="pf-referral"><div class="loading">Đang tải...</div></div>' +
+        '<div style="display:flex;gap:8px;margin-top:16px">' +
+        '<button class="btn btn-primary" id="pf-upgrade">⭐ Nâng cấp</button>' +
+        '<button class="btn" id="pf-edit">✏️ Sửa thông tin</button>' +
+        "</div></div>";
+      document.getElementById("profile-body").innerHTML = html;
+      document.getElementById("pf-upgrade").onclick = openUpgrade;
+      document.getElementById("pf-edit").onclick = function () {
+        openProfileEdit(p);
+      };
+      // referral section (async)
+      api("/api/referral").then(function (r) {
+        var el = document.getElementById("pf-referral");
+        if (!el) return;
+        var bar = "✅".repeat(r.qualified) +
+          "⬜".repeat(Math.max(0, r.needed - r.qualified));
+        var h = '<div class="card-meta" style="margin-bottom:6px">' +
+          "Tiến độ: <b>" + r.qualified + "/" + r.needed + "</b> " + bar +
+          "</div>" +
+          '<div class="card-meta" style="margin-bottom:8px">' +
+          "Mời đủ " + r.needed +
+          " người (mỗi người 5 tin đạt chuẩn) → <b>1 tháng Pro free</b> 🎉</div>";
+        if (r.link) {
+          h += '<div style="display:flex;gap:8px">' +
+            '<input id="pf-ref-link" readonly value="' + esc(r.link) +
+            '" style="flex:1" onclick="this.select()">' +
+            '<button class="btn btn-primary btn-sm" id="pf-ref-copy">📋 Copy</button></div>';
+        }
+        el.innerHTML = h;
+        var cp = document.getElementById("pf-ref-copy");
+        if (cp) cp.onclick = function () {
+          var inp = document.getElementById("pf-ref-link");
+          inp.select();
+          try { document.execCommand("copy"); } catch (e) {}
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(inp.value).catch(function () {});
+          }
+          toast("Đã copy link mời 📋");
+        };
+      }).catch(function () {
+        var el = document.getElementById("pf-referral");
+        if (el) el.innerHTML = "";
+      });
+    }).catch(function () { toast("Không tải được hồ sơ"); });
+  }
+  document.getElementById("profile-back").onclick = function () {
+    show("view-list");
+  };
+
+  function openProfileEdit(p) {
+    var body = document.getElementById("profile-body");
+    body.innerHTML = '<div class="form">' +
+      '<div class="field"><label>Tên hiển thị</label>' +
+      '<input id="pe-name" type="text" value="' + esc(p.name || "") + '"></div>' +
+      '<div class="field"><label>Số điện thoại</label>' +
+      '<input id="pe-phone" type="tel" value="' + esc(p.phone || "") + '"></div>' +
+      '<div class="field"><label>Xưng hô</label>' +
+      '<select id="pe-pronoun">' +
+      '<option value="anh"' + (p.pronoun === "anh" ? " selected" : "") +
+      ">Anh</option>" +
+      '<option value="chị"' + (p.pronoun === "chị" ? " selected" : "") +
+      ">Chị</option>" +
+      "</select></div>" +
+      '<button class="btn btn-primary btn-block" id="pe-save">💾 Lưu</button>' +
+      "</div>";
+    document.getElementById("pe-save").onclick = function () {
+      api("/api/profile", {
+        method: "PUT",
+        body: { fields: {
+          display_name: document.getElementById("pe-name").value.trim(),
+          phone: document.getElementById("pe-phone").value.trim(),
+          pronoun: document.getElementById("pe-pronoun").value,
+        } },
+      }).then(function () {
+        toast("Đã lưu ✅");
+        openProfile();
+      }).catch(function () { toast("Lỗi lưu"); });
+    };
+  }
+
+  // ---------- upgrade ----------
+  function openUpgrade() {
+    document.getElementById("upgrade-body").innerHTML =
+      '<div class="loading">Đang tải...</div>';
+    show("view-upgrade");
+    Promise.all([trialCheck("send2client"), trialCheck("xbroker_match"),
+                 api("/api/profile")]).then(function (rs) {
+      var tSend = rs[0], tXb = rs[1], prof = rs[2];
+      var tier = (prof && prof.tier) || "free";
+      function row(feat, free, pro, max) {
+        return '<tr><td>' + feat + "</td><td>" + free + "</td><td>" + pro +
+          "</td><td>" + max + "</td></tr>";
+      }
+      var yn = function (v) { return v ? "✅" : "❌"; };
+      var html = '<div class="detail-body">' +
+        '<div class="card-meta" style="margin-bottom:12px">Gói hiện tại: <b>' +
+        esc({ free: "Free", pro: "Pro 💎", max: "Max 💎💎" }[tier] || tier) +
+        "</b></div>" +
+        '<table class="tier-table">' +
+        "<tr><th></th><th>Free</th><th>Pro<br>99k/th</th><th>Max<br>199k/th</th></tr>" +
+        row("Số tin", "20", "∞", "∞") +
+        row("Match tin của mình", yn(true), yn(true), yn(true)) +
+        row("Đặt lịch xem", yn(true), yn(true), yn(true)) +
+        row("Gửi tin cho khách", "3 lượt thử", yn(true), yn(true)) +
+        row("Match liên broker", "3 lượt thử", "3 lượt thử", yn(true)) +
+        row("Filter nâng cao", yn(false), yn(true), yn(true)) +
+        row("Thống kê chi tiết", yn(false), yn(false), yn(true)) +
+        "</table>" +
+        '<div class="card-meta" style="margin:12px 0">' +
+        "🎁 Lượt thử còn lại — Gửi tin: " +
+        (tSend.remaining < 0 ? "∞" : tSend.remaining + "/3") +
+        " · Match liên broker: " +
+        (tXb.remaining < 0 ? "∞" : tXb.remaining + "/3") +
+        "</div>";
+      if (tier === "free") {
+        html += '<button class="btn btn-primary btn-block" id="up-pro">' +
+          "⭐ Nâng cấp Pro — 99k/tháng</button>" +
+          '<button class="btn btn-block" id="up-max">' +
+          "💎💎 Nâng cấp Max — 199k/tháng</button>";
+      } else if (tier === "pro") {
+        html += '<button class="btn btn-primary btn-block" id="up-max">' +
+          "💎💎 Lên Max — 199k/tháng</button>";
+      } else {
+        html += '<div class="empty"><div class="big">💎💎</div>' +
+          "Bạn đang dùng gói cao nhất!</div>";
+      }
+      html += "</div>";
+      document.getElementById("upgrade-body").innerHTML = html;
+      var up = document.getElementById("up-pro");
+      if (up) up.onclick = function () { requestUpgrade("pro"); };
+      var um = document.getElementById("up-max");
+      if (um) um.onclick = function () { requestUpgrade("max"); };
+    }).catch(function () { toast("Không tải được"); });
+  }
+  document.getElementById("upgrade-back").onclick = function () {
+    show("view-list");
+  };
+
+  function requestUpgrade(tier) {
+    var label = tier === "pro" ? "Pro — 99k/tháng" : "Max — 199k/tháng";
+    api("/api/premium/request", {
+      method: "POST", body: { tier: tier },
+    }).then(function (d) {
+      if (d.error === "already_pending") {
+        toast("Yêu cầu đang chờ duyệt ⏳");
+        return;
+      }
+      if (d.error) { toast("Lỗi, thử lại nhé"); return; }
+      var body = document.getElementById("upgrade-body");
+      body.innerHTML = '<div class="detail-body">' +
+        '<div class="propose-done"><div class="big">⭐</div>' +
+        "<h3>Đã gửi yêu cầu " + esc(label) + "</h3>" +
+        '<p style="color:var(--muted);margin:12px 0">' +
+        "Chuyển khoản theo hướng dẫn trong bot, admin sẽ duyệt trong 24h.</p>" +
+        '<p style="color:var(--muted)">Mở bot Linh và làm theo hướng dẫn thanh toán nhé 💳</p>' +
+        "</div></div>";
+      toast("Đã gửi yêu cầu ✅");
+    }).catch(function () { toast("Lỗi, thử lại nhé"); });
+  }
+
+  // ---------- commission ----------
+  function openCommission() {
+    document.getElementById("commission-body").innerHTML =
+      '<div class="loading">Đang tải...</div>';
+    show("view-commission");
+    api("/api/deals").then(function (d) {
+      var total = d.month_total || 0;
+      var fmtM = function (v) {
+        return (v / 1000000).toFixed(1).replace(/\.0$/, "") + "tr";
+      };
+      var html = '<div class="detail-body">' +
+        '<div class="propose-head"><div class="propose-req">Tổng tháng ' +
+        esc(d.month) + ": <b>" + esc(fmtM(total)) + "</b></div></div>";
+      var closed = d.closed || [];
+      html += '<div class="section-title">✅ Đã chốt (' + closed.length + ")</div>";
+      if (!closed.length) html += '<div class="card-meta">Chưa có</div>';
+      html += closed.map(function (x) {
+        return '<div class="spec"><span class="k">' +
+          esc(x.client_name || x.listing_id || "—") + "</span>" +
+          '<span class="v">' + esc(fmtM(x.commission_vnd)) + "</span></div>";
+      }).join("");
+      var neg = d.negotiating || [];
+      html += '<div class="section-title">🤝 Đang đàm phán (' + neg.length + ")</div>";
+      if (!neg.length) html += '<div class="card-meta">Chưa có</div>';
+      html += neg.map(function (x) {
+        return '<div class="spec"><span class="k">' +
+          esc(x.client_name || x.listing_id || "—") + "</span>" +
+          '<span class="v">' + esc(fmtM(x.commission_vnd)) + "</span></div>";
+      }).join("");
+      html += '<button class="btn btn-primary btn-block" id="cm-add">' +
+        "+ Thêm giao dịch</button></div>";
+      document.getElementById("commission-body").innerHTML = html;
+      document.getElementById("cm-add").onclick = openDealForm;
+    }).catch(function () { toast("Không tải được"); });
+  }
+  document.getElementById("commission-back").onclick = function () {
+    show("view-list");
+  };
+
+  function openDealForm() {
+    var body = document.getElementById("commission-body");
+    body.innerHTML = '<div class="form">' +
+      '<div class="field"><label>Tên khách</label>' +
+      '<input id="df-client" type="text"></div>' +
+      '<div class="field"><label>Hoa hồng (triệu)</label>' +
+      '<input id="df-amount" type="number" inputmode="decimal" placeholder="7.5"></div>' +
+      '<div class="field"><label>Ghi chú</label>' +
+      '<input id="df-notes" type="text" placeholder="VD: 2PN An Thượng"></div>' +
+      '<button class="btn btn-primary btn-block" id="df-save">💾 Lưu</button>' +
+      '<button class="btn btn-block" id="df-cancel">Hủy</button></div>';
+    document.getElementById("df-cancel").onclick = openCommission;
+    document.getElementById("df-save").onclick = function () {
+      var amt = parseFloat(document.getElementById("df-amount").value);
+      api("/api/deals", {
+        method: "POST",
+        body: {
+          client_name: document.getElementById("df-client").value.trim(),
+          commission_amount: isNaN(amt) ? 0 : Math.round(amt * 1000000),
+          notes: document.getElementById("df-notes").value.trim(),
+        },
+      }).then(function () {
+        toast("Đã lưu ✅");
+        openCommission();
+      }).catch(function () { toast("Lỗi lưu"); });
+    };
+  }
+
+  // ---------- notification settings ----------
+  function openNotifySettings() {
+    document.getElementById("notify-body").innerHTML =
+      '<div class="loading">Đang tải...</div>';
+    show("view-notify");
+    api("/api/notify/prefs").then(function (d) {
+      var prefs = d.prefs || [];
+      var html = '<div class="detail-body">' +
+        '<div class="card-meta" style="margin-bottom:12px">' +
+        "Bot sẽ báo cho bạn qua Telegram khi có:</div>" +
+        prefs.map(function (p) {
+          return '<div class="spec"><span class="k">' + esc(p.label) +
+            '</span><button class="toggle' + (p.enabled ? " on" : "") +
+            '" data-pref="' + esc(p.key) + '">' +
+            (p.enabled ? "Bật" : "Tắt") + "</button></div>";
+        }).join("") + "</div>";
+      document.getElementById("notify-body").innerHTML = html;
+      document.getElementById("notify-body").querySelectorAll(".toggle")
+        .forEach(function (t) {
+          t.onclick = function () {
+            var pref = t.getAttribute("data-pref");
+            var now = t.classList.contains("on");
+            api("/api/notify/prefs", {
+              method: "PUT",
+              body: { pref: pref, enabled: !now },
+            }).then(function () {
+              t.classList.toggle("on");
+              t.textContent = now ? "Tắt" : "Bật";
+              toast(now ? "Đã tắt 🔕" : "Đã bật 🔔");
+            }).catch(function () { toast("Lỗi"); });
+          };
+        });
+    }).catch(function () { toast("Không tải được"); });
+  }
+  document.getElementById("notify-back").onclick = function () {
+    show("view-list");
+  };
 })();
