@@ -355,3 +355,137 @@ def list_shares(broker_id):
             "expires_at": p["expires_at"],
         })
     return {"shares": out}, 200
+
+
+# ---------------------------------------------------------------- propose flow
+
+def get_propose(broker_id, request_id):
+    """GET /api/propose/<request_id> — broker's propose view data.
+
+    Returns request info, slot status, and own inventory scored by match.
+    """
+    import time
+    import feat_match
+
+    req = db.get_propose_request(request_id)
+    if not req:
+        return {"error": "not_found"}, 404
+
+    now = time.time()
+    expires_at = req.get("expires_at")
+    expired = bool(expires_at and expires_at < now)
+
+    has_slot = db.check_broker_slot(request_id, broker_id)
+    existing = db.get_propose_response(request_id, broker_id)
+    already_submitted = existing["listing_ids"] if existing else []
+
+    # Build client requirements dict for score_match
+    client = {
+        "budget_min": req.get("budget_min"),
+        "budget_max": req.get("budget_max"),
+        "bedrooms": req.get("bedrooms"),
+        "district": req.get("district"),
+        "property_type": req.get("property_type"),
+    }
+
+    # Score own inventory — hard-filtered FIRST by the lead's hard criteria
+    # (Khanh 2026-10-16: no bypass, prevents irrelevant submissions).
+    rows = db.list_broker_listings(broker_id, limit=200, offset=0)
+    eligible, failed_summary = feat_match.filter_hard_criteria(rows, client)
+    scored = []
+    for r in eligible:
+        try:
+            ms = feat_match.score_match(r, client)
+        except Exception:
+            ms = 0
+        p = master_schema.normalize_parsed(r.get("parsed") or {})
+        photo_count = len(r.get("photo_file_ids") or [])
+        qs, _ = master_schema.quality_score(p, photo_count)
+        item = listing_summary(r)
+        item["match_score"] = round(ms, 1)
+        item["quality_score"] = qs
+        scored.append(item)
+    scored.sort(key=lambda x: x["match_score"], reverse=True)
+
+    return {
+        "request": {
+            "id": request_id,
+            "summary": req.get("requirements_summary") or "",
+            "requirements": client,
+            "requirements_raw": req.get("requirements_raw") or "",
+            "urgency": req.get("urgency") or "normal",
+            "expires_at": expires_at,
+            "expired": expired,
+            "status": req.get("status"),
+        },
+        "has_slot": has_slot,
+        "already_submitted": already_submitted,
+        "listings": scored,
+        "failed_summary": failed_summary,
+        "max_listings": db.PROPOSE_MAX_LISTINGS,
+    }, 200
+
+
+def submit_propose(broker_id, request_id, listing_ids):
+    """POST /api/propose/<request_id> — save broker's proposed listings."""
+    import time
+
+    req = db.get_propose_request(request_id)
+    if not req:
+        return {"error": "not_found"}, 404
+
+    now = time.time()
+    if req.get("expires_at") and req["expires_at"] < now:
+        return {"error": "expired",
+                "error_vi": "Hết giờ rồi ạ, slot đã chuyển cho người tiếp theo."}, 410
+
+    if not db.check_broker_slot(request_id, broker_id):
+        return {"error": "no_slot",
+                "error_vi": "Anh chưa giữ slot cho yêu cầu này."}, 403
+
+    if not isinstance(listing_ids, list):
+        return {"error": "bad_request"}, 400
+    # Deduplicate, preserve order, cap at max
+    seen = set()
+    listing_ids = [lid for lid in listing_ids
+                   if not (lid in seen or seen.add(lid))]
+    listing_ids = listing_ids[:db.PROPOSE_MAX_LISTINGS]
+
+    # Validate ownership
+    valid = []
+    for lid in listing_ids:
+        row = db.get_listing(lid)
+        if row and row.get("broker_id") == broker_id:
+            valid.append(lid)
+
+    # Hard-filter server-side too — frontend filtering alone is bypassable
+    # (Khanh 2026-10-16: hard criteria cannot be disabled).
+    import feat_match
+    client = {
+        "budget_min": req.get("budget_min"),
+        "budget_max": req.get("budget_max"),
+        "bedrooms": req.get("bedrooms"),
+        "district": req.get("district"),
+        "property_type": req.get("property_type"),
+    }
+    rows_by_id = {lid: db.get_listing(lid) for lid in valid}
+    eligible, _ = feat_match.filter_hard_criteria(
+        [r for r in rows_by_id.values() if r], client)
+    eligible_ids = {r["id"] for r in eligible}
+    valid = [lid for lid in valid if lid in eligible_ids]
+    if not valid:
+        return {"error": "no_eligible",
+                "error_vi": "Không có tin nào đạt tiêu chí cứng của lead."}, 422
+
+    # Compute match scores for storage
+    scores = {}
+    for lid in valid:
+        row = rows_by_id[lid]
+        try:
+            scores[lid] = round(feat_match.score_match(row, client), 1)
+        except Exception:
+            scores[lid] = 0
+
+    db.save_propose_response(request_id, broker_id, valid, scores)
+    return {"ok": True, "submitted_count": len(valid),
+            "submitted_ids": valid}, 200
