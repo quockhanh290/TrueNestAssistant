@@ -31,7 +31,7 @@ log = logging.getLogger("linh")
 
 MENU_KB = InlineKeyboardMarkup([
     [InlineKeyboardButton("📝 Gửi tin mới", callback_data="menu:new")],
-    [InlineKeyboardButton("📋 Tin của tôi", callback_data="menu:list:0")],
+    [InlineKeyboardButton("📋 Tin của tôi", callback_data="menu:list:0:all")],
     [InlineKeyboardButton("✍️ Viết tin FB", callback_data="menu:write")],
     [InlineKeyboardButton("❓ Hướng dẫn", callback_data="menu:help")],
 ])
@@ -40,6 +40,36 @@ STATUS_EMOJI = {
     "draft": "📝", "pending_info": "⏳", "submitted": "✅",
     "rented": "🔑", "expired": "📦",
 }
+
+# listing list filters for "📋 Tin của tôi"
+LIST_FILTERS = {
+    "all": {"label": "Tất cả", "statuses": None},          # None = all except deleted
+    "active": {"label": "Đang trống", "statuses": ("draft", "pending_info", "submitted")},
+    "rented": {"label": "Đã cho thuê", "statuses": ("rented",)},
+}
+
+
+def rel_time(ts):
+    """'3 ngày trước', '2 giờ trước', 'vừa xong'."""
+    import time as _t
+    d = _t.time() - ts
+    if d < 3600:
+        m = int(d // 60)
+        return "vừa xong" if m < 1 else f"{m} phút trước"
+    if d < 86400:
+        return f"{int(d // 3600)} giờ trước"
+    return f"{int(d // 86400)} ngày trước"
+
+
+def parse_listing_cb(data, action):
+    """Parse 'action:tg:<hex>:page[:filter]' — listing ids contain a colon.
+    Returns (listing_id, page, filt)."""
+    rest = data[len(action) + 1:]          # strip "action:"
+    # rest = "tg:<hex>:page[:filter]"
+    m = __import__("re").match(r"^(tg:[0-9a-f]+):(\d+)(?::(\w+))?$", rest)
+    if not m:
+        return None, "0", "all"
+    return m.group(1), m.group(2), m.group(3) or "all"
 
 # per-user collection buffer: {user_id: {"texts": [], "photos": [], "deadline": ts}}
 _buffers = {}
@@ -102,7 +132,9 @@ async def show_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "❓ <b>Hướng dẫn</b>\n\n"
         "📝 <b>Gửi tin mới:</b> bấm nút rồi gửi text + ảnh của tin. "
         "Gửi xong em tự đọc và tóm tắt lại, thiếu gì em hỏi thêm.\n\n"
-        "📋 <b>Tin của tôi:</b> xem lại các tin đã gửi, đánh dấu đã cho thuê.\n\n"
+        "📋 <b>Tin của tôi:</b> xem lại các tin đã gửi, lọc theo trạng thái, "
+        "đánh dấu đã cho thuê. Anh cũng có thể gõ trực tiếp kiểu "
+        "'cho xem tin 2PN dưới 15tr' để em tìm giúp.\n\n"
         "✍️ <b>Viết tin FB:</b> em viết giúp anh tin đăng Facebook "
         "tiếng Việt / Anh / Hàn / Trung / Nga từ tin đã có.\n\n"
         "Mẹo: cứ gửi như anh đăng group là được, không cần theo mẫu gì cả.",
@@ -217,7 +249,12 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         buf["deadline"] = time.time() + COLLECT_WINDOW
         return
 
-    # 3. otherwise treat as a fresh listing
+    # 3. natural-language listing query? (not a new listing)
+    if listing_parser.looks_like_query(text):
+        await _handle_query(update, ctx, uid, text)
+        return
+
+    # 4. otherwise treat as a fresh listing
     if db.count_recent_listings(uid, hours=1) >= config.RATE_LIMIT_PER_HOUR:
         await natural_delay(update)
         await update.message.reply_text(
@@ -311,31 +348,153 @@ async def _handle_answer(update, ctx, awaiting, text):
         )
 
 
+# ---------------------------------------------------------------- advanced query
+
+def _describe_filters(f):
+    """Human-readable Vietnamese description of active filters."""
+    bits = []
+    br = f.get("bedrooms")
+    if br == 0.0:
+        bits.append("studio")
+    elif br:
+        bits.append(f"{int(br)}PN")
+    if "min_price" in f and "max_price" in f:
+        bits.append(f"giá {fmt_price(f['min_price'])}–{fmt_price(f['max_price'])}")
+    elif "max_price" in f:
+        bits.append(f"dưới {fmt_price(f['max_price'])}")
+    elif "min_price" in f:
+        bits.append(f"trên {fmt_price(f['min_price'])}")
+    if f.get("district"):
+        bits.append(f"ở {f['district']}")
+    if f.get("building_name"):
+        bits.append(f"tòa {f['building_name']}")
+    if f.get("pet_friendly") is True:
+        bits.append("cho pet")
+    if f.get("property_type"):
+        bits.append(f.get("property_type"))
+    if f.get("status") == "rented":
+        bits.append("đã cho thuê")
+    elif f.get("status") == "active":
+        bits.append("còn trống")
+    return ", ".join(bits) if bits else "tất cả tin"
+
+
+async def _handle_query(update, ctx, uid, text):
+    """Natural-language listing search, e.g. 'cho xem tin 2PN dưới 15tr'."""
+    filters = listing_parser.parse_query(text)
+    await natural_delay(update)
+    if not filters:
+        await update.message.reply_text(
+            "Em chưa hiểu anh muốn lọc kiểu gì 😅 Anh thử kiểu "
+            "'cho xem tin 2PN dưới 15tr' hoặc bấm 📋 Tin của tôi nhé.",
+            reply_markup=MENU_KB,
+        )
+        return
+    # store for pagination
+    ctx.user_data["last_query"] = filters
+    items = db.search_listings(uid, filters, limit=5, offset=0)
+    desc = _describe_filters(filters)
+    if not items:
+        await update.message.reply_text(
+            f"Em không tìm thấy tin nào ({desc}) anh ơi. "
+            "Thử nới điều kiện ra nhé?",
+            reply_markup=MENU_KB,
+        )
+        return
+    lines = [f"<b>🔍 Kết quả ({desc}):</b>"]
+    kb = []
+    for i, l in enumerate(items, start=1):
+        lines.append(f"{i}. {listing_line(l)}")
+        kb.append([InlineKeyboardButton(
+            f"{i}. Chi tiết", callback_data=f"qdetail:{l['id']}:0")])
+    kb.append([InlineKeyboardButton("⬅️ Menu", callback_data="menu:back")])
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML",
+                                    reply_markup=InlineKeyboardMarkup(kb))
+
+
+async def show_query_detail(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Detail view from a query result — back goes to menu (query not persisted)."""
+    q = update.callback_query
+    await q.answer()
+    listing_id = q.data.split(":", 1)[1].rsplit(":", 1)[0]  # qdetail:tg:<hex>:0
+    l = db.get_listing(listing_id)
+    if not l:
+        await q.edit_message_text("Tin này không còn nữa.", reply_markup=MENU_KB)
+        return
+    p = l["parsed"]
+    lines = [
+        f"<b>{listing_line(l)}</b>",
+        f"📸 {len(l['photo_file_ids'])} ảnh | 👀 {l['view_count']} lượt xem",
+        f"📅 Đăng {rel_time(l['created_at'])}",
+        f"Trạng thái: {STATUS_EMOJI.get(l['status'], '')} {l['status']}",
+    ]
+    if p.get("area_m2"):
+        lines.append(f"Diện tích: {p['area_m2']:g}m²")
+    if p.get("furnishing"):
+        lines.append(f"Nội thất: {p['furnishing']}")
+    kb = []
+    if l["status"] not in ("rented", "deleted"):
+        kb.append([InlineKeyboardButton("🔑 Đánh dấu đã cho thuê",
+                                       callback_data=f"qrented:{listing_id}")])
+    kb.append([InlineKeyboardButton("⬅️ Menu", callback_data="menu:back")])
+    await q.edit_message_text("\n".join(lines), parse_mode="HTML",
+                              reply_markup=InlineKeyboardMarkup(kb))
+
+
+async def mark_query_rented(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    listing_id = q.data.split(":", 1)[1]  # qrented:tg:<hex>
+    db.set_listing_status(listing_id, "rented", changed_by="broker")
+    await natural_delay(update)
+    await q.edit_message_text("Đã đánh dấu cho thuê 🔑 Chúc mừng anh!",
+                              reply_markup=MENU_KB)
+
+
 # ---------------------------------------------------------------- my listings
 
 async def show_my_listings(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     uid = q.from_user.id
-    page = int(q.data.split(":")[2])
+    parts = q.data.split(":")
+    page = int(parts[2]) if len(parts) > 2 else 0
+    filt = parts[3] if len(parts) > 3 else "all"
+    if filt not in LIST_FILTERS:
+        filt = "all"
     per = 5
-    total = db.count_broker_listings(uid)
-    items = db.list_broker_listings(uid, limit=per, offset=page * per)
+    statuses = LIST_FILTERS[filt]["statuses"]
+    total = db.count_broker_listings(uid, statuses=statuses)
+    items = db.list_broker_listings(uid, limit=per, offset=page * per,
+                                    statuses=statuses)
     if not items:
-        await q.edit_message_text("Anh chưa có tin nào. Bấm 📝 Gửi tin mới để bắt đầu nhé!",
-                                  reply_markup=MENU_KB)
+        msg = ("Anh chưa có tin nào trong mục này. "
+               "Bấm 📝 Gửi tin mới để bắt đầu nhé!"
+               if total == 0 else
+               "Không có tin nào trong mục này anh ơi.")
+        await q.edit_message_text(msg, reply_markup=MENU_KB)
         return
     lines = [f"<b>📋 Tin của anh ({total}):</b>"]
     kb = []
+    # quick filter row
+    frow = []
+    for key, meta in LIST_FILTERS.items():
+        mark = "● " if key == filt else ""
+        frow.append(InlineKeyboardButton(
+            f"{mark}{meta['label']}",
+            callback_data=f"menu:list:0:{key}"))
+    kb.append(frow)
     for i, l in enumerate(items, start=page * per + 1):
         lines.append(f"{i}. {listing_line(l)}")
         kb.append([InlineKeyboardButton(
-            f"{i}. Chi tiết", callback_data=f"detail:{l['id']}:{page}")])
+            f"{i}. Chi tiết", callback_data=f"detail:{l['id']}:{page}:{filt}")])
     nav = []
     if page > 0:
-        nav.append(InlineKeyboardButton("⬅️", callback_data=f"menu:list:{page-1}"))
+        nav.append(InlineKeyboardButton(
+            "⬅️", callback_data=f"menu:list:{page-1}:{filt}"))
     if (page + 1) * per < total:
-        nav.append(InlineKeyboardButton("➡️", callback_data=f"menu:list:{page+1}"))
+        nav.append(InlineKeyboardButton(
+            "➡️", callback_data=f"menu:list:{page+1}:{filt}"))
     if nav:
         kb.append(nav)
     kb.append([InlineKeyboardButton("⬅️ Menu", callback_data="menu:back")])
@@ -347,8 +506,8 @@ async def show_my_listings(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def show_detail(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
-    _, listing_id, page = q.data.split(":")
-    l = db.get_listing(listing_id)
+    listing_id, page, filt = parse_listing_cb(q.data, "detail")
+    l = db.get_listing(listing_id) if listing_id else None
     if not l:
         await q.edit_message_text("Tin này không còn nữa.", reply_markup=MENU_KB)
         return
@@ -356,6 +515,7 @@ async def show_detail(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     lines = [
         f"<b>{listing_line(l)}</b>",
         f"📸 {len(l['photo_file_ids'])} ảnh | 👀 {l['view_count']} lượt xem",
+        f"📅 Đăng {rel_time(l['created_at'])}",
         f"Trạng thái: {STATUS_EMOJI.get(l['status'], '')} {l['status']}",
     ]
     if p.get("area_m2"):
@@ -365,11 +525,11 @@ async def show_detail(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     kb = []
     if l["status"] not in ("rented", "deleted"):
         kb.append([InlineKeyboardButton("🔑 Đánh dấu đã cho thuê",
-                                       callback_data=f"rented:{listing_id}:{page}")])
+                                       callback_data=f"rented:{listing_id}:{page}:{filt}")])
     kb.append([InlineKeyboardButton("🗑 Xoá tin",
-                                    callback_data=f"delete:{listing_id}:{page}")])
+                                    callback_data=f"delete:{listing_id}:{page}:{filt}")])
     kb.append([InlineKeyboardButton("⬅️ Danh sách",
-                                    callback_data=f"menu:list:{page}")])
+                                    callback_data=f"menu:list:{page}:{filt}")])
     await q.edit_message_text("\n".join(lines), parse_mode="HTML",
                               reply_markup=InlineKeyboardMarkup(kb))
 
@@ -377,26 +537,28 @@ async def show_detail(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def mark_rented(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
-    _, listing_id, page = q.data.split(":")
-    db.set_listing_status(listing_id, "rented", changed_by="broker")
+    listing_id, page, filt = parse_listing_cb(q.data, "rented")
+    if listing_id:
+        db.set_listing_status(listing_id, "rented", changed_by="broker")
     await natural_delay(update)
     await q.edit_message_text("Đã đánh dấu cho thuê 🔑 Chúc mừng anh!",
                               reply_markup=InlineKeyboardMarkup([[
                                   InlineKeyboardButton(
                                       "⬅️ Danh sách",
-                                      callback_data=f"menu:list:{page}")]]))
+                                      callback_data=f"menu:list:{page}:{filt}")]]))
 
 
 async def delete_listing(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
-    _, listing_id, page = q.data.split(":")
-    db.set_listing_status(listing_id, "deleted", changed_by="broker")
+    listing_id, page, filt = parse_listing_cb(q.data, "delete")
+    if listing_id:
+        db.set_listing_status(listing_id, "deleted", changed_by="broker")
     await q.edit_message_text("Đã xoá tin 🗑",
                               reply_markup=InlineKeyboardMarkup([[
                                   InlineKeyboardButton(
                                       "⬅️ Danh sách",
-                                      callback_data=f"menu:list:{page}")]]))
+                                      callback_data=f"menu:list:{page}:{filt}")]]))
 
 
 # ---------------------------------------------------------------- write FB post
@@ -684,7 +846,7 @@ async def on_write_lang(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """Show language selection for the chosen listing."""
     q = update.callback_query
     await q.answer()
-    _, listing_id = q.data.split(":")
+    listing_id = q.data.split(":", 1)[1]  # "write:tg:<hex>"
     l = db.get_listing(listing_id)
     if not l:
         await q.edit_message_text("Tin này không còn nữa.", reply_markup=MENU_KB)
@@ -709,7 +871,9 @@ async def on_write_generate(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """Generate the FB post and send it as a copyable message."""
     q = update.callback_query
     await q.answer()
-    _, listing_id, lang = q.data.split(":")
+    # "writelang:tg:<hex>:<lang>"
+    rest = q.data.split(":", 1)[1]
+    listing_id, lang = rest.rsplit(":", 1)
     l = db.get_listing(listing_id)
     if not l:
         await q.edit_message_text("Tin này không còn nữa.", reply_markup=MENU_KB)
@@ -787,8 +951,12 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await show_menu(update, ctx)
     elif data.startswith("detail:"):
         await show_detail(update, ctx)
+    elif data.startswith("qdetail:"):
+        await show_query_detail(update, ctx)
     elif data.startswith("rented:"):
         await mark_rented(update, ctx)
+    elif data.startswith("qrented:"):
+        await mark_query_rented(update, ctx)
     elif data.startswith("delete:"):
         await delete_listing(update, ctx)
 
