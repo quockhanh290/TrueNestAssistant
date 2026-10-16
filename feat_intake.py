@@ -53,7 +53,17 @@ async def on_new_listing_prompt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def _flush_after(uid, ctx):
-    await asyncio.sleep(COLLECT_WINDOW + 1)
+    # Wait until the buffer deadline passes (extended by each new photo/text).
+    # Fixes: broker sending photos one-by-one slowly would get split listings.
+    while True:
+        buf = _buffers.get(uid)
+        if not buf:
+            return
+        now = time.time()
+        wait = buf["deadline"] - now
+        if wait <= 0:
+            break
+        await asyncio.sleep(min(wait + 0.5, 5))
     buf = _buffers.pop(uid, None)
     if not buf or (not buf["texts"] and not buf["photos"]):
         return
