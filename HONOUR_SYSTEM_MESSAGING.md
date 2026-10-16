@@ -4,7 +4,20 @@ _Tài liệu nội bộ: những gì cần nói rõ với broker và khách_
 
 ---
 
-## Triết lý: Honour System
+## Nguyên tắc hiển thị
+
+1. **Ngắn gọn trong flow:** onboarding và tin nhắn chỉ nói ý chính (1-2 dòng)
+2. **Chi tiết trong Terms:** menu có mục "📜 Điều khoản" chứa đầy đủ
+3. **Đồng ý trước khi release contact:** broker và khách đều phải bấm "Đồng ý" với điều khoản TRƯỚC KHI bot release contact lần đầu
+   - Broker: đồng ý khi nhận match đầu tiên
+   - Khách: đồng ý khi chọn broker đầu tiên
+   - Sau đó không nhắc lại (trừ khi điều khoản thay đổi)
+
+## Pattern: khách không xác nhận → trừ điểm broker
+
+Nếu broker có pattern khách không xác nhận (vd: 3 deal liên tiếp không có xác nhận từ khách):
+- Trừ điểm uy tín (tỷ lệ xác nhận thấp)
+- Lý do: hoặc broker không chăm khách, hoặc deal không thật, hoặc broker dặn khách đừng xác nhận — cả 3 đều là red flag
 
 > Platform vận hành trên hệ thống danh dự (honour system).
 > Chúng tôi duy trì hạ tầng, kết nối khách với môi giới tốt nhất,
