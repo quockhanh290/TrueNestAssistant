@@ -13,6 +13,7 @@ from telegram.ext import ContextTypes
 
 import config
 import db
+import feat_premium
 import parser as listing_parser
 from normalize import normalize_phone
 
@@ -39,6 +40,10 @@ async def on_new_listing_prompt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     uid = q.from_user.id
+    # enterprise volume gate: >300 active listings requires Enterprise tier
+    if db.requires_enterprise_tier(uid):
+        await feat_premium.send_gate(q, "enterprise_volume", uid, edit=True)
+        return
     # rate limit
     if db.count_recent_listings(uid, hours=1) >= config.RATE_LIMIT_PER_HOUR:
         await q.edit_message_text(
@@ -246,6 +251,43 @@ async def hl_done_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await q.edit_message_text(t, reply_markup=kb)
 
 
+async def _try_final_submit(update_or_q, ctx, uid, listing_id, chat_id, pn,
+                            via_callback):
+    """Shared final-submit path: enterprise gate -> dedup check -> submit.
+
+    Returns True if submitted, False if blocked (gate shown) or deferred
+    (dup prompt shown).
+    """
+    async def _say(text, kb=None):
+        if via_callback:
+            await update_or_q.edit_message_text(text, reply_markup=kb)
+        else:
+            await update_or_q.message.reply_text(text, reply_markup=kb)
+
+    l = db.get_listing(listing_id)
+    if not l:
+        await _say("Tin này không còn nữa.", MENU_KB)
+        return False
+    # enterprise volume gate
+    if db.requires_enterprise_tier(uid):
+        await feat_premium.send_gate(update_or_q, "enterprise_volume", uid,
+                                     edit=via_callback)
+        return False
+    p = l["parsed"]
+    # dedup check before final submit — never auto-merge, always ask
+    if not ctx.user_data.pop("dup_confirmed", None):
+        dups = db.find_potential_duplicates(uid, p, exclude_id=listing_id)
+        if dups:
+            await _ask_duplicate_confirm(_say, ctx, listing_id, dups[0], pn)
+            return False
+    db.set_listing_status(listing_id, "submitted", changed_by="bot")
+    from feat_write import _maybe_write_post_finish  # lazy: avoid cycle
+    if await _maybe_write_post_finish(chat_id, uid, listing_id, ctx):
+        return True
+    await _say("Xong! Em đã lưu tin rồi nhé ✓", MENU_KB)
+    return True
+
+
 async def _finalize_after_confirm(update_or_q, ctx, uid, listing_id, chat_id,
                                 via_callback):
     """Broker confirmed the summary ([Đúng rồi] button or typed 'đúng rồi'):
@@ -280,11 +322,8 @@ async def _finalize_after_confirm(update_or_q, ctx, uid, listing_id, chat_id,
         await _ask_missing(chat_id, uid, listing_id, missing[0], ctx,
                            remaining=missing[1:])
     else:
-        db.set_listing_status(listing_id, "submitted", changed_by="bot")
-        from feat_write import _maybe_write_post_finish  # lazy: avoid cycle
-        if await _maybe_write_post_finish(chat_id, uid, listing_id, ctx):
-            return
-        await _say("Xong! Em đã lưu tin rồi nhé ✓", MENU_KB)
+        await _try_final_submit(update_or_q, ctx, uid, listing_id, chat_id,
+                                pn, via_callback)
 
 
 async def confirm_save_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -293,6 +332,98 @@ async def confirm_save_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     lid = q.data.split(":", 2)[2]  # "cfm:save:<listing_id>" (ids contain ':')
     await _finalize_after_confirm(q, ctx, q.from_user.id, lid,
                                   q.message.chat_id, via_callback=True)
+
+
+async def _ask_duplicate_confirm(say, ctx, draft_id, old, pn):
+    """Show potential-duplicate prompt. Never auto-merge or auto-delete."""
+    from utils import listing_line
+    op = old.get("parsed") or {}
+    br = op.get("bedrooms")
+    br_s = "Studio" if br == 0.0 else (f"{int(br)}PN" if br else "?PN")
+    loc = op.get("building_name") or op.get("district") or "?"
+    price = op.get("price_vnd")
+    price_s = f"{price / 1_000_000:g}tr/tháng" if price else "?/tháng"
+    days = int((time.time() - old["created_at"]) / 86400)
+    age = f"{days} ngày trước" if days > 0 else "hôm nay"
+    ctx.user_data["dup_check"] = {"draft_id": draft_id, "old_id": old["id"]}
+    await say(
+        f"⚠️ Em thấy tin này giống tin {pn} đã có:\n\n"
+        f"🏠 {br_s} {loc}, {price_s} (đăng {age})\n\n"
+        f"{pn.capitalize()} kiểm tra giúp em nhé 👇",
+        InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Đây là tin mới, lưu tiếp",
+                                  callback_data="dup:save")],
+            [InlineKeyboardButton("🔗 Trùng rồi, lưu dạng trùng",
+                                  callback_data="dup:skip")],
+            [InlineKeyboardButton("👀 Xem tin cũ",
+                                  callback_data="dup:view")],
+        ]))
+
+
+async def dup_action_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Handle dup:* callbacks from the duplicate-confirm prompt."""
+    q = update.callback_query
+    await q.answer()
+    uid = q.from_user.id
+    pn = get_pronoun(uid)
+    act = q.data.split(":", 1)[1] if ":" in q.data else ""
+    dc = ctx.user_data.get("dup_check") or {}
+    draft_id = dc.get("draft_id")
+    old_id = dc.get("old_id")
+
+    if act == "view" and old_id:
+        from feat_listings import _detail_content
+        old = db.get_listing(old_id)
+        if not old or old["broker_id"] != uid:
+            await q.edit_message_text("Tin cũ không còn nữa 😅",
+                                      reply_markup=MENU_KB)
+            return
+        text, kb = _detail_content(old, page=0, filt="a")
+        # keep a way back to the dup decision
+        rows = kb.inline_keyboard if kb else []
+        kb = InlineKeyboardMarkup(
+            [[InlineKeyboardButton("⬅️ Quay lại quyết định",
+                                   callback_data="dup:back")]] + rows)
+        await q.edit_message_text(text, parse_mode="HTML", reply_markup=kb)
+        return
+
+    if act == "back" and draft_id:
+        old = db.get_listing(old_id) if old_id else None
+        if old:
+            async def _say(t, kb=None):
+                await q.edit_message_text(t, reply_markup=kb)
+            await _ask_duplicate_confirm(_say, ctx, draft_id, old, pn)
+        return
+
+    if not draft_id:
+        await q.edit_message_text("Hết hạn rồi, anh gửi lại giúp em nhé 😅",
+                                  reply_markup=MENU_KB)
+        return
+    l = db.get_listing(draft_id)
+    if not l or l["broker_id"] != uid:
+        ctx.user_data.pop("dup_check", None)
+        await q.edit_message_text("Tin này không còn nữa.",
+                                  reply_markup=MENU_KB)
+        return
+
+    if act == "save":
+        # broker confirms it's a genuinely new listing — proceed
+        ctx.user_data.pop("dup_check", None)
+        ctx.user_data["dup_confirmed"] = True
+        await _finalize_after_confirm(q, ctx, uid, draft_id,
+                                      q.message.chat_id, via_callback=True)
+    elif act == "skip":
+        # confirmed duplicate — keep for reference, linked to the original.
+        # Never auto-merge or auto-delete either side.
+        ctx.user_data.pop("dup_check", None)
+        if old_id:
+            db.update_listing(draft_id, duplicate_of=old_id)
+        await q.edit_message_text(
+            "Ok ạ, em đã lưu tin này dạng trùng để tham khảo 🔗\n"
+            "Tin gốc vẫn giữ nguyên, không gộp không xóa gì đâu ạ.",
+            reply_markup=MENU_KB)
+    else:
+        await q.answer("Anh chọn giúp em nhé 👆")
 
 
 _CONFIRM_WORDS = {"đúng rồi", "dung roi", "đúng", "dung", "ok", "oke",
@@ -756,15 +887,9 @@ async def _handle_answer(update, ctx, awaiting, text):
                            remaining=still[1:])
     else:
         ctx.user_data.pop("awaiting", None)
-        db.set_listing_status(listing_id, "submitted", changed_by="bot")
-        from feat_write import _maybe_write_post_finish  # lazy: avoid cycle
-        if await _maybe_write_post_finish(chat_id, uid, listing_id, ctx):
-            return
-        await asyncio.sleep(1)
-        await update.message.reply_text(
-            "Xong! Em đã lưu tin rồi nhé ✓",
-            reply_markup=MENU_KB,
-        )
+        pn = get_pronoun(uid)
+        await _try_final_submit(update, ctx, uid, listing_id, chat_id, pn,
+                                via_callback=False)
 
 
 # ---------------------------------------------------------------- advanced query

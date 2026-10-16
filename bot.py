@@ -34,6 +34,7 @@ import feat_match
 import feat_viewings
 import feat_templates
 import feat_refresh
+import feat_stale
 import feat_deals
 import feat_evening
 import feat_premium
@@ -701,6 +702,10 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                                          edit=True)
         else:
             await feat_refresh.rf_action(update, ctx)
+    elif data.startswith("stale:"):
+        await feat_stale.stale_action_cb(update, ctx)
+    elif data.startswith("dup:"):
+        await feat_intake.dup_action_cb(update, ctx)
     elif data.startswith("deal:"):
         rest = data[len("deal:"):]
         if rest == "new":
