@@ -361,6 +361,17 @@ async def _try_final_submit(update_or_q, ctx, uid, listing_id, chat_id, pn,
                                          reply_to_message_id)
             return False
     db.set_listing_status(listing_id, "submitted", changed_by="bot")
+    # auto-generate Vietnamese FB post and save with the listing.
+    # Silent — broker sees it in the ✍️ write menu. Other languages
+    # are generated on demand from there.
+    from feat_write import generate_post  # lazy: avoid cycle
+    try:
+        post_vi = generate_post(l, "vi")
+        if post_vi and post_vi.strip():
+            db.save_post(listing_id, post_vi.strip(), "vi")
+    except Exception:
+        log.warning("auto-generate vi post failed for %s", listing_id,
+                    exc_info=True)
     from feat_write import _maybe_write_post_finish  # lazy: avoid cycle
     if await _maybe_write_post_finish(chat_id, uid, listing_id, ctx):
         await _promote_next_confirming(ctx, chat_id, uid)
