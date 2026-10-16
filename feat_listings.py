@@ -1043,7 +1043,10 @@ async def cmd_edit(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
     db.get_or_create_broker(u.id, u.username, u.full_name)
     await natural_delay(update)
-    items = db.list_broker_listings(u.id, limit=5, offset=0)
+    items = db.list_broker_listings(u.id, limit=5, offset=0,
+                                     statuses=["submitted", "draft",
+                                               "pending_info", "rented",
+                                               "expired"])
     if not items:
         await update.message.reply_text(
             "Anh chưa có tin nào để sửa. Bấm 📝 Gửi tin mới nhé!",

@@ -271,7 +271,10 @@ async def on_write_post_prompt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     uid = q.from_user.id
-    items = db.list_broker_listings(uid, limit=5, offset=0)
+    items = db.list_broker_listings(uid, limit=5, offset=0,
+                                     statuses=["submitted", "draft",
+                                               "pending_info", "rented",
+                                               "expired"])
     kb = []
     for i, l in enumerate(items, start=1):
         kb.append([InlineKeyboardButton(
@@ -281,7 +284,9 @@ async def on_write_post_prompt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     kb.append([InlineKeyboardButton("⬅️ Menu", callback_data="menu:back")])
     await natural_delay(update)
     if items:
-        total = db.count_broker_listings(uid)
+        total = db.count_broker_listings(
+            uid, statuses=["submitted", "draft", "pending_info",
+                           "rented", "expired"])
         text = (f"Anh muốn viết tin cho căn nào? "
                 f"Em thấy anh có {total} tin gần đây nè:")
     else:
@@ -347,6 +352,13 @@ async def on_write_generate(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     # "writelang:tg:<hex>:<lang>"
     rest = q.data.split(":", 1)[1]
     listing_id, lang = rest.rsplit(":", 1)
+    # ko/zh/ru/all are Pro features; vi/en are free
+    if lang in ("ko", "zh", "ru", "all"):
+        import feat_premium
+        if not feat_premium.requires_tier(q.from_user.id, "fb_multilang"):
+            await feat_premium.send_gate(q, "fb_multilang",
+                                         q.from_user.id, edit=True)
+            return
     l = db.get_listing(listing_id)
     if not l:
         await q.edit_message_text("Tin này không còn nữa.", reply_markup=MENU_KB)

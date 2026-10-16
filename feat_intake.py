@@ -488,7 +488,9 @@ async def on_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     else:
         # No active buffer — stray photo. Usually it's for the most recent
         # listing, so ask to confirm instead of starting a new one blindly.
-        recent = db.list_broker_listings(uid, limit=1)
+        recent = db.list_broker_listings(
+            uid, limit=1, statuses=["submitted", "draft", "pending_info",
+                                    "rented", "expired"])
         if recent:
             lst = recent[0]
             created_ago = time.time() - (lst.get("created_at") or 0)
