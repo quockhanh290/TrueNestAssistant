@@ -199,3 +199,26 @@ body {
 .modal-body b { color: var(--text); }
 .modal .btn { width: 100%; margin-bottom: 8px; }
 .modal .btn:last-child { margin-bottom: 0; }
+
+/* ---------- propose view ---------- */
+.propose-head { padding: 14px 16px; background: var(--card); border-radius: 14px; margin-bottom: 12px; }
+.propose-req { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+.propose-timer { font-size: 14px; color: var(--muted); }
+.propose-timer.urgent { color: var(--red); font-weight: 700; }
+.propose-card { display: flex; gap: 10px; background: var(--card); border-radius: 14px; padding: 10px; margin-bottom: 10px; cursor: pointer; border: 2px solid transparent; }
+.propose-card.selected { border-color: var(--accent); }
+.propose-check { font-size: 22px; flex-shrink: 0; width: 30px; text-align: center; padding-top: 4px; }
+.propose-img { width: 72px; height: 72px; border-radius: 10px; object-fit: cover; flex-shrink: 0; background: #242f3d; }
+.propose-img-ph { width: 72px; height: 72px; border-radius: 10px; background: #242f3d; display: flex; align-items: center; justify-content: center; font-size: 28px; flex-shrink: 0; }
+.propose-info { flex: 1; min-width: 0; }
+.propose-title { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+.propose-meta { font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+.propose-scores { font-size: 12px; margin-top: 2px; }
+.propose-expand { font-size: 13px; color: var(--accent); margin-top: 4px; }
+.propose-detail { margin-top: 8px; padding-top: 8px; border-top: 1px solid #242f3d; font-size: 13px; }
+.propose-bar { position: sticky; bottom: 70px; background: var(--card); border-radius: 14px; padding: 12px 14px; margin-top: 12px; display: flex; align-items: center; gap: 10px; box-shadow: 0 -2px 12px rgba(0,0,0,0.3); }
+.propose-count { flex: 1; font-size: 14px; font-weight: 600; }
+.propose-done { text-align: center; padding: 40px 20px; }
+.propose-done .big { font-size: 48px; margin-bottom: 12px; }
+.propose-criteria { background: var(--card); border-radius: 14px; padding: 14px 16px; margin: 12px 0; }
+.propose-criterion { font-size: 14px; padding: 4px 0; color: var(--text); }
