@@ -784,6 +784,12 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await feat_evening.eve_go(update, ctx)
     elif data.startswith("mresp:msg:") or data.startswith("mresp:back:"):
         await feat_match.match_relay_prompt(update, ctx)
+    elif data.startswith("mresp:connect:"):
+        await feat_match.match_connect_request(update, ctx)
+    elif data.startswith("mresp:accept:"):
+        await feat_match.match_connect_accept(update, ctx)
+    elif data.startswith("mresp:decline:"):
+        await feat_match.match_connect_decline(update, ctx)
     elif data == "mresp:cancel":
         await feat_match.match_relay_cancel(update, ctx)
     elif data.startswith("mpick:toggle:"):
@@ -873,6 +879,7 @@ def main():
     app.add_handler(CommandHandler("commission", feat_deals.cmd_commission))
     app.add_handler(CommandHandler("premium", feat_premium.cmd_premium))
     app.add_handler(CommandHandler("approve", feat_premium.cmd_approve))
+    app.add_handler(CommandHandler("matchstats", feat_match.cmd_matchstats))
     app.add_handler(CommandHandler("skip", feat_listings.cmd_skip_photo_delete))
     app.add_handler(CommandHandler("huy", feat_listings.cmd_cancel_addphoto))
     app.add_handler(CallbackQueryHandler(on_callback))
