@@ -87,11 +87,13 @@ Match: 95% (giá ✓, vị trí ✓, PN ✓)
 - Broker xem đủ ảnh + thông tin rồi mới bấm chọn
 - Bấm "Chọn" → quay về danh sách, tin đó thành ✅
 
-**Giới hạn nền tảng Telegram:**
+**Giới hạn nền tảng Telegram (đã xác minh):**
 - 1 tin nhắn tối đa ~10 nút inline (5 tin + 3 action = vừa đủ)
 - Tên tin phải rút gọn (không hiện full địa chỉ dài)
 - Không có checkbox thật → dùng emoji ✅/☐
-- Không làm được: drag-drop sắp xếp, multi-column layout, hình ảnh inline trong nút
+- 1 tin nhắn chứa được: ảnh + chữ (~1000 ký tự) + nút bấm
+- Album tối đa 10 ảnh/lần → bấm vào xem full-screen, vuốt qua lại (native)
+- Không làm được: nút bấm chứa ảnh, drag-drop sắp xếp, multi-column layout
 
 - 5 người được chọn nhận DM với chi tiết + nút submit
 - Mỗi người chọn up to 5 listing từ kho của mình để đề xuất
