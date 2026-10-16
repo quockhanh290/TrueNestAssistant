@@ -49,15 +49,13 @@
       // fall back to URL params for demo/browser testing.
       const tg = window.Telegram?.WebApp;
       const initData = tg?.initData || '';
-      const headers = {};
       let url;
       if (initData) {
-        headers['X-Telegram-Init-Data'] = initData;
-        url = `/api/listings?limit=50`;
+        url = `/api/listings?limit=50&init_data=${encodeURIComponent(initData)}`;
       } else {
         url = `/api/listings?broker_id=${brokerId}&demo=${demo}&limit=50`;
       }
-      const res = await fetch(url, { headers });
+      const res = await fetch(url);
       if (!res.ok) {
         console.warn('V2 API status:', res.status);
         showApiError(res.status);
