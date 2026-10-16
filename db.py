@@ -273,6 +273,72 @@ def count_recent_listings(broker_id, hours=1, path=None):
     return n
 
 
+def search_listings(broker_id, filters, limit=50, offset=0, path=None):
+    """Search a broker's listings by parsed-field filters.
+
+    filters keys: bedrooms (float), min_price, max_price (VND float),
+    district (str), building_name (str), pet_friendly (bool),
+    property_type (str), status ("active" | "rented" | exact status).
+    "active" expands to draft/pending_info/submitted.
+    """
+    ACTIVE = ("draft", "pending_info", "submitted")
+    conds = ["broker_id = ?"]
+    vals = [broker_id]
+
+    st = filters.get("status")
+    if st == "active":
+        ph = ", ".join("?" for _ in ACTIVE)
+        conds.append(f"status IN ({ph})")
+        vals.extend(ACTIVE)
+    elif st == "rented":
+        conds.append("status = ?")
+        vals.append("rented")
+    elif isinstance(st, str):
+        conds.append("status = ?")
+        vals.append(st)
+    else:
+        # default: hide deleted
+        conds.append("status != 'deleted'")
+
+    if "bedrooms" in filters:
+        conds.append("CAST(json_extract(parsed, '$.bedrooms') AS REAL) = ?")
+        vals.append(float(filters["bedrooms"]))
+    if "min_price" in filters:
+        conds.append("CAST(json_extract(parsed, '$.price_vnd') AS REAL) >= ?")
+        vals.append(float(filters["min_price"]))
+    if "max_price" in filters:
+        conds.append("CAST(json_extract(parsed, '$.price_vnd') AS REAL) <= ?")
+        vals.append(float(filters["max_price"]))
+    if "district" in filters:
+        conds.append("json_extract(parsed, '$.district') = ?")
+        vals.append(filters["district"])
+    if "building_name" in filters:
+        conds.append("json_extract(parsed, '$.building_name') = ?")
+        vals.append(filters["building_name"])
+    if "pet_friendly" in filters:
+        conds.append("json_extract(parsed, '$.pet_friendly') = ?")
+        vals.append(1 if filters["pet_friendly"] else 0)
+    if "property_type" in filters:
+        conds.append("json_extract(parsed, '$.property_type') = ?")
+        vals.append(filters["property_type"])
+
+    sql = ("SELECT * FROM tg_listings WHERE " + " AND ".join(conds) +
+           " ORDER BY created_at DESC LIMIT ? OFFSET ?")
+    vals.extend([limit, offset])
+
+    conn = connect(path)
+    rows = conn.execute(sql, vals).fetchall()
+    conn.close()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["photo_file_ids"] = json.loads(d["photo_file_ids"])
+        d["parsed"] = json.loads(d["parsed"])
+        d["missing_fields"] = json.loads(d["missing_fields"])
+        out.append(d)
+    return out
+
+
 def stale_listings(older_than_days=7, statuses=("submitted",), path=None):
     """Listings not updated in N days — candidates for availability nudge."""
     conn = connect(path)
