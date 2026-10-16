@@ -60,8 +60,16 @@ def parse_price(text):
     if m:
         val = float((m.group(1) or m.group(2)).replace(",", "."))
         return val * 25_000, "medium"  # rough USD->VND
+    # "Rent: 18,500,000" / "rent 18500000" (English prefix)
+    m = re.search(r"(?:rent|price)\s*[:\-]?\s*(\d[\d.,]{5,})", t)
+    if m:
+        return float(m.group(1).replace(",", "").replace(".", "")), "medium"
     # "12,000,000" / "12.000.000" / "12000000" near price keywords
     m = re.search(r"(?:giá|gia|price)\s*[:\-]?\s*(\d[\d.,]{5,})", t)
+    if m:
+        return float(m.group(1).replace(",", "").replace(".", "")), "medium"
+    # "18,500,000 VND/month" / "18,500,000 VND" / "18.5M VND"
+    m = re.search(r"(\d{1,3}(?:[.,]\d{3})+)\s*(?:vnd|vnđ|đồng)?\s*(?:/month|/mo|/tháng|/thang)?", t)
     if m:
         return float(m.group(1).replace(",", "").replace(".", "")), "medium"
     m = re.search(r"(\d{1,3}(?:[.,]\d{3})+)\s*(?:đ|vnd|/tháng|/thang)?", t)
@@ -76,10 +84,21 @@ def parse_phone(text):
     m = re.search(r"(0(?:3|5|7|8|9)\d{8})", t)
     if m:
         return m.group(1), "high"
-    # +84 variant
-    m = re.search(r"\+84\s*(\d{9})", text)
+    # +84 variant (tolerates spaces: "+84 905 123 456" or "+84905123456")
+    m = re.search(r"\+?84[\s.\-]*((?:\d[\s.\-]*){9})(?!\d)", text)
     if m:
-        return "0" + m.group(1), "medium"
+        digits = re.sub(r"\D", "", m.group(1))
+        if len(digits) == 9:
+            return "0" + digits, "medium"
+    return None, None
+
+
+def parse_telegram(text):
+    """Extract Telegram username: "@haunii_apartment" -> "haunii_apartment"."""
+    m = re.search(r"(?:telegram|tele)\s*[:\-]?\s*@?([a-zA-Z][a-zA-Z0-9_]{4,31})",
+                  text, re.I)
+    if m:
+        return m.group(1), "medium"
     return None, None
 
 
@@ -87,6 +106,10 @@ def parse_bedrooms(text):
     t = _norm(text)
     if re.search(r"\bstudio\b", t):
         return 0.0, "high"
+    # English: "2-bedroom", "2 bedroom", "2BR", "2 br", "2 bed", "2bd"
+    m = re.search(r"(\d+)\s*[-]?\s*(?:bedrooms?|br\b|bed\b|bd\b)", t)
+    if m:
+        return float(m.group(1)), "high"
     m = re.search(r"(\d+)\s*(?:pn|phòng ngủ|phong ngu|bed)", t)
     if m:
         return float(m.group(1)), "high"
@@ -95,6 +118,10 @@ def parse_bedrooms(text):
 
 def parse_bathrooms(text):
     t = _norm(text)
+    # English: "2-bathroom", "2 bathroom", "2BA", "2 bath"
+    m = re.search(r"(\d+)\s*[-]?\s*(?:bathrooms?|ba\b|bath\b)", t)
+    if m:
+        return float(m.group(1)), "high"
     m = re.search(r"(\d+)\s*(?:wc|toilet|nhà vệ sinh|nha ve sinh|bath)", t)
     if m:
         return float(m.group(1)), "high"
@@ -117,6 +144,35 @@ def parse_district(text):
     for alias, canon in DISTRICT_ALIASES.items():
         if alias in t:
             return canon, "medium"
+    # English with "District" suffix: "Son Tra District", "Hai Chau District"
+    for alias, canon in DISTRICT_ALIASES.items():
+        if alias + " district" in t or alias + " dist" in t:
+            return canon, "high"
+    return None, None
+
+
+def parse_street(text):
+    """Extract street name from English/Vietnamese listings.
+
+    Handles: "630 Vo Nguyen Giap St", "Vo Nguyen Giap Street",
+    "đường Võ Nguyên Giáp", "630 Vo Nguyen Giap".
+    Returns street name or None.
+    """
+    # "Location: 630 Vo Nguyen Giap St, Son Tra" or "Address: ..."
+    m = re.search(
+        r"(?:location|address|địa chỉ|dia chi)\s*:\s*"
+        r"(?:\d+\s+)?([A-Za-zÀ-ỹ][A-Za-zÀ-ỹ\s]+?)"
+        r"(?:\s+(?:st|street|str|đường|duong))?",
+        text, re.I)
+    if m:
+        street = m.group(1).strip().rstrip(",")
+        # Don't return if it's just a number or too short
+        if len(street) >= 4 and re.search(r"[a-zA-ZÀ-ỹ]", street):
+            return street, "medium"
+    # "630 Vo Nguyen Giap" pattern: number + capitalized words
+    m = re.search(r"\b\d{1,4}\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b", text)
+    if m:
+        return m.group(1).strip(), "low"
     return None, None
 
 
@@ -158,11 +214,11 @@ def parse_property_type(text):
 
 def parse_furnishing(text):
     t = _norm(text)
-    if re.search(r"full\s*(?:nội thất|noi that|nt)", t):
+    if re.search(r"full\s*(?:nội thất|noi that|nt|furnish)", t):
         return "full", "high"
-    if re.search(r"nội thất cơ bản|noi that co ban", t):
+    if re.search(r"nội thất cơ bản|noi that co ban|basic furnish", t):
         return "basic", "medium"
-    if re.search(r"nhà trống|nha trong|trống|không nội thất", t):
+    if re.search(r"nhà trống|nha trong|trống|không nội thất|unfurnish", t):
         return "empty", "medium"
     return None, None
 
@@ -173,6 +229,23 @@ def parse_pet(text):
         if re.search(r"không\s*(?:cho\s*)?(?:nuôi\s*)?pet|cấm pet", t):
             return False, "high"
         return True, "medium"
+    return None, None
+
+
+def parse_availability(text):
+    """Extract availability from English/Vietnamese listings.
+
+    "Available now", "available immediately" -> "available"
+    "Available from [date]" -> "available_from_date" (raw string)
+    """
+    t = _norm(text)
+    if re.search(r"available\s+(?:now|immediately|asap)", t):
+        return "available", "high"
+    if re.search(r"(?:còn trống|con trong|sẵn sàng|san sang)", t):
+        return "available", "high"
+    m = re.search(r"available\s+from\s+([a-z0-9\s,/\-]{3,20})", t)
+    if m:
+        return f"from {m.group(1).strip()}", "medium"
     return None, None
 
 
@@ -211,6 +284,9 @@ def parse_listing(text, photo_count=0):
     phone, c = parse_phone(text)
     set_field("primary_phone", phone, c)
 
+    tg, c = parse_telegram(text)
+    set_field("telegram_username", tg, c)
+
     br, c = parse_bedrooms(text)
     set_field("bedrooms", br, c)
 
@@ -222,6 +298,12 @@ def parse_listing(text, photo_count=0):
 
     dist, c = parse_district(text)
     set_field("district", dist, c)
+
+    street, c = parse_street(text)
+    set_field("street", street, c)
+
+    avail, c = parse_availability(text)
+    set_field("availability_note", avail, c)
 
     bld, c = parse_building(text)
     set_field("building_name", bld, c)
@@ -260,8 +342,20 @@ def parse_listing(text, photo_count=0):
 
 
 def reflective_summary(parsed):
-    """Build the natural 'reflective listening' summary in Vietnamese."""
+    """Build the natural 'reflective listening' summary in Vietnamese.
+
+    Returns a fallback prompt when nothing was parsed (0 fields).
+    """
     f = parsed["fields"]
+
+    # empty parse: don't show a broken "À em thấy đây là căn này..."
+    # exclude photo_count (photos alone aren't parsed content)
+    content_fields = {k: v for k, v in f.items()
+                      if k not in ("photo_count",)}
+    if not content_fields:
+        return ("Anh gửi thêm thông tin giúp em nhé? "
+                "(giá, số phòng ngủ, địa chỉ...)")
+
     parts = []
 
     # what kind of place
@@ -280,9 +374,12 @@ def reflective_summary(parsed):
 
     bld = f.get("building_name")
     dist = f.get("district")
+    street = f.get("street")
     loc = ""
     if bld:
         loc = f" ở {bld}"
+    elif street:
+        loc = f" ở {street}"
     elif dist:
         loc = f" ở {dist}"
 
