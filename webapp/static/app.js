@@ -512,12 +512,19 @@
   if (tg) {
     tg.BackButton.onClick(function () { show("view-list"); });
   }
-  // Deep links: ?view=listing&id=<id>[&tab=post] or ?view=batch&ids=id1,id2
+  // Deep links: ?view=listing&id=<id>[&tab=post], ?view=batch&ids=id1,id2,
+  // ?view=propose&request_id=<rid>, or ?view=intake[&return=<url>]
   var dlView = qs.get("view");
   var dlId = qs.get("id");
   var dlIds = qs.get("ids");
   var dlTab = qs.get("tab") || "info";
-  if (dlView === "listing" && dlId) {
+  var dlReqId = qs.get("request_id");
+  var dlReturn = qs.get("return");
+  if (dlView === "propose" && dlReqId) {
+    openPropose(dlReqId);
+  } else if (dlView === "intake") {
+    openIntake(dlReturn);
+  } else if (dlView === "listing" && dlId) {
     openDetail(dlId, dlTab);
     // also load list in background for back navigation
     loadListings();
@@ -525,6 +532,288 @@
     loadBatch(dlIds);
   } else {
     loadListings();
+  }
+
+  // ---------- propose view (broker picks listings after reserving slot) ----------
+  var proposeState = null;
+  var proposeTimer = null;
+
+  function openPropose(requestId) {
+    document.getElementById("propose-body").innerHTML =
+      '<div class="loading">Đang tải...</div>';
+    show("view-propose");
+    api("/api/propose/" + encodeURIComponent(requestId)).then(function (d) {
+      if (d.error) {
+        document.getElementById("propose-body").innerHTML =
+          '<div class="empty"><div class="big">⚠️</div>' +
+          esc(d.error_vi || "Không tải được yêu cầu.") + "</div>";
+        return;
+      }
+      proposeState = {
+        requestId: requestId,
+        request: d.request,
+        hasSlot: d.has_slot,
+        maxListings: d.max_listings || 5,
+        listings: d.listings || [],
+        failedSummary: d.failed_summary || {},
+        selected: {},
+        submitted: false,
+        expanded: {},
+        showAll: false,
+      };
+      // pre-select already submitted
+      (d.already_submitted || []).forEach(function (id) {
+        proposeState.selected[id] = true;
+      });
+      renderPropose();
+      startProposeTimer();
+    }).catch(function () {
+      document.getElementById("propose-body").innerHTML =
+        '<div class="empty"><div class="big">⚠️</div>Không tải được dữ liệu.</div>';
+    });
+  }
+
+  function proposeCountdown() {
+    if (!proposeState || !proposeState.request.expires_at) return "";
+    var left = Math.max(0, proposeState.request.expires_at - Date.now() / 1000);
+    var m = Math.floor(left / 60), s = Math.floor(left % 60);
+    return { text: "⏰ Còn " + m + " phút " + s + " giây", urgent: left < 600, left: left };
+  }
+
+  function startProposeTimer() {
+    if (proposeTimer) clearInterval(proposeTimer);
+    proposeTimer = setInterval(function () {
+      if (!proposeState || proposeState.submitted) {
+        clearInterval(proposeTimer);
+        return;
+      }
+      var cd = proposeCountdown();
+      var el = document.getElementById("propose-timer");
+      if (el && cd) {
+        el.innerHTML = esc(cd.text);
+        el.className = "propose-timer" + (cd.urgent ? " urgent" : "");
+      }
+      if (cd && cd.left <= 0) {
+        clearInterval(proposeTimer);
+        autoSubmitPropose();
+      }
+    }, 1000);
+  }
+
+  function autoSubmitPropose() {
+    var ids = Object.keys(proposeState.selected);
+    toast("Hết giờ, đã tự động gửi " + ids.length + " tin ⏰");
+    submitPropose(true);
+  }
+
+  function fmtBR(v) {
+    if (v === 0 || v === "0") return "Studio";
+    return v + "PN";
+  }
+  function fmtTr(v) {
+    var t = v / 1000000;
+    return (t % 1 === 0 ? t.toFixed(0) : t.toFixed(1)) + "tr";
+  }
+  function proposeCriteriaHtml(fs, req) {
+    var lines = [];
+    if (fs.bedrooms) {
+      var have = (fs.bedrooms.have || []).map(fmtBR).join(", ");
+      lines.push("• " + fmtBR(fs.bedrooms.required) +
+        (have ? " (bạn có: " + esc(have) + ")" : " (tin của bạn thiếu thông tin)"));
+    }
+    if (fs.budget) {
+      var over = (fs.budget.over || []).map(fmtTr).join(", ");
+      lines.push("• Dưới " + fmtTr(fs.budget.max) +
+        (over ? " (tin bạn: " + esc(over) + ")" : " (tin của bạn thiếu giá)"));
+    }
+    if (fs.district) {
+      var dhave = (fs.district.have || []).join(", ");
+      lines.push("• " + esc(fs.district.required) +
+        (dhave ? " (tin bạn: " + esc(dhave) + ")" : " (tin của bạn thiếu khu vực)"));
+    }
+    if (fs.property_type) {
+      var phave = (fs.property_type.have || []).join(", ");
+      lines.push("• Loại: " + esc(fs.property_type.required) +
+        (phave ? " (tin bạn: " + esc(phave) + ")" : ""));
+    }
+    if (fs.status) {
+      lines.push("• " + fs.status.failed +
+        " tin chưa đủ điều kiện (nháp/đã thuê)");
+    }
+    return lines.map(function (l) {
+      return '<div class="propose-criterion">' + l + "</div>";
+    }).join("");
+  }
+
+  var intakeReturnUrl = null;
+  function openIntake(returnUrl) {
+    intakeReturnUrl = returnUrl || null;
+    document.getElementById("intake-body").innerHTML =
+      '<div class="empty"><div class="big">📝</div>' +
+      "<b>Nhập tin mới từ bot</b><br><br>" +
+      "Quay lại chat với em Linh và forward tin nhắn " +
+      "hoặc gửi ảnh + mô tả như bình thường nhé.<br><br>" +
+      "Tin mới sẽ tự động vào kho của anh." +
+      (intakeReturnUrl
+        ? '<br><br><button class="btn btn-primary" id="intake-back" ' +
+          'style="width:100%">⬅️ Quay lại đề xuất</button>'
+        : "") +
+      "</div>";
+    show("view-intake");
+    var back = document.getElementById("intake-back");
+    if (back) {
+      back.onclick = function () {
+        var m = /request_id=([^&]+)/.exec(intakeReturnUrl || "");
+        if (m) openPropose(decodeURIComponent(m[1]));
+        else show("view-list");
+      };
+    }
+  }
+
+  function renderPropose() {
+    var st = proposeState;
+    var req = st.request;
+    var body = document.getElementById("propose-body");
+
+    if (!st.hasSlot) {
+      body.innerHTML = '<div class="empty"><div class="big">🔒</div>' +
+        "Anh chưa giữ slot cho yêu cầu này.</div>";
+      return;
+    }
+    if (req.expired) {
+      body.innerHTML = '<div class="empty"><div class="big">⏰</div>' +
+        "Hết giờ rồi ạ, slot đã chuyển cho người tiếp theo.</div>";
+      return;
+    }
+    if (st.submitted) {
+      var n = Object.keys(st.selected).length;
+      body.innerHTML = '<div class="propose-done"><div class="big">✅</div>' +
+        "<h3>Đã gửi " + n + " tin, chờ khách duyệt</h3>" +
+        '<p style="color:var(--muted)">Em sẽ báo khi có kết quả.</p></div>';
+      return;
+    }
+
+    var cd = proposeCountdown();
+    var html = '<div class="propose-head">' +
+      '<div class="propose-req">Cần: ' + esc(req.summary || req.requirements_raw || "—") + "</div>" +
+      (cd ? '<div class="propose-timer' + (cd.urgent ? " urgent" : "") +
+       '" id="propose-timer">' + esc(cd.text) + "</div>" : "") +
+      "</div>";
+
+    if (!st.listings.length) {
+      var fs = st.failedSummary || {};
+      var fsKeys = Object.keys(fs);
+      if (fsKeys.length) {
+        // Hard-filtered out everything — show which criteria failed.
+        html += '<div class="empty"><div class="big">😔</div>' +
+          "<b>Không có tin nào đạt tiêu chí của lead</b></div>" +
+          '<div class="propose-criteria"><div class="section-title">Tiêu chí cứng:</div>' +
+          proposeCriteriaHtml(fs, st.request.requirements || {}) +
+          "</div>" +
+          '<button class="btn btn-primary" id="propose-addnew" ' +
+          'style="width:100%;margin-top:12px">➕ Thêm tin mới phù hợp</button>';
+        body.innerHTML = html;
+        document.getElementById("propose-addnew").onclick = function () {
+          openIntake("?view=propose&request_id=" +
+            encodeURIComponent(st.requestId));
+        };
+      } else {
+        html += '<div class="empty"><div class="big">🏠</div>' +
+          "Anh chưa có tin nào trong kho.<br>Gửi tin vào bot trước đã nhé! 📝</div>";
+        body.innerHTML = html;
+      }
+      return;
+    }
+
+    var visible = st.showAll ? st.listings : st.listings.slice(0, 10);
+    html += visible.map(function (l) {
+      var sel = st.selected[l.id];
+      var exp = st.expanded[l.id];
+      var img = (l.photo_urls && l.photo_urls.length)
+        ? '<img class="propose-img" src="' + esc(l.photo_urls[0]) +
+          '" loading="lazy" onerror="this.outerHTML=\'<div class=&quot;propose-img-ph&quot;>🏢</div>\'">'
+        : '<div class="propose-img-ph">🏢</div>';
+      var q = l.quality_score || 0;
+      var card = '<div class="propose-card' + (sel ? " selected" : "") +
+        '" data-id="' + esc(l.id) + '">' +
+        '<div class="propose-check">' + (sel ? "☑️" : "☐") + "</div>" +
+        img +
+        '<div class="propose-info">' +
+        '<div class="propose-title">' + esc(l.title) + "</div>" +
+        '<div class="propose-meta">' + esc(l.price) + "/tháng</div>" +
+        '<div class="propose-scores">🎯 Match ' + (l.match_score || 0) +
+        "% · 🤖 " + q + "đ</div>";
+      if (exp) {
+        card += '<div class="propose-detail">' +
+          (l.photo_count ? "📸 " + l.photo_count + " ảnh<br>" : "") +
+          (l.district ? "📍 " + esc(l.district) + "<br>" : "") +
+          (l.area_m2 ? "📐 " + l.area_m2 + "m²<br>" : "") +
+          (l.bedroom_label ? "🛏️ " + esc(l.bedroom_label) : "") +
+          "</div>" +
+          '<div class="propose-expand">▴ Thu gọn</div>';
+      } else {
+        card += '<div class="propose-expand">▾ Xem chi tiết</div>';
+      }
+      card += "</div></div>";
+      return card;
+    }).join("");
+
+    if (!st.showAll && st.listings.length > 10) {
+      html += '<button class="btn" id="propose-more" style="width:100%;margin-bottom:10px">' +
+        "Xem thêm " + (st.listings.length - 10) + " tin khác</button>";
+    }
+
+    var nSel = Object.keys(st.selected).length;
+    html += '<div class="propose-bar">' +
+      '<div class="propose-count">Đã chọn ' + nSel + "/" + st.maxListings + " tin</div>" +
+      '<button class="btn btn-primary" id="propose-submit" ' +
+      (nSel ? "" : "disabled") + ">📤 Gửi đề xuất</button></div>";
+
+    body.innerHTML = html;
+
+    // wire events
+    body.querySelectorAll(".propose-card").forEach(function (card) {
+      card.onclick = function (e) {
+        var id = card.getAttribute("data-id");
+        // toggle expand on "xem chi tiết" click, else toggle select
+        if (e.target.classList.contains("propose-expand")) {
+          st.expanded[id] = !st.expanded[id];
+        } else {
+          if (st.selected[id]) {
+            delete st.selected[id];
+          } else {
+            if (Object.keys(st.selected).length >= st.maxListings) {
+              toast("Tối đa " + st.maxListings + " tin");
+              return;
+            }
+            st.selected[id] = true;
+          }
+        }
+        renderPropose();
+      };
+    });
+    var more = document.getElementById("propose-more");
+    if (more) more.onclick = function () { st.showAll = true; renderPropose(); };
+    var sub = document.getElementById("propose-submit");
+    if (sub) sub.onclick = function () { submitPropose(false); };
+  }
+
+  function submitPropose(isAuto) {
+    var st = proposeState;
+    var ids = Object.keys(st.selected);
+    api("/api/propose/" + encodeURIComponent(st.requestId),
+        { method: "POST", body: { listing_ids: ids } }).then(function (d) {
+      if (d.error) {
+        toast(d.error_vi || "Gửi thất bại");
+        return;
+      }
+      st.submitted = true;
+      if (proposeTimer) clearInterval(proposeTimer);
+      if (!isAuto) toast("Đã gửi " + d.submitted_count + " tin ✅");
+      renderPropose();
+    }).catch(function () {
+      toast("Gửi thất bại, thử lại nhé");
+    });
   }
 
   function loadBatch(ids) {
