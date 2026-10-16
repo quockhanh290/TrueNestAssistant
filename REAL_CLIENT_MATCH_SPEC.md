@@ -43,10 +43,10 @@ Hai bot giao tiếp qua backend chung, không bao giờ lộ contact chéo.
   ```
 - Queue minh bạch: mỗi người biết mình là số mấy
 
-### 3. Submit (30 phút)
+### 3. Submit (1 giờ)
 - 5 người được chọn nhận DM với chi tiết + nút submit
-- Mỗi người chọn listing từ kho của mình để đề xuất
-- **Timeout 30 phút:** không submit → mất slot → người tiếp theo trong queue được đôn lên
+- Mỗi người chọn up to 5 listing từ kho của mình để đề xuất
+- **Timeout 1 giờ:** không submit → mất slot → người tiếp theo trong queue được đôn lên
 - Người bị loại nhận: "Hết giờ rồi ạ, slot đã chuyển cho người tiếp theo."
 
 ### 4. Xếp hạng
