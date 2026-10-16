@@ -312,3 +312,45 @@ async def penalize_false_refresh(ctx, listing_id):
     await notify_false_refresh(ctx, broker_id, title, before, after,
                                result["false_count"])
     return result
+
+
+async def penalize_false_amenity(ctx, listing_id):
+    """Apply penalty for false amenities/highlights (gaming the score).
+
+    Same penalty track as false refresh: -10đ per incident, 7-day propose
+    ban at 3 strikes. (Khanh 2026-10-16: punish score gaming.)
+    """
+    from utils import broker_profile_score  # noqa: E402
+    lst = db.get_listing(listing_id)
+    if not lst:
+        return None
+    broker_id = lst.get("broker_id")
+    before = broker_profile_score(broker_id).get("score")
+    result = db.flag_false_refresh(listing_id)  # same counter/penalty
+    if not result:
+        return None
+    after = broker_profile_score(broker_id).get("score")
+    p = lst.get("parsed") or {}
+    title = p.get("building_name") or p.get("district") or "Tin"
+    pn = "anh/chị"
+    try:
+        from utils import get_pronoun
+        pn = get_pronoun(broker_id)
+    except Exception:
+        pass
+    msg = (
+        f"⚠️ <b>Cảnh báo uy tín</b>\n\n"
+        f"Tin \"{title}\" của {pn} bị khách báo "
+        f"<b>tiện ích không đúng thực tế</b>.\n\n"
+        f"Điểm uy tín: {before} → {after} (-10đ)\n"
+        f"Số lần vi phạm: {result['false_count']}\n\n"
+        f"💡 Chỉ ghi những tiện ích <b>có thật</b>. "
+        f"Khai khống để lấy điểm sẽ bị phạt nặng."
+    )
+    if result["false_count"] >= 3:
+        msg += "\n\n🚫 {pn} đã vi phạm 3 lần — bị cấm propose 7 ngày.".format(pn=pn)
+    try:
+        await ctx.bot.send_message(broker_id, msg, parse_mode="HTML")
+    except Exception:
+        pass
+    return result
