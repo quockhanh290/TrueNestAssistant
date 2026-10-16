@@ -149,8 +149,14 @@ async def stray_confirm_yes(update, ctx):
         return
     listing_id = sp["listing_id"]
     file_id = sp["file_id"]
-    db.add_listing_photo(listing_id, file_id)
-    await q.edit_message_text("Đã thêm ảnh vào tin rồi anh ✓ 📸")
+    listing = db.get_listing(listing_id)
+    if not listing:
+        await q.edit_message_text("Tin này không còn nữa 😅")
+        return
+    photos = (listing.get("photo_file_ids") or []) + [file_id]
+    db.update_listing(listing_id, photo_file_ids=photos)
+    await q.edit_message_text(
+        f"Đã thêm ảnh vào tin rồi anh ✓ 📸 (tổng {len(photos)} ảnh)")
 
 
 async def stray_confirm_new(update, ctx):
