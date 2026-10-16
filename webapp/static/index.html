@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Quản lý căn — TrueNest</title>
+<link rel="stylesheet" href="/static/style.css">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+
+<!-- ============ LIST VIEW ============ -->
+<div id="view-list" class="view active">
+  <div class="header"><h1>🏠 Quản lý căn</h1></div>
+  <div class="search">
+    <input id="search" type="text" placeholder="🔍 Tìm kiếm...">
+  </div>
+  <div class="filters" id="filters">
+    <button class="filter active" data-br="">Tất cả</button>
+    <button class="filter" data-br="studio">Studio</button>
+    <button class="filter" data-br="1">1PN</button>
+    <button class="filter" data-br="2">2PN</button>
+    <button class="filter" data-br="3">3PN</button>
+    <button class="filter" data-br="4+">4PN+</button>
+    <button class="filter" data-st="rented">Đã cho thuê</button>
+  </div>
+  <div class="list" id="listing-list"></div>
+</div>
+
+<!-- ============ DETAIL VIEW ============ -->
+<div id="view-detail" class="view">
+  <div class="header">
+    <button class="back" id="detail-back">‹ Quay lại</button>
+    <h1 id="detail-heading">Chi tiết</h1>
+  </div>
+  <div class="tabs">
+    <div class="tab active" id="tab-info">📋 Thông tin</div>
+    <div class="tab" id="tab-post">📝 Bài đăng</div>
+  </div>
+  <div id="detail-info"></div>
+  <div id="detail-post" style="display:none">
+    <div class="detail-body">
+      <div class="langs" id="post-langs"></div>
+      <div class="post-text" id="post-text"></div>
+      <button class="btn btn-primary btn-block" id="post-edit-btn">✏️ Sửa bài đăng</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ EDIT VIEW ============ -->
+<div id="view-edit" class="view">
+  <div class="header">
+    <button class="back" id="edit-back">‹ Hủy</button>
+    <h1>Sửa thông tin</h1>
+  </div>
+  <div class="form" id="edit-form">
+    <div class="field-row">
+      <div class="field">
+        <label>Giá (triệu/tháng)</label>
+        <input id="f-price" type="number" inputmode="decimal" step="0.1" placeholder="12.5">
+      </div>
+      <div class="field">
+        <label>Diện tích (m²)</label>
+        <input id="f-area" type="number" inputmode="decimal" placeholder="78">
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Phòng ngủ</label>
+        <select id="f-bedrooms">
+          <option value="">—</option>
+          <option value="0">Studio</option>
+          <option value="1">1PN</option>
+          <option value="2">2PN</option>
+          <option value="3">3PN</option>
+          <option value="4">4PN</option>
+          <option value="5">5PN+</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>WC</label>
+        <input id="f-bathrooms" type="number" inputmode="decimal" placeholder="2">
+      </div>
+    </div>
+    <div class="field">
+      <label>Địa chỉ / đường</label>
+      <input id="f-street" type="text" placeholder="123 Trần Hưng Đạo">
+    </div>
+    <div class="field">
+      <label>Tòa nhà</label>
+      <input id="f-building" type="text" placeholder="Monarchy">
+    </div>
+    <div class="field">
+      <label>Quận</label>
+      <input id="f-district" type="text" placeholder="Sơn Trà">
+    </div>
+    <div class="field">
+      <label>Cọc</label>
+      <input id="f-deposit" type="text" placeholder="2 tháng">
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Nội thất</label>
+        <select id="f-furnished">
+          <option value="">—</option>
+          <option value="full">Full</option>
+          <option value="basic">Cơ bản</option>
+          <option value="empty">Trống</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Pet</label>
+        <select id="f-pet">
+          <option value="">—</option>
+          <option value="1">Cho nuôi</option>
+          <option value="0">Không</option>
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <label>Mô tả</label>
+      <textarea id="f-desc" placeholder="Mô tả căn hộ..."></textarea>
+    </div>
+    <button class="btn btn-primary btn-block" id="edit-save">💾 Lưu thay đổi</button>
+  </div>
+</div>
+
+<!-- ============ POST EDIT VIEW ============ -->
+<div id="view-postedit" class="view">
+  <div class="header">
+    <button class="back" id="postedit-back">‹ Hủy</button>
+    <h1 id="postedit-title">Sửa bài đăng</h1>
+  </div>
+  <div class="form">
+    <div class="field">
+      <label>Ngôn ngữ</label>
+      <select id="pe-lang">
+        <option value="vi">🇻🇳 Tiếng Việt</option>
+        <option value="en">🇬🇧 English</option>
+        <option value="ko">🇰🇷 한국어</option>
+        <option value="zh">🇨🇳 中文</option>
+        <option value="ru">🇷🇺 Русский</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Nội dung bài đăng</label>
+      <textarea id="pe-text" style="min-height:220px"></textarea>
+    </div>
+    <button class="btn btn-primary btn-block" id="postedit-save">💾 Lưu bài đăng</button>
+  </div>
+</div>
+
+<div class="tabbar">
+  <button class="tab active"><span class="icon">🏠</span>Căn hộ</button>
+  <button class="tab" id="tab-soon1"><span class="icon">👥</span>Khách</button>
+  <button class="tab" id="tab-soon2"><span class="icon">📅</span>Lịch xem</button>
+  <button class="tab" id="tab-soon3"><span class="icon">💰</span>Hoa hồng</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
