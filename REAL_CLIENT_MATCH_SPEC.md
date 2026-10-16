@@ -159,6 +159,20 @@ Bảng mới: `commission_disputes` hoặc dùng chung cơ chế.
 **Lưu ý:**
 - Nếu không ai nhận concierge → hoàn tiền khách? → chưa quyết định
 
+## Thu tiền (đơn giản)
+- Khi broker xác nhận "đã chốt" → bot gửi STK + số tiền (20% hoa hồng)
+- Broker chuyển khoản → gửi bill → bot đánh dấu đã thanh toán
+- Không chuyển → mark **công nợ** → không được reserve/submit match tiếp theo cho đến khi thanh toán
+- Đơn giản, không cần tích hợp cổng thanh toán ở MVP
+
+## Dispute resolution
+- Khi có mâu thuẫn (khách bảo chốt / broker bảo chưa):
+  1. Bot hỏi lại cả 2 bên để đối chiếu chi tiết
+  2. Nếu vẫn mâu thuẫn → gắn cờ, tạm dừng quyền match của broker
+  3. Khanh xem xét tay (ở MVP, số lượng ít nên làm được)
+  4. Kết luận: broker đúng → gỡ cờ; broker sai → warning
+- Không ban ngay khi có tranh chấp — chỉ ban khi đã xác minh gian lận
+
 ## Chưa quyết định
 - [ ] Bot nhận yêu cầu khách (build sau)
 - [ ] Concierge: không ai nhận thì hoàn tiền khách?
