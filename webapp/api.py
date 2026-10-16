@@ -12,6 +12,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import db  # noqa: E402
 import utils  # noqa: E402
 import schema as master_schema  # noqa: E402
+import config  # noqa: E402
+import db  # noqa: E402
+import utils  # noqa: E402
+import schema as master_schema  # noqa: E402
 
 
 # ---------------------------------------------------------------- helpers
@@ -264,11 +268,26 @@ def refresh_listing(broker_id, listing_id, claimed_status):
     if claimed_status != "available":
         return {"error": "invalid_status",
                 "error_vi": "Trạng thái không hợp lệ."}, 400
+    # Velocity check (Khanh 2026-10-16): ≥5 refreshes in 10 min is suspicious.
+    # Don't block — flag it and warn the broker via bot DM.
+    velocity_suspicious = db.check_refresh_velocity(broker_id)
+    recent_count = db.count_recent_refreshes(broker_id)
     if not db.refresh_listing(listing_id, broker_id=broker_id,
-                              claimed_status="available"):
+                              claimed_status="available",
+                              velocity_flag=velocity_suspicious):
         return {"error": "not_found"}, 404
+    if velocity_suspicious:
+        try:
+            db.queue_notification(
+                "velocity_warning", None,
+                {"broker_id": broker_id,
+                 "count": recent_count + 1,
+                 "window_min": db.VELOCITY_WINDOW_MIN})
+        except Exception:
+            pass
     return {"ok": True, "status": "available", "age_days": 0.0,
             "freshness_emoji": "🟢", "freshness_label": "Mới",
+            "velocity_flagged": velocity_suspicious,
             "warning_vi": (
                 "Cập nhật mà không kiểm tra thực tế, nếu bị phát hiện "
                 "sẽ bị trừ điểm uy tín.")}, 200
@@ -645,3 +664,14 @@ def submit_propose(broker_id, request_id, listing_ids):
     db.save_propose_response(request_id, broker_id, valid, scores)
     return {"ok": True, "submitted_count": len(valid),
             "submitted_ids": valid}, 200
+
+
+def admin_list_reports(broker_id):
+    """GET /api/admin/reports — Khanh only. Unreviewed client reports."""
+    if broker_id != config.ADMIN_TELEGRAM_ID or not broker_id:
+        return {"error": "forbidden"}, 403
+    reports = db.list_unreviewed_reports()
+    # Enrich with reason labels
+    for r in reports:
+        r["reason_vi"] = db.REPORT_REASON_VI.get(r["reason"], r["reason"])
+    return {"reports": reports, "count": len(reports)}, 200
