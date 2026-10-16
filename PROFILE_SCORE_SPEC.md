@@ -55,7 +55,43 @@ _Quyết định: 2026-10-16, Khanh đồng ý_
 3. Xếp hạng: `điểm match tin × điểm hồ sơ`
 4. Bot gửi cho top 3 broker
 
-## Lưu ý
-- Cold start: broker mới chỉ tính từ chất lượng tin (2 yếu tố đầu)
-- Không hiển thị điểm của người khác
-- Strike/ban không ảnh hưởng điểm uy tín (2 hệ thống riêng)
+## Cold start → Full score
+
+**Giai đoạn 1 (broker mới):**
+- Điều kiện: < 30 ngày HOẶC < 15 listings
+- Chỉ tính 2 yếu tố: chất lượng tin (60%) + độ tươi (40%)
+
+**Giai đoạn 2 (đủ điều kiện):**
+- Điều kiện: ≥ 30 ngày VÀ ≥ 15 listings
+- Tính cả 4 yếu tố theo công thức đầy đủ
+
+**Onboarding nói rõ từ đầu:**
+```
+💎 Điểm uy tín của anh hiện tính theo 2 yếu tố
+   (chất lượng tin + độ tươi).
+
+   Sau 30 ngày và 15 tin → hệ thống tính thêm
+   tốc độ phản hồi + độ chăm khách.
+   Điểm càng cao → càng được ưu tiên match khách thật.
+```
+
+## Normalize khi match
+
+Vấn đề: broker 5 tin (điểm 85, 2 yếu tố) vs broker 50 tin
+(điểm 78, 4 yếu tố) — không so trực tiếp được.
+
+**Giải pháp: percentile theo cohort**
+
+1. Chia 2 nhóm:
+   - Nhóm mới: < 30 ngày hoặc < 15 listings
+   - Nhóm chuẩn: ≥ 30 ngày và ≥ 15 listings
+
+2. Trong mỗi nhóm, xếp percentile:
+   - Broker ở percentile 90 = top 10% của nhóm mình
+
+3. Khi match: so sánh percentile, không so điểm thô
+   - Broker mới percentile 85 vs broker chuẩn percentile 70
+     → broker mới được ưu tiên (dù điểm thô thấp hơn)
+
+**Tại sao:** công bằng cho broker mới giỏi, không bị chôn vùi
+dưới broker cũ điểm cao do có nhiều data hơn.
