@@ -88,29 +88,59 @@ Bạn đang phân vân giữa 3 tin:
 7. Trước hết HĐ 45 ngày → hỏi gia hạn/tìm mới
 ```
 
-### Hiển thị đề xuất (5 căn/lần)
-Mỗi lần hiện 5 căn, mỗi căn có nút thêm vào concierge:
+### Hiển thị đề xuất (từng căn một)
+Mỗi căn hiện riêng với 3 nút:
 
 ```
 🏠 2PN An Thượng, 12tr ⭐
    75m² | ban công | cho pet
    💰 Rẻ hơn TB 11% ✅
    Môi giới: ★★★★☆ (85)
-   [➕ Thêm vào concierge]
 
-🏠 2PN Sơn Trà, 14tr
-   80m² | view biển
-   💰 Cao hơn TB 4%
-   Môi giới: ★★★★☆ (78)
-   [➕ Thêm vào concierge]
-
-[... 3 căn nữa ...]
-
-[➡️ Xem 5 căn tiếp] [🎩 Xem giỏ concierge (2)]
+   [⭐ Shortlist] [⏭️ Bỏ qua] [🎩 Concierge]
 ```
 
-- Khách tick từng căn vào "giỏ concierge" mà không cần chọn broker
-- Đủ số lượng muốn xem → bấm "Xem giỏ" → xác nhận → trả phí → broadcast concierge
+- **Shortlist:** thêm vào danh sách muốn xem
+- **Bỏ qua:** qua căn tiếp theo
+- **Concierge:** thêm vào giỏ concierge (trả phí)
+- Khách xem hết 15 căn → dừng
+
+### Khi khách không chọn đủ (sau 15 căn)
+```
+Có vẻ bạn gặp khó khăn trong việc quyết định. 🤔
+Bạn có muốn xem lại yêu cầu của mình không?
+[Sửa yêu cầu] [Không, cảm ơn]
+```
+
+**Nếu sửa:**
+- Cho sửa ngân sách, khu vực, số PN, tiện ích...
+- Submit lại → broadcast mới với tag `🔄 YÊU CẦU LẦN 2`
+- Báo cho broker đã submit trước đó:
+  ```
+  Proposed của anh bị từ chối.
+  Lý do: khách không thích hoặc thiếu thông tin để quyết định.
+  💡 Gợi ý: cập nhật thêm ảnh, mô tả chi tiết hơn
+     để lần sau khách dễ chọn hơn nhé.
+  ```
+- Nếu broker cũ reserve lại → cảnh báo (không cấm):
+  ```
+  ⚠️ Anh đã bị từ chối ở lần trước.
+  Hãy chọn những căn tốt nhất của anh nhé —
+  đầy đủ thông tin, ảnh đẹp, giá hợp lý.
+  ```
+
+**Nếu không sửa:**
+```
+Rất tiếc, hiện tại mình chưa có căn nào
+đáp ứng được nhu cầu của bạn. 🙏
+
+Bạn đã xem 30 căn mà chưa chọn được 5 căn để đi xem —
+tiếp tục sẽ chỉ làm mất thời gian của các môi giới.
+
+Trừ khi bạn muốn tăng ngân sách, mình gợi ý bạn
+quay lại sau khi có thêm tin mới nhé!
+```
+- Ngoại lệ: nếu budget cao → vẫn cho tiếp tục (broker sẵn sàng phục vụ khách VIP)
 
 ## Nguồn dữ liệu
 - Giá TB: tính từ inventory của broker (real-time)
