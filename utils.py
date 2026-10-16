@@ -21,10 +21,11 @@ log = logging.getLogger("linh")
 MENU_KB = InlineKeyboardMarkup([
     [InlineKeyboardButton("📝 Gửi tin mới", callback_data="menu:new")],
     [InlineKeyboardButton("📋 Tin của tôi", callback_data="menu:list:0:s:a")],
-    [InlineKeyboardButton("✍️ Viết tin FB", callback_data="menu:write")],
     [InlineKeyboardButton("👥 Khách hàng", callback_data="menu:clients")],
-    [InlineKeyboardButton("📅 Lịch xem", callback_data="menu:viewings")],
-    [InlineKeyboardButton("❓ Hướng dẫn", callback_data="menu:help")],
+    [InlineKeyboardButton("✍️ Viết tin FB", callback_data="menu:write"),
+     InlineKeyboardButton("📅 Lịch xem", callback_data="menu:viewings")],
+    [InlineKeyboardButton("💎 Premium", callback_data="menu:premium"),
+     InlineKeyboardButton("❓ Hướng dẫn", callback_data="menu:help")],
 ])
 
 # client (khách hàng) statuses

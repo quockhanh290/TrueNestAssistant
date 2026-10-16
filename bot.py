@@ -61,30 +61,39 @@ HELP_TEXT = (
     "- Lọc theo phòng ngủ, giá tiền, khu vực, trạng thái\n"
     "- Đánh dấu “đã cho thuê” / “còn trống” để em cập nhật\n"
     "- Xem / thêm / xóa ảnh ngay trong chi tiết từng tin\n"
-    "- Hoặc gõ trực tiếp kiểu “cho xem tin 2PN dưới 15tr” để em tìm giúp\n\n"
-    "✍️ <b>Viết tin FB:</b>\n"
-    "- Em viết bài đăng FB từ tin của anh\n"
-    "- 5 ngôn ngữ: Việt, Anh, Hàn, Trung, Nga\n\n"
+    "- 💎 Gói Pro: gõ “cho xem tin 2PN dưới 15tr” để em tìm giúp\n\n"
     "👥 <b>Khách hàng:</b>\n"
     "- Lưu thông tin khách + nhu cầu tìm nhà\n"
-    "- Em gợi ý tin phù hợp để anh gửi cho khách\n"
-    "- Theo dõi trạng thái: mới → đang xem → đã cọc → đã thuê\n\n"
-    "📅 <b>Lịch xem nhà:</b>\n"
+    "- Theo dõi trạng thái: mới → đang xem → đã cọc → đã thuê\n"
+    "- ⏰ Em tự nhắc khi 3+ ngày chưa liên lạc với khách\n"
+    "- 💎 Gói Pro: em tự gợi ý tin phù hợp cho từng khách\n\n"
+    "✍️ <b>Viết tin FB:</b>\n"
+    "- Em viết bài đăng FB từ tin của anh\n"
+    "- Free: Việt, Anh\n"
+    "- 💎 Gói Pro: thêm Hàn, Trung, Nga\n\n"
+    "📅 <b>Lịch xem nhà</b> 💎:\n"
     "- Đặt lịch dẫn khách xem tin, em nhắc trước 1 tiếng\n"
+    "- Sau buổi xem em hỏi feedback từng căn\n"
     "/viewings — xem lịch sắp tới\n\n"
-    "💬 <b>Mẫu tin nhắn:</b>\n"
+    "💬 <b>Mẫu tin nhắn</b> 💎:\n"
     "- Mẫu trả lời khách nhanh, bấm là copy được ngay\n"
     "/templates — xem / thêm mẫu\n\n"
-    "💰 <b>Hoa hồng:</b>\n"
+    "💰 <b>Hoa hồng</b> 💎:\n"
     "- Theo dõi deal đã chốt theo từng tháng\n"
     "/commission — báo cáo hoa hồng\n\n"
+    "🤝 <b>Match liên broker</b> 💎💎:\n"
+    "- Khách không khớp tin của anh? Em đăng lên nhóm môi giới\n"
+    "- Broker khác có tin phù hợp sẽ phản hồi (ẩn danh)\n\n"
+    "🔔 <b>Trợ lý thật sự:</b>\n"
+    "- Sáng 8h: nhắc việc hôm nay | Trưa 12h: tổng kết buổi sáng\n"
+    "- Tối 21h: tổng kết ngày + checklist mai\n"
+    "- Nhắc feedback sau buổi xem, nhắc tin cũ cần cập nhật\n\n"
+    "💎 <b>Premium:</b> /premium — xem các gói Pro (99k) và Max (199k)\n\n"
     "⌨️ <b>Lệnh nhanh:</b>\n"
     "/menu — mở menu chính\n"
     "/edit — sửa thông tin tin đã đăng\n"
     "/clients — danh sách khách hàng\n"
-    "/viewings — lịch xem nhà\n"
-    "/templates — mẫu tin nhắn\n"
-    "/commission — báo cáo hoa hồng\n"
+    "/premium — nâng cấp gói\n"
     "/help — xem hướng dẫn này\n"
     "/contacts — xem / sửa thông tin liên hệ\n"
     "/phone — đổi SĐT nhanh"
@@ -98,14 +107,17 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await natural_delay(update)
     await update.message.reply_text(
         f"Chào {pn}! Em là {config.BOT_NAME} 🏠\n\n"
-        "Em là trợ lý quản lý tin cho thuê MIỄN PHÍ dành cho môi giới Đà Nẵng.\n\n"
+        "Em là trợ lý quản lý tin cho thuê dành cho môi giới Đà Nẵng — "
+        "không phải bot bấm nút, mà như trợ lý thật sự.\n\n"
         f"Em giúp {pn}:\n"
-        "📝 Lưu tin cho thuê — chỉ cần gửi text + ảnh như đăng group FB, em tự bóc thông tin\n"
-        "📋 Quản lý tin — xem, lọc theo phòng/giá/khu vực, đánh dấu đã cho thuê hay còn trống\n"
-        "✍️ Viết tin FB — tự động viết bài đăng đẹp, 5 ngôn ngữ (Việt/Anh/Hàn/Trung/Nga)\n"
-        "🔔 Nhắc thông minh — em nhắc khi tin thiếu thông tin hoặc lâu chưa cập nhật\n\n"
+        "📝 Lưu tin — gửi text + ảnh như đăng group FB, em tự bóc thông tin\n"
+        "👥 Quản lý khách — theo dõi, nhắc follow-up, lưu feedback từng căn\n"
+        "⏰ Nhắc việc — sáng/trưa/tối em báo cáo, không để sót việc nào\n"
+        "✍️ Viết bài FB đẹp — Việt/Anh free, thêm Hàn/Trung/Nga ở gói Pro\n\n"
+        "🆓 Dùng free không giới hạn thời gian (20 tin).\n"
+        "💎 Gói Pro 99k/tháng: không giới hạn tin + tính năng thông minh.\n\n"
         f"👉 Để bắt đầu, {pn} cứ gửi tin đầu tiên cho em nhé! (text kèm ảnh)\n\n"
-        "Gõ /menu để mở menu bất cứ lúc nào, /help để xem hướng dẫn chi tiết.",
+        "Gõ /menu để mở menu, /help để xem hướng dẫn, /premium để nâng cấp.",
         reply_markup=MENU_KB,
     )
     # onboarding: collect phone, then pronoun + display name (once each)
@@ -580,6 +592,8 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await feat_premium.premium_paid_cb(update, ctx)
     elif data == "menu:clients":
         await feat_clients.show_clients(update, ctx)
+    elif data == "menu:premium":
+        await feat_premium.cmd_premium(update, ctx)
     elif data == "menu:viewings":
         if not feat_premium.requires_tier(update.callback_query.from_user.id,
                                           "viewings"):

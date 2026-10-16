@@ -161,9 +161,14 @@ async def cmd_premium(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                             update.effective_user.full_name)
     pn = get_pronoun(uid)
     await natural_delay(update)
-    await update.message.reply_text(
-        _plans_text(uid, pn), parse_mode="HTML",
-        reply_markup=_plans_kb(uid))
+    text = _plans_text(uid, pn)
+    kb = _plans_kb(uid)
+    if update.callback_query:
+        q = update.callback_query
+        await q.answer()
+        await q.edit_message_text(text, parse_mode="HTML", reply_markup=kb)
+    else:
+        await update.message.reply_text(text, parse_mode="HTML", reply_markup=kb)
 
 
 async def premium_plans_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
