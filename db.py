@@ -247,6 +247,7 @@ def init_db(path=None):
     _migrate_listings_duplicate_of(conn)
     _migrate_updated_at(conn)
     _migrate_deals_paid(conn)
+    _migrate_listings_content_hash(conn)
     conn.commit()
     conn.close()
 
@@ -411,6 +412,19 @@ def _migrate_deals_paid(conn):
     if "paid" not in cols:
         conn.execute(
             "ALTER TABLE deals ADD COLUMN paid INTEGER NOT NULL DEFAULT 0"
+        )
+
+
+def _migrate_listings_content_hash(conn):
+    """Add content_hash to tg_listings for exact-duplicate detection.
+
+    sha256(normalized_text + sorted photo file_ids). Used to suggest
+    (never auto-merge) when a broker forwards the same listing twice.
+    """
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(tg_listings)")}
+    if "content_hash" not in cols:
+        conn.execute(
+            "ALTER TABLE tg_listings ADD COLUMN content_hash TEXT"
         )
 
 
@@ -782,19 +796,20 @@ def set_broker_phone(broker_id, phone, path=None):
 # ---------------------------------------------------------------- listings
 
 def create_listing(broker_id, raw_text="", photo_file_ids=None,
-                   parsed=None, missing_fields=None, status="draft", path=None):
+                   parsed=None, missing_fields=None, status="draft",
+                   content_hash=None, path=None):
     listing_id = "tg:" + uuid.uuid4().hex[:12]
     now = _now()
     conn = connect(path)
     conn.execute(
         "INSERT INTO tg_listings (id, broker_id, raw_text, photo_file_ids,"
-        " parsed, missing_fields, status, created_at, updated_at)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " parsed, missing_fields, status, content_hash, created_at, updated_at)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (listing_id, broker_id, raw_text,
          json.dumps(photo_file_ids or [], ensure_ascii=False),
          json.dumps(parsed or {}, ensure_ascii=False),
          json.dumps(missing_fields or [], ensure_ascii=False),
-         status, now, now),
+         status, content_hash, now, now),
     )
     conn.execute(
         "UPDATE brokers SET listings_count = listings_count + 1"
@@ -834,7 +849,8 @@ def get_listing(listing_id, path=None):
 
 def update_listing(listing_id, path=None, **fields):
     allowed = {"raw_text", "photo_file_ids", "parsed", "missing_fields",
-               "status", "view_count", "inquiry_count", "duplicate_of"}
+               "status", "view_count", "inquiry_count", "duplicate_of",
+               "content_hash"}
     json_fields = {"photo_file_ids", "parsed", "missing_fields"}
     sets, vals = [], []
     for k, v in fields.items():
@@ -1269,6 +1285,37 @@ def find_potential_duplicates(broker_id, parsed, exclude_id=None, path=None):
         out.append(d)
     out.sort(key=lambda x: x["created_at"], reverse=True)
     return out
+
+
+def find_exact_duplicate_by_hash(broker_id, content_hash, exclude_id=None,
+                                 days=30, path=None):
+    """Find a listing with the exact same content hash (same broker, recent).
+
+    Used to suggest (never auto-merge) when a broker forwards the same
+    listing twice. Returns the newest matching listing dict, or None.
+    """
+    if not content_hash:
+        return None
+    cutoff = _now() - days * 86400
+    conn = connect(path)
+    rows = conn.execute(
+        "SELECT * FROM tg_listings WHERE broker_id = ?"
+        " AND content_hash = ?"
+        " AND created_at >= ?"
+        " AND status != 'deleted'"
+        " ORDER BY created_at DESC LIMIT 2",
+        (broker_id, content_hash, cutoff),
+    ).fetchall()
+    conn.close()
+    for r in rows:
+        if exclude_id and r["id"] == exclude_id:
+            continue
+        d = dict(r)
+        d["photo_file_ids"] = json.loads(d["photo_file_ids"])
+        d["parsed"] = json.loads(d["parsed"])
+        d["missing_fields"] = json.loads(d["missing_fields"])
+        return d
+    return None
 
 
 # ---------------------------------------------------------------- clients
