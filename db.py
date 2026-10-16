@@ -25,7 +25,8 @@ CREATE TABLE IF NOT EXISTS brokers (
     status         TEXT NOT NULL DEFAULT 'new',
     listings_count INTEGER NOT NULL DEFAULT 0,
     approved_count INTEGER NOT NULL DEFAULT 0,
-    created_at     REAL NOT NULL
+    created_at     REAL NOT NULL,
+    updated_at     REAL NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS tg_listings (
@@ -43,7 +44,14 @@ CREATE TABLE IF NOT EXISTS tg_listings (
 );
 CREATE INDEX IF NOT EXISTS idx_listings_broker ON tg_listings(broker_id);
 CREATE INDEX IF NOT EXISTS idx_listings_status ON tg_listings(status);
+-- composite: covers list_broker_listings / count_broker_listings /
+-- count_recent_listings (broker_id prefix) + status-filtered ORDER BY created_at
+CREATE INDEX IF NOT EXISTS idx_listings_broker_status_created
+    ON tg_listings(broker_id, status, created_at);
 
+-- NOTE: tg_events intentionally has NO updated_at. It is an append-only
+-- audit log: rows are never modified after insert (old_status/new_status/
+-- field edits are immutable history). created_at is the single timestamp.
 CREATE TABLE IF NOT EXISTS tg_events (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     listing_id  TEXT NOT NULL REFERENCES tg_listings(id),
@@ -89,10 +97,16 @@ CREATE TABLE IF NOT EXISTS viewings (
     status      TEXT NOT NULL DEFAULT 'scheduled',
     notes       TEXT NOT NULL DEFAULT '',
     feedback    TEXT NOT NULL DEFAULT '',
-    created_at  REAL NOT NULL
+    created_at  REAL NOT NULL,
+    updated_at  REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_viewings_broker ON viewings(broker_id);
 CREATE INDEX IF NOT EXISTS idx_viewings_sched ON viewings(scheduled_at);
+-- covers list_viewings(upcoming): broker + status + scheduled_at range, ordered
+CREATE INDEX IF NOT EXISTS idx_viewings_broker_status_sched
+    ON viewings(broker_id, status, scheduled_at);
+-- covers client_viewings(): WHERE client_id = ?
+CREATE INDEX IF NOT EXISTS idx_viewings_client ON viewings(client_id);
 
 CREATE TABLE IF NOT EXISTS deals (
     id             TEXT PRIMARY KEY,
@@ -103,17 +117,21 @@ CREATE TABLE IF NOT EXISTS deals (
     commission_vnd REAL,
     closed_at      REAL NOT NULL,
     notes          TEXT NOT NULL DEFAULT '',
-    created_at     REAL NOT NULL
+    created_at     REAL NOT NULL,
+    updated_at     REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_deals_broker ON deals(broker_id);
 CREATE INDEX IF NOT EXISTS idx_deals_closed ON deals(closed_at);
+-- covers list_deals(): broker + closed_at range, ORDER BY closed_at DESC
+CREATE INDEX IF NOT EXISTS idx_deals_broker_closed ON deals(broker_id, closed_at);
 
 CREATE TABLE IF NOT EXISTS templates (
     id         TEXT PRIMARY KEY,
     broker_id  INTEGER NOT NULL REFERENCES brokers(user_id),
     name       TEXT NOT NULL,
     content    TEXT NOT NULL,
-    created_at REAL NOT NULL
+    created_at REAL NOT NULL,
+    updated_at REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_templates_broker ON templates(broker_id);
 
@@ -133,6 +151,9 @@ CREATE TABLE IF NOT EXISTS match_requests (
 CREATE INDEX IF NOT EXISTS idx_mreq_broker ON match_requests(broker_id);
 CREATE INDEX IF NOT EXISTS idx_mreq_status ON match_requests(status);
 CREATE INDEX IF NOT EXISTS idx_mreq_groupmsg ON match_requests(group_message_id);
+-- covers open_request_for_client(): broker + client + status
+CREATE INDEX IF NOT EXISTS idx_mreq_broker_client_status
+    ON match_requests(broker_id, client_id, status);
 
 CREATE TABLE IF NOT EXISTS match_responses (
     id                  TEXT PRIMARY KEY,
@@ -143,7 +164,8 @@ CREATE TABLE IF NOT EXISTS match_responses (
     listing_ids         TEXT NOT NULL DEFAULT '[]',
     match_scores        TEXT NOT NULL DEFAULT '{}',
     messages            TEXT NOT NULL DEFAULT '[]',
-    created_at          REAL NOT NULL
+    created_at          REAL NOT NULL,
+    updated_at          REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_mresp_request ON match_responses(request_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_mresp_unique
@@ -155,7 +177,8 @@ CREATE TABLE IF NOT EXISTS pending_checklist (
     kind      TEXT NOT NULL,
     ref_id    TEXT NOT NULL,
     label     TEXT NOT NULL DEFAULT '',
-    created_at REAL NOT NULL
+    created_at REAL NOT NULL,
+    updated_at REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_pcl_broker ON pending_checklist(broker_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_pcl_unique
@@ -167,10 +190,14 @@ CREATE TABLE IF NOT EXISTS premium_requests (
     tier_requested TEXT NOT NULL DEFAULT 'pro',
     status         TEXT NOT NULL DEFAULT 'pending',
     created_at     REAL NOT NULL,
+    updated_at     REAL NOT NULL,
     decided_at     REAL
 );
 CREATE INDEX IF NOT EXISTS idx_premreq_broker ON premium_requests(broker_id);
 CREATE INDEX IF NOT EXISTS idx_premreq_status ON premium_requests(status);
+-- covers get_pending_premium_request(): broker + pending status
+CREATE INDEX IF NOT EXISTS idx_premreq_broker_status
+    ON premium_requests(broker_id, status);
 """
 
 
@@ -188,8 +215,54 @@ def init_db(path=None):
     _migrate_viewings(conn)
     _migrate_match_requests(conn)
     _migrate_match_responses(conn)
+    _migrate_updated_at(conn)
     conn.commit()
     conn.close()
+
+
+def _migrate_updated_at(conn):
+    """Add updated_at to tables that lacked it + backfill from created_at.
+
+    Idempotent: skips columns/indexes that already exist. tg_events is
+    deliberately excluded (append-only audit log — see SCHEMA note).
+    Also creates the composite indexes added in the 2026-10-16 optimization
+    pass for pre-existing DBs (fresh DBs get them from SCHEMA).
+    """
+    tables = ("brokers", "viewings", "deals", "templates",
+              "match_responses", "pending_checklist", "premium_requests")
+    for t in tables:
+        cols = {r["name"] for r in conn.execute(f"PRAGMA table_info({t})")}
+        if "updated_at" not in cols:
+            conn.execute(
+                f"ALTER TABLE {t} ADD COLUMN updated_at REAL NOT NULL DEFAULT 0"
+            )
+        # backfill anything still unset (0 from the default, or NULL)
+        conn.execute(
+            f"UPDATE {t} SET updated_at = created_at"
+            " WHERE updated_at IS NULL OR updated_at = 0"
+        )
+    new_indexes = [
+        ("idx_listings_broker_status_created",
+         "CREATE INDEX IF NOT EXISTS idx_listings_broker_status_created"
+         " ON tg_listings(broker_id, status, created_at)"),
+        ("idx_viewings_broker_status_sched",
+         "CREATE INDEX IF NOT EXISTS idx_viewings_broker_status_sched"
+         " ON viewings(broker_id, status, scheduled_at)"),
+        ("idx_viewings_client",
+         "CREATE INDEX IF NOT EXISTS idx_viewings_client"
+         " ON viewings(client_id)"),
+        ("idx_deals_broker_closed",
+         "CREATE INDEX IF NOT EXISTS idx_deals_broker_closed"
+         " ON deals(broker_id, closed_at)"),
+        ("idx_mreq_broker_client_status",
+         "CREATE INDEX IF NOT EXISTS idx_mreq_broker_client_status"
+         " ON match_requests(broker_id, client_id, status)"),
+        ("idx_premreq_broker_status",
+         "CREATE INDEX IF NOT EXISTS idx_premreq_broker_status"
+         " ON premium_requests(broker_id, status)"),
+    ]
+    for _name, sql in new_indexes:
+        conn.execute(sql)
 
 
 def _migrate_clients(conn):
@@ -287,10 +360,12 @@ def get_or_create_broker(user_id, username=None, display_name=None, path=None):
     if row:
         conn.close()
         return dict(row)
+    now = _now()
     conn.execute(
-        "INSERT INTO brokers (user_id, username, display_name, status, created_at)"
-        " VALUES (?, ?, ?, 'new', ?)",
-        (user_id, username, display_name, _now()),
+        "INSERT INTO brokers (user_id, username, display_name, status,"
+        " created_at, updated_at)"
+        " VALUES (?, ?, ?, 'new', ?, ?)",
+        (user_id, username, display_name, now, now),
     )
     conn.commit()
     row = conn.execute(
@@ -308,6 +383,10 @@ def update_broker(user_id, path=None, **fields):
     if not sets:
         return
     vals = [fields[k] for k in fields if k in allowed]
+    # every broker mutation bumps updated_at (counters in create_listing /
+    # set_listing_status are excluded — they're aggregate stats, not edits)
+    sets += ", updated_at = ?"
+    vals.append(_now())
     vals.append(user_id)
     conn = connect(path)
     conn.execute(f"UPDATE brokers SET {sets} WHERE user_id = ?", vals)
@@ -389,11 +468,12 @@ def check_listing_limit(broker_id, path=None):
 
 def create_premium_request(broker_id, tier_requested="pro", path=None):
     rid = f"pr:{uuid.uuid4().hex[:12]}"
+    now = _now()
     conn = connect(path)
     conn.execute(
         "INSERT INTO premium_requests (id, broker_id, tier_requested, status,"
-        " created_at) VALUES (?, ?, ?, 'pending', ?)",
-        (rid, broker_id, tier_requested, _now()),
+        " created_at, updated_at) VALUES (?, ?, ?, 'pending', ?, ?)",
+        (rid, broker_id, tier_requested, now, now),
     )
     conn.commit()
     conn.close()
@@ -435,9 +515,11 @@ def decide_premium_request(request_id, approve, path=None):
         conn.close()
         return req
     status = "approved" if approve else "rejected"
+    now = _now()
     conn.execute(
-        "UPDATE premium_requests SET status = ?, decided_at = ? WHERE id = ?",
-        (status, _now(), request_id),
+        "UPDATE premium_requests SET status = ?, decided_at = ?,"
+        " updated_at = ? WHERE id = ?",
+        (status, now, now, request_id),
     )
     conn.commit()
     conn.close()
@@ -1240,10 +1322,11 @@ def create_viewing(broker_id, client_id=None, client_name="", listing_id=None,
     conn.execute(
         "INSERT INTO viewings (id, broker_id, client_id, client_name,"
         " listing_id, listing_ids, scheduled_at, status, notes, feedback,"
-        " created_at)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, '', ?)",
+        " created_at, updated_at)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, '', ?, ?)",
         (viewing_id, broker_id, client_id, client_name, ids[0] if ids else None,
-         json.dumps(ids, ensure_ascii=False), scheduled_at or now, notes, now),
+         json.dumps(ids, ensure_ascii=False), scheduled_at or now, notes,
+         now, now),
     )
     conn.commit()
     conn.close()
@@ -1299,6 +1382,8 @@ def update_viewing(viewing_id, path=None, **fields):
     if not sets:
         return False
     vals = [fields[k] for k in fields if k in allowed]
+    sets += ", updated_at = ?"
+    vals.append(_now())
     vals.append(viewing_id)
     conn = connect(path)
     cur = conn.execute(
@@ -1425,10 +1510,10 @@ def create_deal(broker_id, client_id=None, client_name="", listing_id=None,
     conn = connect(path)
     conn.execute(
         "INSERT INTO deals (id, broker_id, client_id, client_name, listing_id,"
-        " commission_vnd, closed_at, notes, created_at)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " commission_vnd, closed_at, notes, created_at, updated_at)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (deal_id, broker_id, client_id, client_name, listing_id,
-         commission_vnd, closed_at or now, notes, now),
+         commission_vnd, closed_at or now, notes, now, now),
     )
     conn.commit()
     conn.close()
@@ -1515,11 +1600,13 @@ def suggested_deal_pairs(broker_id, path=None):
 
 def create_template(broker_id, name, content, path=None):
     tpl_id = "tpl:" + uuid.uuid4().hex[:12]
+    now = _now()
     conn = connect(path)
     conn.execute(
-        "INSERT INTO templates (id, broker_id, name, content, created_at)"
-        " VALUES (?, ?, ?, ?, ?)",
-        (tpl_id, broker_id, name, content, _now()),
+        "INSERT INTO templates (id, broker_id, name, content, created_at,"
+        " updated_at)"
+        " VALUES (?, ?, ?, ?, ?, ?)",
+        (tpl_id, broker_id, name, content, now, now),
     )
     conn.commit()
     conn.close()
@@ -1787,16 +1874,17 @@ def add_match_response(request_id, responder_broker_id, responder_username=None,
         conn.close()
         return False, n
     lids = listing_ids or ([listing_id] if listing_id else [])
+    now = _now()
     conn.execute(
         "INSERT INTO match_responses (id, request_id, responder_broker_id,"
         " responder_username, listing_id, listing_ids, match_scores,"
-        " messages, created_at)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, '[]', ?)",
+        " messages, created_at, updated_at)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, '[]', ?, ?)",
         ("mresp:" + uuid.uuid4().hex[:12], request_id, responder_broker_id,
          responder_username, lids[0] if lids else listing_id,
          json.dumps(lids, ensure_ascii=False),
          json.dumps(match_scores or {}, ensure_ascii=False),
-         _now()),
+         now, now),
     )
     n = conn.execute(
         "SELECT COUNT(*) c FROM match_responses WHERE request_id = ?",
@@ -1890,9 +1978,9 @@ def log_relay_message(request_id, responder_broker_id, sender_id, text,
         msgs = []
     msgs.append({"from": sender_id, "text": text, "ts": _now()})
     conn.execute(
-        "UPDATE match_responses SET messages = ?"
+        "UPDATE match_responses SET messages = ?, updated_at = ?"
         " WHERE request_id = ? AND responder_broker_id = ?",
-        (json.dumps(msgs, ensure_ascii=False), request_id,
+        (json.dumps(msgs, ensure_ascii=False), _now(), request_id,
          responder_broker_id),
     )
     conn.commit()
@@ -1906,12 +1994,13 @@ def log_relay_message(request_id, responder_broker_id, sender_id, text,
 def add_checklist_item(broker_id, kind, ref_id, label="", path=None):
     """Idempotent — same (broker, kind, ref) is only stored once."""
     item_id = "ck:" + uuid.uuid4().hex[:12]
+    now = _now()
     conn = connect(path)
     conn.execute(
         "INSERT OR IGNORE INTO pending_checklist"
-        " (id, broker_id, kind, ref_id, label, created_at)"
-        " VALUES (?, ?, ?, ?, ?, ?)",
-        (item_id, broker_id, kind, ref_id, label, _now()),
+        " (id, broker_id, kind, ref_id, label, created_at, updated_at)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (item_id, broker_id, kind, ref_id, label, now, now),
     )
     conn.commit()
     conn.close()
