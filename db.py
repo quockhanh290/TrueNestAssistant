@@ -111,6 +111,21 @@ CREATE TABLE IF NOT EXISTS templates (
     created_at REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_templates_broker ON templates(broker_id);
+
+CREATE TABLE IF NOT EXISTS match_requests (
+    id                  TEXT PRIMARY KEY,
+    broker_id           INTEGER NOT NULL REFERENCES brokers(user_id),
+    client_id           TEXT NOT NULL REFERENCES clients(id),
+    requirements_summary TEXT NOT NULL DEFAULT '',
+    urgency             TEXT NOT NULL DEFAULT 'normal',
+    status              TEXT NOT NULL DEFAULT 'open',
+    group_message_id    INTEGER,
+    created_at          REAL NOT NULL,
+    updated_at          REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_mreq_broker ON match_requests(broker_id);
+CREATE INDEX IF NOT EXISTS idx_mreq_status ON match_requests(status);
+CREATE INDEX IF NOT EXISTS idx_mreq_groupmsg ON match_requests(group_message_id);
 """
 
 
@@ -1036,7 +1051,108 @@ def delete_template(tpl_id, path=None):
     cur = conn.execute("DELETE FROM templates WHERE id = ?", (tpl_id,))
     conn.commit()
     conn.close()
-    return cur.rowcount > 0
+
+
+# ---------------------------------------------------------------- match requests
+# Cross-broker matching broadcasts. Privacy: client name/phone are NEVER
+# stored here in a shareable form — only requirements_summary + urgency
+# go into the group message.
+
+MATCH_REQUEST_STATUSES = ("open", "matched", "closed")
+
+
+def create_match_request(broker_id, client_id, requirements_summary,
+                         urgency="normal", path=None):
+    if urgency not in ("urgent", "normal", "low"):
+        urgency = "normal"
+    mr_id = "mr:" + uuid.uuid4().hex[:12]
+    now = _now()
+    conn = connect(path)
+    conn.execute(
+        "INSERT INTO match_requests (id, broker_id, client_id,"
+        " requirements_summary, urgency, status, group_message_id,"
+        " created_at, updated_at)"
+        " VALUES (?, ?, ?, ?, ?, 'open', NULL, ?, ?)",
+        (mr_id, broker_id, client_id, requirements_summary, urgency,
+         now, now),
+    )
+    conn.commit()
+    conn.close()
+    return mr_id
+
+
+def get_match_request(mr_id, path=None):
+    conn = connect(path)
+    row = conn.execute(
+        "SELECT * FROM match_requests WHERE id = ?", (mr_id,)
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_match_request_by_group_message(group_message_id, path=None):
+    """Find an OPEN request by its Telegram group message id."""
+    conn = connect(path)
+    row = conn.execute(
+        "SELECT * FROM match_requests"
+        " WHERE group_message_id = ? AND status = 'open'",
+        (group_message_id,),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def list_broker_requests(broker_id, status=None, limit=50, path=None):
+    conds = ["broker_id = ?"]
+    vals = [broker_id]
+    if status:
+        conds.append("status = ?")
+        vals.append(status)
+    vals.append(limit)
+    conn = connect(path)
+    rows = conn.execute(
+        "SELECT * FROM match_requests WHERE " + " AND ".join(conds) +
+        " ORDER BY updated_at DESC LIMIT ?",
+        vals,
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def list_open_requests(broker_id=None, path=None):
+    """All open requests; optionally scoped to one broker."""
+    if broker_id is None:
+        sql = ("SELECT * FROM match_requests WHERE status = 'open'"
+               " ORDER BY updated_at DESC")
+        vals = []
+    else:
+        sql = ("SELECT * FROM match_requests WHERE broker_id = ?"
+               " AND status = 'open' ORDER BY updated_at DESC")
+        vals = [broker_id]
+    conn = connect(path)
+    rows = conn.execute(sql, vals).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def update_match_request(mr_id, path=None, **fields):
+    allowed = {"status", "group_message_id", "requirements_summary"}
+    sets = ", ".join(f"{k} = ?" for k in fields if k in allowed)
+    if not sets:
+        return
+    vals = [fields[k] for k in fields if k in allowed]
+    vals.extend([_now(), mr_id])
+    conn = connect(path)
+    conn.execute(
+        f"UPDATE match_requests SET {sets}, updated_at = ? WHERE id = ?",
+        vals,
+    )
+    conn.commit()
+    conn.close()
+
+
+def close_match_request(mr_id, path=None):
+    update_match_request(mr_id, path=path, status="closed")
 
 
 if __name__ == "__main__":
