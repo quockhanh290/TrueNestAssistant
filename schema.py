@@ -6,51 +6,93 @@ web app use this schema — no field should exist outside it.
 
 # Field: (type, required, weight_in_quality_score, vietnamese_label)
 #
-# QUALITY WEIGHTS — MUST SUM TO EXACTLY 100 (rebalanced 2026-10-16, v2: amenities/highlights scored)
+# QUALITY WEIGHTS — MUST SUM TO EXACTLY 100 (rebalanced 2026-10-16, v3: address detail by property type)
 # ┌─────────────────┬────────┐
-# │ price_vnd       │ 12     │ Giá thuê
+# │ price_vnd       │ 10     │ Giá thuê
 # │ primary_phone   │  5     │ SĐT liên hệ
-# │ photos          │ 10     │ Ảnh (≥3)
+# │ photos          │  8     │ Ảnh (≥3)
 # │ bedrooms        │  8     │ Số phòng ngủ
 # │ bathrooms       │  6     │ Số WC
 # │ property_type   │  5     │ Loại hình
-# │ district        │ 10     │ Khu vực
-# │ street          │  6     │ Địa chỉ chi tiết
+# │ district        │  8     │ Khu vực
+# │ street          │  8     │ Địa chỉ chi tiết (số nhà + tên đường)
 # │ area_m2         │  6     │ Diện tích
-# │ furnishing      │  6     │ Nội thất
+# │ furnishing      │  4     │ Nội thất
 # │ description     │  6     │ Mô tả (>50 ký tự)
 # │ deposit_months  │  2     │ Đặt cọc
-# │ amenities       │ 10     │ Tiện ích (VD: hồ bơi, gym...)
-# │ highlights      │  8     │ Điểm nổi bật
+# │ amenities       │  8     │ Tiện ích (VD: hồ bơi, gym...)
+# │ highlights      │  6     │ Điểm nổi bật
+# │ building_name   │  4     │ Tên tòa nhà/dự án (căn hộ)
+# │ floor_number    │  2     │ Số tầng (căn hộ)
+# │ balcony_direction│ 2     │ Hướng ban công (căn hộ)
+# │ view            │  2     │ View (căn hộ)
 # ├─────────────────┼────────┤
 # │ TOTAL           │ 100    │
 # └─────────────────┴────────┘
-# pet_friendly/building_name/floor_number/available_from = 0
-# (tracked but not scored — informational fields)
+# pet_friendly/available_from = 0 (tracked but not scored — informational)
+#
+# ADDRESS DETAIL BY PROPERTY TYPE (Khanh 2026-10-16):
+# - Nhà riêng/villa/nhà phố: số nhà + tên đường cụ thể → street (8đ)
+# - Căn hộ/chung cư: tên dự án/tòa nhà + số tầng + số phòng,
+#   hướng ban công, view → building_name (4đ) + floor_number (2đ)
+#   + balcony_direction (2đ) + view (2đ) = 10đ
+# Exact address is HIDDEN from clients (share page shows district only).
+# It's for internal dedup/matching — brokers can enter truthfully.
 MASTER_SCHEMA = {
     # Critical — listing is unusable without these
-    "price_vnd":      ("number",  True,  12, "Giá thuê"),
+    "price_vnd":      ("number",  True,  10, "Giá thuê"),
     "primary_phone":  ("string",  True,   5, "SĐT liên hệ"),
-    "photos":         ("array",   True,  10, "Ảnh (tối thiểu 3)"),
+    "photos":         ("array",   True,   8, "Ảnh (tối thiểu 3)"),
     # Important
     "bedrooms":       ("number",  False,  8, "Số phòng ngủ"),
     "bathrooms":      ("number",  False,  6, "Số WC"),
     "property_type":  ("string",  False,  5, "Loại hình"),
-    "district":       ("string",  False, 10, "Khu vực"),
-    "street":         ("string",  False,  6, "Địa chỉ chi tiết"),
+    "district":       ("string",  False,  8, "Khu vực"),
+    "street":         ("string",  False,  8, "Địa chỉ chi tiết"),
     "area_m2":        ("number",  False,  6, "Diện tích"),
-    "furnishing":     ("string",  False,  6, "Nội thất"),
+    "furnishing":     ("string",  False,  4, "Nội thất"),
     "description":    ("string",  False,  6, "Mô tả chi tiết"),
     "deposit_months": ("number",  False,  2, "Đặt cọc (tháng)"),
     # Amenities & highlights — what clients actually care about
-    "amenities":      ("array",   False, 10, "Tiện ích"),
-    "highlights":     ("array",   False,  8, "Điểm nổi bật"),
+    "amenities":      ("array",   False,  8, "Tiện ích"),
+    "highlights":     ("array",   False,  6, "Điểm nổi bật"),
+    # Address detail — property-type specific (see comment above)
+    "building_name":  ("string",  False,  4, "Tên tòa nhà/dự án"),
+    "floor_number":   ("number",  False,  2, "Số tầng"),
+    "balcony_direction": ("string", False, 2, "Hướng ban công"),
+    "view":           ("string",  False,  2, "View"),
     # Nice to have (informational, not scored)
     "pet_friendly":   ("boolean", False,  0, "Chính sách pet"),
-    "building_name":  ("string",  False,  0, "Tòa nhà"),
-    "floor_number":   ("number",  False,  0, "Tầng"),
     "available_from": ("string",  False,  0, "Ngày trống"),
 }
+
+# Property types for address-detail scoring
+HOUSE_TYPES = {"house", "villa", "townhouse", "nhà riêng", "biệt thự", "nhà phố"}
+APARTMENT_TYPES = {"apartment", "condo", "căn hộ", "chung cư", "studio"}
+
+
+def get_detail_fields_for_type(property_type):
+    """Return (field, label, weight) tuples for address detail, by property type.
+    Used by UI to prompt brokers for the right detail fields."""
+    pt = str(property_type or "").lower().strip()
+    if pt in HOUSE_TYPES:
+        return [
+            ("street", "Số nhà + tên đường cụ thể", 8),
+        ]
+    elif pt in APARTMENT_TYPES:
+        return [
+            ("building_name", "Tên dự án/tòa nhà", 4),
+            ("floor_number", "Số tầng", 2),
+            ("balcony_direction", "Hướng ban công", 2),
+            ("view", "View (VD: biển, sông, thành phố)", 2),
+        ]
+    else:
+        # Unknown type — suggest all
+        return [
+            ("street", "Địa chỉ chi tiết", 8),
+            ("building_name", "Tên tòa nhà/dự án", 4),
+            ("floor_number", "Số tầng", 2),
+        ]
 
 CRITICAL_FIELDS = [k for k, v in MASTER_SCHEMA.items() if v[1]]
 
