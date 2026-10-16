@@ -10,6 +10,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import db  # noqa: E402
+import utils  # noqa: E402
+import schema as master_schema  # noqa: E402
 
 
 # ---------------------------------------------------------------- helpers
@@ -46,8 +48,10 @@ def _title(parsed):
 
 
 def listing_summary(row):
-    """Compact dict for the list view."""
-    p = row.get("parsed") or {}
+    """Compact dict for the list view. Fields follow canonical master schema."""
+    p = master_schema.normalize_parsed(row.get("parsed") or {})
+    photo_count = len(row.get("photo_file_ids") or [])
+    score, _ = master_schema.quality_score(p, photo_count)
     return {
         "id": row["id"],
         "title": _title(p),
@@ -60,29 +64,40 @@ def listing_summary(row):
         "bathrooms": p.get("bathrooms"),
         "district": p.get("district"),
         "status": row.get("status"),
-        "photo_count": len(row.get("photo_file_ids") or []),
+        "photo_count": photo_count,
+        "photo_urls": list(row.get("photo_urls") or []),
         "has_post": bool(db.get_saved_post_langs(row["id"])),
         "created_at": row.get("created_at"),
+        "quality_score": score,
+        "ai_scored": True,
     }
 
 
 def listing_detail(row):
-    """Full detail dict for the detail view."""
-    p = row.get("parsed") or {}
+    """Full detail dict for the detail view. Fields follow canonical master schema."""
+    p = master_schema.normalize_parsed(row.get("parsed") or {})
     d = listing_summary(row)
+    photo_count = len(row.get("photo_file_ids") or [])
+    score, missing = master_schema.quality_score(p, photo_count)
     d.update({
         "raw_text": row.get("raw_text", ""),
         "address": p.get("street"),
         "building_name": p.get("building_name"),
-        "ward": p.get("ward"),
-        "furnished": p.get("furnished"),
+        "furnishing": p.get("furnishing"),
         "pet_friendly": p.get("pet_friendly"),
         "amenities": p.get("amenities"),
+        "highlights": p.get("highlights"),
         "phone": p.get("primary_phone"),
-        "deposit": p.get("deposit"),
+        "deposit_months": p.get("deposit_months"),
         "available_from": p.get("available_from"),
+        "property_type": p.get("property_type"),
+        "floor_number": p.get("floor_number"),
         "post_langs": db.get_saved_post_langs(row["id"]),
         "missing_fields": row.get("missing_fields") or [],
+        "quality_score": score,
+        "quality_missing": missing,
+        "ai_scored": True,
+        "schema_version": "1.0",
     })
     return d
 
