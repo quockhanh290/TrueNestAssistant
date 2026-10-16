@@ -124,6 +124,100 @@ def score_match(lst, c):
     return score
 
 
+def filter_hard_criteria(listings, requirements):
+    """Split listings into (passed, failed_summary) by the lead's hard criteria.
+
+    A listing MUST pass ALL of these to be proposable (no tolerance, no bypass):
+    - budget_max: price_vnd <= budget_max
+    - bedrooms: exact match (no ±1)
+    - district: exact match (no adjacent districts)
+    - property_type: exact match (only when the requirement specifies one)
+    - status: must be 'submitted' or 'active' (excludes rented/draft/etc.)
+
+    listings: list of listing dicts (with 'parsed' and 'status').
+    requirements: dict like the `client` dict passed to score_match()
+                  (budget_max, bedrooms, district, property_type).
+
+    Returns (passed_list, failed_summary). failed_summary only contains
+    categories that had at least one failure, e.g.:
+        {
+            "bedrooms": {"required": 2, "have": [1, 3]},
+            "budget": {"max": 15000000, "over": [18000000, 20000000]},
+            "district": {"required": "Sơn Trà", "have": ["Hải Châu"]},
+        }
+    """
+    passed = []
+    br_have = set()
+    budget_over = set()
+    dist_have = set()
+    pt_have = set()
+    status_failed = 0
+
+    req_max = _client_float(requirements, "budget_max")
+    req_br = _client_float(requirements, "bedrooms")
+    req_dist = (requirements.get("district") or "").strip()
+    req_pt = (requirements.get("property_type") or "").strip()
+
+    for lst in listings:
+        p = lst.get("parsed") or {}
+        ok = True
+
+        # status — only live, submitted inventory
+        if lst.get("status") not in ("submitted", "active"):
+            status_failed += 1
+            ok = False
+
+        # budget_max — no tolerance; missing price cannot be verified
+        if req_max is not None:
+            lp = _parsed_float(lst, "price_vnd")
+            if lp is None or lp > req_max:
+                if lp is not None:
+                    budget_over.add(lp)
+                ok = False
+
+        # bedrooms — exact match; missing value cannot be verified
+        if req_br is not None:
+            lb = _parsed_float(lst, "bedrooms")
+            if lb is None or lb != req_br:
+                if lb is not None:
+                    br_have.add(lb)
+                ok = False
+
+        # district — exact match; missing value cannot be verified
+        if req_dist:
+            ld = (p.get("district") or "").strip()
+            if not ld or ld != req_dist:
+                if ld:
+                    dist_have.add(ld)
+                ok = False
+
+        # property_type — exact match, only when the lead specifies one
+        if req_pt:
+            lpt = (p.get("property_type") or "").strip()
+            if not lpt or lpt != req_pt:
+                if lpt:
+                    pt_have.add(lpt)
+                ok = False
+
+        if ok:
+            passed.append(lst)
+
+    failed = {}
+    if req_br is not None and br_have:
+        failed["bedrooms"] = {"required": req_br, "have": sorted(br_have)}
+    if req_max is not None and budget_over:
+        failed["budget"] = {"max": req_max, "over": sorted(budget_over)[:5]}
+    if req_dist and dist_have:
+        failed["district"] = {"required": req_dist, "have": sorted(dist_have)}
+    if req_pt and pt_have:
+        failed["property_type"] = {"required": req_pt,
+                                   "have": sorted(pt_have)}
+    if status_failed:
+        failed["status"] = {"failed": status_failed}
+
+    return passed, failed
+
+
 def _responder_candidates(broker_id, c):
     """Broad inventory fetch for a responder; score_match() ranks them.
 
@@ -474,26 +568,27 @@ def _picker_text_kb(pick):
 
 
 async def _send_picker_dm(ctx, user_id, r, scored):
-    """DM the responder their top-5 scored listings to pick from."""
-    top5 = scored[:5]
-    pick = {
-        "request_id": r["id"],
-        "candidates": [
-            {"id": lst["id"], "score": sc, "listing": lst}
-            for lst, sc in top5
-        ],
-        "selected": [],
-    }
-    # NOTE: user_data is per-user across chats, so setting it here in the
-    # group handler is visible when they tap buttons in DM.
-    ctx.application.user_data[user_id]["match_picking"] = pick
-    text, kb = _picker_text_kb(pick)
-    c = db.get_client(r["client_id"])
+    """DM the responder a web app deep link to pick listings.
+
+    Web app flow (Khanh 2026-10-16): broker picks up to 5 listings via
+    web app instead of Telegram inline keyboard.
+    """
+    from telegram import WebAppInfo
+    from utils import webapp_url
+
     req = r["requirements_summary"]
+    url = webapp_url(view="propose", request_id=r["id"])
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("📱 Chọn tin đề xuất",
+                             web_app=WebAppInfo(url=url)),
+    ]])
+    # Set expiry for the 1-hour submit window
+    db.set_match_request_expiry(r["id"])
     await ctx.bot.send_message(
         chat_id=user_id,
-        text=(f"Anh có {len(top5)} tin phù hợp với yêu cầu [{req}].\n\n"
-              + text),
+        text=(f"✅ Anh đã giữ slot! Em mở web app để chọn tin nhé.\n\n"
+              f"Yêu cầu: [{req}]\n"
+              f"⏰ Còn 60 phút để submit (tối đa 5 tin)"),
         reply_markup=kb)
 
 
