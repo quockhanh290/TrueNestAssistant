@@ -161,7 +161,11 @@ Bảng mới: `commission_disputes` hoặc dùng chung cơ chế.
 
 ## Thu tiền (đơn giản)
 - Khi broker xác nhận "đã chốt" → bot gửi STK + số tiền (20% hoa hồng)
-- Broker chuyển khoản → gửi bill → bot đánh dấu đã thanh toán
+- Broker chuyển khoản → **up ảnh bill lên bot**
+- Bot tự động báo Khanh: "Broker [X] vừa up bill chuyển khoản [số tiền]. Anh check tài khoản giúp em nhé."
+  [✅ Đã nhận] [❌ Chưa thấy]
+- Khanh bấm "Đã nhận" → xóa công nợ, broker được reserve tiếp
+- Khanh bấm "Chưa thấy" → bot báo broker kiểm tra lại
 - Không chuyển → mark **công nợ** → không được reserve/submit match tiếp theo cho đến khi thanh toán
 - Đơn giản, không cần tích hợp cổng thanh toán ở MVP
 
