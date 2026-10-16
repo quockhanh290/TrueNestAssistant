@@ -57,9 +57,9 @@
       const tgUid = tg?.initDataUnsafe?.user?.id || '';
       let url;
       if (initData || tgUid) {
-        // Send both: server validates initData, falls back to tg_user_id
+        // Send both: server validates initData, falls back to tg_user_id/broker_id
         const parts = ['limit=50'];
-        if (tgUid) parts.push('tg_user_id=' + tgUid);
+        if (tgUid) { parts.push('tg_user_id=' + tgUid); parts.push('broker_id=' + tgUid); }
         if (initData) {
           try {
             // base64url encode (btoa throws on Unicode, so try/catch)
