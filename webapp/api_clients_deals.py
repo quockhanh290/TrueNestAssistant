@@ -3,10 +3,28 @@
 Thin wrappers over db/ — no SQL here. UI calls these via webapp/server.py.
 All functions return (dict, http_status) tuples.
 """
+import os
 import time
 
 import db
 import utils
+
+
+# ---------------------------------------------------------------- referral
+
+def get_referral_api(broker_id):
+    """GET /api/referral — invite link + progress + reward status."""
+    prog = db.get_referral_progress(broker_id)
+    username = (os.getenv("BOT_USERNAME", "") or "").lstrip("@")
+    link = f"https://t.me/{username}?start=ref_{broker_id}" if username else ""
+    return {
+        "link": link,
+        "invited": prog["invited"],
+        "qualified": prog["qualified"],
+        "needed": prog["needed"],
+        "reward_months_active": db.active_referral_months(broker_id),
+        "max_stack": db.REFERRAL_MAX_STACK,
+    }, 200
 
 
 # ---------------------------------------------------------------- clients
@@ -338,4 +356,18 @@ def request_premium_api(broker_id, tier):
         return {"error": "already_pending",
                 "error_vi": "Yêu cầu nâng cấp đang chờ duyệt"}, 409
     rid = db.create_premium_request(broker_id, tier_requested=tier)
+    # Notify Khanh via outbox -> bot DM (same as bot flow's direct DM).
+    # Without this, webapp upgrade requests sit silently in the DB.
+    try:
+        broker = db.get_broker(broker_id) or {}
+        db.queue_notification(
+            "premium_request", None,
+            {"broker_id": broker_id,
+             "request_id": rid,
+             "tier": tier,
+             "broker_name": (broker.get("display_name")
+                             or broker.get("username")
+                             or str(broker_id))})
+    except Exception:
+        pass
     return {"id": rid, "tier": tier}, 200
