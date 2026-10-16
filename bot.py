@@ -185,6 +185,40 @@ async def natural_delay(update: Update):
                                        config.REPLY_DELAY_MAX))
 
 
+PROCESSING_HINTS = [
+    "Anh đợi em 1 xíu nhé, em đang xử lý... ⏳",
+    "Để em xem nào... 🔍",
+    "Sắp xong rồi ạ! ✨",
+    "Em đang làm đây, anh đợi xíu nhé 💪",
+]
+
+
+async def react_heart(message):
+    """React ❤️ to a user message. Never breaks the flow."""
+    try:
+        await message.set_reaction("❤️")
+    except Exception:
+        pass
+
+
+async def maybe_send_hint(message, chance=0.3):
+    """Occasionally send a processing hint to feel more human."""
+    if random.random() < chance:
+        try:
+            await message.reply_text(random.choice(PROCESSING_HINTS))
+        except Exception:
+            pass
+
+
+async def maybe_send_hint_to_chat(ctx, chat_id, chance=0.3):
+    """Same as maybe_send_hint, when we only have chat_id (no message)."""
+    if random.random() < chance:
+        try:
+            await ctx.bot.send_message(chat_id, random.choice(PROCESSING_HINTS))
+        except Exception:
+            pass
+
+
 def fmt_price(v):
     if not v:
         return "?"
@@ -343,6 +377,7 @@ async def _process_buffer(uid, buf, ctx):
     photos = buf["photos"]
     result = listing_parser.parse_listing(raw, photo_count=len(photos))
 
+    await maybe_send_hint_to_chat(ctx, chat_id)
     await ctx.bot.send_chat_action(chat_id, "typing")
     await asyncio.sleep(random.uniform(1.0, 1.5))
 
@@ -392,6 +427,7 @@ async def _ask_missing(chat_id, uid, listing_id, field, ctx, remaining):
 
 
 async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    await react_heart(update.message)
     uid = update.effective_user.id
     text = update.message.text or ""
 
@@ -509,6 +545,7 @@ async def _handle_photo_answer(update, ctx, awaiting, file_id, caption):
 
 
 async def on_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    await react_heart(update.message)
     uid = update.effective_user.id
     msg = update.message
     file_id = msg.photo[-1].file_id  # largest size
@@ -649,6 +686,7 @@ def _describe_filters(f):
 async def _handle_query(update, ctx, uid, text):
     """Natural-language listing search, e.g. 'cho xem tin 2PN dưới 15tr'."""
     filters = listing_parser.parse_query(text)
+    await maybe_send_hint(update.message)
     await natural_delay(update)
     if not filters:
         await update.message.reply_text(
@@ -1240,6 +1278,7 @@ async def on_write_generate(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await q.edit_message_text("Tin này không còn nữa.", reply_markup=MENU_KB)
         return
     post = generate_post(l, lang)
+    await maybe_send_hint(q.message)
     # feel like Linh is actually sitting down and writing it
     await q.message.reply_text("Để em viết nhé... ✍️")
     for _ in range(2):
