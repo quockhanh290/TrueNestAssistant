@@ -76,6 +76,7 @@ def get_listing(listing_id, path=None):
     d["photo_file_ids"] = json.loads(d["photo_file_ids"])
     d["photo_urls"] = json.loads(d.get("photo_urls") or "[]")
     d["photo_hashes"] = json.loads(d.get("photo_hashes") or "{}")
+    d["photo_phashes"] = json.loads(d.get("photo_phashes") or "{}")
     d["parsed"] = json.loads(d["parsed"])
     d["missing_fields"] = json.loads(d["missing_fields"])
     return d
@@ -83,10 +84,12 @@ def get_listing(listing_id, path=None):
 
 def update_listing(listing_id, path=None, **fields):
     allowed = {"raw_text", "photo_file_ids", "photo_urls", "photo_hashes",
+               "photo_phashes",
                "parsed", "missing_fields",
                "status", "view_count", "inquiry_count", "duplicate_of",
                "content_hash", "saved_post"}
     json_fields = {"photo_file_ids", "photo_urls", "photo_hashes",
+                   "photo_phashes",
                    "parsed", "missing_fields"}
     sets, vals = [], []
     for k, v in fields.items():
@@ -298,6 +301,7 @@ def list_broker_listings(broker_id, limit=5, offset=0, statuses=None, path=None)
         d["photo_file_ids"] = json.loads(d["photo_file_ids"])
         d["photo_urls"] = json.loads(d.get("photo_urls") or "[]")
         d["photo_hashes"] = json.loads(d.get("photo_hashes") or "{}")
+        d["photo_phashes"] = json.loads(d.get("photo_phashes") or "{}")
         d["parsed"] = json.loads(d["parsed"])
         d["missing_fields"] = json.loads(d["missing_fields"])
         out.append(d)
@@ -377,23 +381,33 @@ def add_photo_url(listing_id, url, path=None):
     return True
 
 
-def add_photo_hash(listing_id, url, dhash, path=None):
-    """Record a dhash for a photo URL: photo_hashes[url] = dhash.
+def add_photo_hash(listing_id, url, dhash, phash=None, path=None):
+    """Record perceptual hashes for a photo URL.
 
-    Skips when dhash is None (PIL missing at upload time) — upload still
-    works, just no dedup for that photo. Returns True if stored.
+    Stores photo_hashes[url] = dhash (when given) and
+    photo_phashes[url] = phash (when given). Skips when the respective
+    hash is None (PIL missing at upload time) — upload still works,
+    just no dedup for that photo. Returns True if anything was stored.
     """
-    if not url or not dhash:
+    if not url or (not dhash and not phash):
         return False
     l = get_listing(listing_id, path=path)
     if not l:
         return False
-    hashes = l.get("photo_hashes") or {}
-    if hashes.get(url) == dhash:
-        return False
-    hashes[url] = dhash
-    update_listing(listing_id, path=path, photo_hashes=hashes)
-    return True
+    stored = False
+    if dhash:
+        hashes = l.get("photo_hashes") or {}
+        if hashes.get(url) != dhash:
+            hashes[url] = dhash
+            update_listing(listing_id, path=path, photo_hashes=hashes)
+            stored = True
+    if phash:
+        phashes = l.get("photo_phashes") or {}
+        if phashes.get(url) != phash:
+            phashes[url] = phash
+            update_listing(listing_id, path=path, photo_phashes=phashes)
+            stored = True
+    return stored
 
 
 def _hamming_hex(h1, h2):
@@ -404,36 +418,63 @@ def _hamming_hex(h1, h2):
         return 64
 
 
-def find_photos_by_hash(dhash, max_distance=5, path=None, exclude_id=None):
-    """Find photos with a dhash within max_distance (hamming).
+def find_photos_by_hash(dhash, max_distance=5, path=None, exclude_id=None,
+                        phash=None):
+    """Find photos whose dHash OR pHash is within max_distance (hamming).
 
-    Returns [(listing_id, url, distance)] ordered by distance. Skips
-    exclude_id. Scans the whole tg_listings table — fine at broker-bot
-    scale; revisit if listings grow past ~50k.
+    Checks both hash columns: dHash catches small edits/crops, pHash
+    catches resizes/recompressions/recolors. Either firing suggests a
+    duplicate — callers decide, never auto-merge.
+
+    Returns [(listing_id, url, distance)] ordered by distance (the best
+    of the two hash distances). Skips exclude_id. Scans the whole
+    tg_listings table — fine at broker-bot scale; revisit if listings
+    grow past ~50k.
     """
-    if not dhash:
+    if not dhash and not phash:
         return []
     conn = connect(path)
-    rows = conn.execute(
-        "SELECT id, photo_hashes FROM tg_listings"
-        " WHERE photo_hashes IS NOT NULL AND photo_hashes != '{}'"
-    ).fetchall()
+    try:
+        rows = conn.execute(
+            "SELECT id, photo_hashes, photo_phashes FROM tg_listings"
+            " WHERE (photo_hashes IS NOT NULL AND photo_hashes != '{}')"
+            " OR (photo_phashes IS NOT NULL AND photo_phashes != '{}')"
+        ).fetchall()
+    except Exception:
+        # photo_phashes column missing (migration not run yet) — dHash only.
+        rows = conn.execute(
+            "SELECT id, photo_hashes FROM tg_listings"
+            " WHERE photo_hashes IS NOT NULL AND photo_hashes != '{}'"
+        ).fetchall()
     conn.close()
+    out = []
     out = []
     for r in rows:
         lid = r["id"]
         if exclude_id and lid == exclude_id:
             continue
+        # photo_phashes may be absent on DBs created before the migration.
+        keys = r.keys()
         try:
             hashes = json.loads(r["photo_hashes"] or "{}")
         except (json.JSONDecodeError, TypeError):
-            continue
-        for url, h in hashes.items():
-            if not h:
-                continue
-            dist = _hamming_hex(dhash, h)
-            if dist <= max_distance:
-                out.append((lid, url, dist))
+            hashes = {}
+        try:
+            ph_raw = r["photo_phashes"] if "photo_phashes" in keys else None
+            phashes = json.loads(ph_raw or "{}")
+        except (json.JSONDecodeError, TypeError):
+            phashes = {}
+        urls = set(hashes) | set(phashes)
+        for url in urls:
+            best = 64
+            h = hashes.get(url)
+            if dhash and h:
+                best = min(best, _hamming_hex(dhash, h))
+            p = phashes.get(url)
+            if phash and p:
+                best = min(best, _hamming_hex(phash, p))
+            if best <= max_distance:
+                out.append((lid, url, best))
     out.sort(key=lambda t: t[2])
     return out
 
@@ -463,6 +504,7 @@ def list_broker_listings_with_posts(broker_id, limit=5, offset=0,
         d["photo_file_ids"] = json.loads(d["photo_file_ids"])
         d["photo_urls"] = json.loads(d.get("photo_urls") or "[]")
         d["photo_hashes"] = json.loads(d.get("photo_hashes") or "{}")
+        d["photo_phashes"] = json.loads(d.get("photo_phashes") or "{}")
         d["parsed"] = json.loads(d["parsed"])
         d["missing_fields"] = json.loads(d["missing_fields"])
         out.append(d)
@@ -570,6 +612,7 @@ def search_listings(broker_id, filters, limit=50, offset=0, path=None):
         d["photo_file_ids"] = json.loads(d["photo_file_ids"])
         d["photo_urls"] = json.loads(d.get("photo_urls") or "[]")
         d["photo_hashes"] = json.loads(d.get("photo_hashes") or "{}")
+        d["photo_phashes"] = json.loads(d.get("photo_phashes") or "{}")
         d["parsed"] = json.loads(d["parsed"])
         d["missing_fields"] = json.loads(d["missing_fields"])
         out.append(d)
@@ -651,6 +694,7 @@ def stale_listings(older_than_days=7, statuses=("submitted",), path=None):
         d["photo_file_ids"] = json.loads(d["photo_file_ids"])
         d["photo_urls"] = json.loads(d.get("photo_urls") or "[]")
         d["photo_hashes"] = json.loads(d.get("photo_hashes") or "{}")
+        d["photo_phashes"] = json.loads(d.get("photo_phashes") or "{}")
         d["parsed"] = json.loads(d["parsed"])
         out.append(d)
     return out
@@ -718,6 +762,7 @@ def find_potential_duplicates(broker_id, parsed, exclude_id=None, path=None):
         d["photo_file_ids"] = json.loads(d["photo_file_ids"])
         d["photo_urls"] = json.loads(d.get("photo_urls") or "[]")
         d["photo_hashes"] = json.loads(d.get("photo_hashes") or "{}")
+        d["photo_phashes"] = json.loads(d.get("photo_phashes") or "{}")
         d["parsed"] = op
         d["missing_fields"] = json.loads(d["missing_fields"])
         out.append(d)
@@ -752,6 +797,7 @@ def find_exact_duplicate_by_hash(broker_id, content_hash, exclude_id=None,
         d["photo_file_ids"] = json.loads(d["photo_file_ids"])
         d["photo_urls"] = json.loads(d.get("photo_urls") or "[]")
         d["photo_hashes"] = json.loads(d.get("photo_hashes") or "{}")
+        d["photo_phashes"] = json.loads(d.get("photo_phashes") or "{}")
         d["parsed"] = json.loads(d["parsed"])
         d["missing_fields"] = json.loads(d["missing_fields"])
         return d
