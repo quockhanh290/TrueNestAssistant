@@ -39,6 +39,7 @@ import feat_stale
 import feat_deals
 import feat_evening
 import feat_payment
+import feat_notify
 import feat_premium
 import feat_sendclient
 import hints
@@ -1185,6 +1186,8 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await feat_listings.delete_cancel_cb(update, ctx)
     elif data.startswith("delete:"):
         await feat_listings.delete_listing(update, ctx)
+    elif data.startswith("notify:"):
+        await feat_notify.notify_pref_toggle(update, ctx)
 
 
 def main():
@@ -1208,6 +1211,7 @@ def main():
     app.add_handler(CommandHandler("metrics", feat_metrics.cmd_metrics))
     app.add_handler(CommandHandler("skip", feat_listings.cmd_skip_photo_delete))
     app.add_handler(CommandHandler("huy", feat_listings.cmd_cancel_addphoto))
+    app.add_handler(CommandHandler("thongbao", feat_notify.cmd_thongbao))
     app.add_handler(CallbackQueryHandler(on_callback))
     # Group replies to broadcast messages (cross-broker matching).
     # Registered before on_text so group replies are caught first.
