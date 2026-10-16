@@ -10,6 +10,7 @@ from telegram.ext import ContextTypes
 import config
 import db
 import parser as listing_parser
+import translate
 from normalize import normalize_phone
 
 from utils import (
@@ -537,16 +538,29 @@ async def handle_edit_post(update, ctx, ep, text):
         return True
     db.save_post(listing_id, text.strip(), lang)
     pn = get_pronoun(uid)
-    # Language sync rule: editing Vietnamese triggers auto-regeneration
-    # of other existing languages from structured listing data.
-    # (No translation API, so we regenerate from `parsed` instead of
-    # translating the edited Vietnamese text.)
+    # Language sync rule: editing Vietnamese triggers auto-translation
+    # of other existing languages from the edited text.
+    # Chain per language: translate() → fallback generate_post() from data.
     # Editing a non-Vietnamese language only saves that language.
-    synced = []
+    translated = []
+    auto_gen = []
     if lang == "vi":
         other_langs = [lg for lg in db.get_saved_post_langs(listing_id)
                        if lg != "vi"]
+        edited_text = text.strip()
         for lg in other_langs:
+            new_text = None
+            try:
+                new_text = await asyncio.to_thread(
+                    translate.translate, edited_text, lg)
+            except Exception:
+                log.warning("translate %s failed for %s", lg, listing_id,
+                            exc_info=True)
+            if new_text:
+                db.save_post(listing_id, new_text, lg)
+                translated.append(lg)
+                continue
+            # Fallback: regenerate from structured listing data
             try:
                 regen = generate_post(l, lg)
             except Exception:
@@ -555,10 +569,14 @@ async def handle_edit_post(update, ctx, ep, text):
                 continue
             if regen and regen.strip():
                 db.save_post(listing_id, regen.strip(), lg)
-                synced.append(lg)
-    if synced:
-        sync_note = (f"\nEm đã cập nhật các bản "
-                     f"{'/'.join(synced).upper()} theo nội dung mới. "
+                auto_gen.append(lg)
+    notes = []
+    if translated:
+        notes.append(f"dịch sang {'/'.join(translated).upper()}")
+    if auto_gen:
+        notes.append(f"dùng bản sinh tự động cho {'/'.join(auto_gen).upper()}")
+    if notes:
+        sync_note = (f"\nEm đã {', '.join(notes)} theo nội dung mới. "
                      f"Anh kiểm tra lại giúp em nhé.")
     else:
         sync_note = ""
