@@ -900,15 +900,10 @@ async def _handle_answer(update, ctx, awaiting, text):
 # Step-by-step listing creation for brokers who don't have a listing written.
 
 GUIDED_STEPS = ["bedrooms", "bathrooms", "ptype", "price", "area",
-                "district", "area_loc", "street", "landmark", "building_detail",
+                "ward", "street", "landmark", "building_detail",
                 "floor", "furnishing", "pet",
                 "availability", "lease_min", "deposit", "pay_schedule",
                 "amenities", "photos", "description"]
-
-GUIDED_DISTRICTS = [("st", "Sơn Trà"), ("hc", "Hải Châu"),
-                    ("nhs", "Ngũ Hành Sơn"), ("lc", "Liên Chiểu"),
-                    ("cl", "Cẩm Lệ"), ("tk", "Thanh Khê"),
-                    ("hv", "Hòa Vang")]
 
 GUIDED_PTYPES = [("lux_apt", "🏢 Chung cư cao cấp"),
                  ("house", "🏠 Nhà riêng nguyên căn"),
@@ -947,42 +942,18 @@ _GUIDED_CANCEL_WORDS = {"huy", "/huy", "huỷ", "hủy", "cancel"}
 _GUIDED_SKIP_WORDS = {"bỏ qua", "bo qua", "skip", "ko", "không", "k"}
 
 # ---------------------------------------------------------------- location data
-# data/locations.json: {districts: [{code, name, areas: [{name, note, streets}]}]}
+# Post-merger catalog: data/danang_locations.json via locations.py
+# (94 admin units, 3682 streets, 925 buildings)
 
-_LOCATIONS = None
-_BUILDINGS_CACHE = None
-
-
-def _load_locations():
-    global _LOCATIONS
-    if _LOCATIONS is None:
-        p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                         "data", "locations.json")
-        with open(p, encoding="utf-8") as f:
-            _LOCATIONS = json.load(f)
-    return _LOCATIONS
+_LOC = None
 
 
-def _district_by_code(code):
-    for d in _load_locations()["districts"]:
-        if d["code"] == code:
-            return d
-    return None
-
-
-def _load_buildings_cache():
-    global _BUILDINGS_CACHE
-    if _BUILDINGS_CACHE is None:
-        p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                         "data", "buildings.json")
-        with open(p, encoding="utf-8") as f:
-            _BUILDINGS_CACHE = json.load(f)
-    return _BUILDINGS_CACHE
-
-
-_BUILDING_DISTRICT = {"hc": "Hai Chau", "st": "Son Tra",
-                      "nhs": "Ngu Hanh Son", "tk": "Thanh Khe",
-                      "cl": "Cam Le", "lc": "Lien Chieu", "hv": "Hoa Vang"}
+def _loc():
+    global _LOC
+    if _LOC is None:
+        import locations as _l
+        _LOC = _l
+    return _LOC
 
 
 def _unaccent(s):
@@ -991,13 +962,13 @@ def _unaccent(s):
     return s.replace("đ", "d").replace("Đ", "d").lower()
 
 
-def _landmark_suggestions(district_code, area_name, limit=6):
-    """Suggest catalog landmarks for a district, ranked by area match."""
+def _landmark_suggestions(ward_name, limit=6):
+    """Suggest catalog landmarks, preferring entries near the ward name."""
     try:
         import buildings as _bld
-        d = _district_by_code(district_code)
-        dname = d["name"] if d else ""
-        entries = _bld.buildings_in_district(dname, area_name or "")
+        entries = _bld.buildings_in_district(ward_name or "")
+        if not entries:
+            entries = _bld.load_catalog()[:limit]
         return [e["name"] for e in entries[:limit]]
     except Exception:
         return []
@@ -1056,56 +1027,30 @@ def _guided_step_content(gd):
         return (f"Diện tích bao nhiêu m² ạ? (vd: 65) {tag}",
                 _guided_back_kb(kb))
 
-    if step == "district":
+    if step == "ward":
+        wards = _loc().get_wards()
         kb = []
-        for i in range(0, len(GUIDED_DISTRICTS), 2):
-            row = [InlineKeyboardButton(label,
-                                        callback_data=f"guided:set:district:{code}")
-                   for code, label in GUIDED_DISTRICTS[i:i + 2]]
+        for i in range(0, len(wards), 2):
+            row = [InlineKeyboardButton(
+                w["name"], callback_data=f"guided:set:ward:{i + j}")
+                for j, w in enumerate(wards[i:i + 2])]
             kb.append(row)
-        return f"Quận nào ạ? {tag}", _guided_back_kb(kb)
-
-    if step == "area_loc":
-        d = _district_by_code(gd["answers"].get("district_code"))
-        areas = d["areas"] if d else []
-        kb = []
-        for i in range(0, len(areas), 2):
-            row = []
-            for j, a in enumerate(areas[i:i + 2]):
-                idx = i + j
-                row.append(InlineKeyboardButton(
-                    a["name"], callback_data=f"guided:set:area_loc:{idx}"))
-            kb.append(row)
-        dname = d["name"] if d else ""
-        return (f"Khu vực nào trong {dname} ạ? {tag}",
+        kb.append([InlineKeyboardButton("🔍 Tìm xã/phường khác",
+                                        callback_data="guided:set:ward:more")])
+        kb.append([InlineKeyboardButton("Bỏ qua",
+                                        callback_data="guided:skip")])
+        return (f"Phường/xã nào ạ? (hoặc gõ tên để tìm) {tag}",
                 _guided_back_kb(kb))
 
     if step == "street":
-        d = _district_by_code(gd["answers"].get("district_code"))
-        area_name = gd["answers"].get("area_loc")
-        streets = []
-        if d:
-            for a in d["areas"]:
-                if a["name"] == area_name:
-                    streets = a["streets"]
-                    break
-        kb = []
-        for i in range(0, len(streets), 2):
-            row = [InlineKeyboardButton(
-                s, callback_data=f"guided:set:street:{i + j}")
-                for j, s in enumerate(streets[i:i + 2])]
-            kb.append(row)
-        kb.append([InlineKeyboardButton("✏️ Gõ tay",
-                                        callback_data="guided:set:street:custom")])
-        kb.append([InlineKeyboardButton("Bỏ qua",
-                                        callback_data="guided:skip")])
-        return (f"Đường nào ở {area_name} ạ? {tag}",
+        kb = [[InlineKeyboardButton("Bỏ qua",
+                                    callback_data="guided:skip")]]
+        return (f"Đường nào ạ? (gõ vài chữ, vd: trần hưng đạo) {tag}",
                 _guided_back_kb(kb))
 
     if step == "landmark":
-        dcode = gd["answers"].get("district_code")
-        area_name = gd["answers"].get("area_loc")
-        opts = _landmark_suggestions(dcode, area_name or "")
+        ward_name = gd["answers"].get("ward")
+        opts = _landmark_suggestions(ward_name or "")
         gd["landmark_options"] = opts
         kb = []
         for i, name in enumerate(opts):
@@ -1299,38 +1244,22 @@ async def guided_set(update, ctx):
             "Ngày nào ạ? (vd: 01/11)",
             reply_markup=_guided_back_kb())
         return
-    if step == "district":
-        d = _district_by_code(value)
-        if not d:
-            return
-        answers["district_code"] = value
-        answers["district"] = d["name"]
-    elif step == "area_loc":
-        d = _district_by_code(answers.get("district_code"))
-        try:
-            area = d["areas"][int(value)]
-        except (TypeError, IndexError, ValueError, KeyError):
-            return  # stale button
-        answers["area_loc"] = area["name"]
-    elif step == "street":
-        if value == "custom":
-            gd["awaiting_free"] = step
+    if step == "ward":
+        if value == "more":
+            gd["awaiting_free"] = "ward"
             await q.edit_message_text(
-                "Đường nào ạ? (gõ tên đường giúp em)",
+                "Anh gõ tên xã/phường giúp em (vd: hòa tiến) 🔍",
                 reply_markup=_guided_back_kb())
             return
-        d = _district_by_code(answers.get("district_code"))
-        area_name = answers.get("area_loc")
-        streets = []
-        if d:
-            for a in d["areas"]:
-                if a["name"] == area_name:
-                    streets = a["streets"]
-                    break
         try:
-            answers["street"] = streets[int(value)]
+            w = _loc().get_wards()[int(value)]
         except (IndexError, ValueError):
             return  # stale button
+        answers["ward"] = w["name"]
+        answers["district"] = w["name"]  # backward compat: parsed field
+    elif step == "street":
+        # street is now free-text search only; buttons come from ssearch
+        return
     elif step == "landmark":
         if value == "custom":
             gd["awaiting_free"] = step
@@ -1368,24 +1297,98 @@ async def guided_bset(update, ctx):
         return
     answers = gd["answers"]
     answers["landmark"] = name
-    # bonus: auto-fill street/district from the catalog entry
+    # bonus: auto-fill street/ward from the catalog entry
     try:
         import buildings as _bld
         entry = _bld.find_building(name)
         if entry:
             if not answers.get("street") and entry.get("street"):
                 answers["street"] = entry["street"]
-            if not answers.get("district") and entry.get("district"):
+            if not answers.get("ward") and entry.get("district"):
+                answers["ward"] = entry["district"]
                 answers["district"] = entry["district"]
-                # keep district_code in sync for downstream steps
-                for code, dname in GUIDED_DISTRICTS:
-                    if dname == entry["district"]:
-                        answers["district_code"] = code
-                        break
     except Exception:
         pass
     gd.pop("bsearch", None)
     _guided_advance(gd)
+    await _guided_show(update, ctx, edit=True)
+
+
+async def guided_sset(update, ctx):
+    """Broker picked a street from catalog search results."""
+    q = update.callback_query
+    await q.answer()
+    gd = ctx.user_data.get("guided")
+    if not gd:
+        return
+    try:
+        idx = int(q.data.rsplit(":", 1)[-1])
+        name = gd["ssearch"]["names"][idx]
+    except (KeyError, IndexError, ValueError):
+        await q.edit_message_text("Hết hạn rồi, anh gõ lại giúp em nhé 😅")
+        return
+    gd["answers"]["street"] = name
+    gd.pop("ssearch", None)
+    _guided_advance(gd)
+    await _guided_show(update, ctx, edit=True)
+
+
+async def guided_sset_custom(update, ctx):
+    """Broker wants to use their typed street text as-is."""
+    q = update.callback_query
+    await q.answer()
+    gd = ctx.user_data.get("guided")
+    if not gd:
+        return
+    query = ((gd.get("ssearch") or {}).get("query") or "").strip()
+    if not query:
+        await q.edit_message_text("Hết hạn rồi, anh gõ lại giúp em nhé 😅")
+        return
+    gd["answers"]["street"] = query
+    gd.pop("ssearch", None)
+    _guided_advance(gd)
+    await _guided_show(update, ctx, edit=True)
+
+
+async def guided_sback(update, ctx):
+    """Back from street search results -> re-show the street step."""
+    q = update.callback_query
+    await q.answer()
+    gd = ctx.user_data.get("guided")
+    if not gd:
+        return
+    gd.pop("ssearch", None)
+    await _guided_show(update, ctx, edit=True)
+
+
+async def guided_wset(update, ctx):
+    """Broker picked a ward/commune from search results."""
+    q = update.callback_query
+    await q.answer()
+    gd = ctx.user_data.get("guided")
+    if not gd:
+        return
+    try:
+        idx = int(q.data.rsplit(":", 1)[-1])
+        name = gd["wsearch"]["names"][idx]
+    except (KeyError, IndexError, ValueError):
+        await q.edit_message_text("Hết hạn rồi, anh gõ lại giúp em nhé 😅")
+        return
+    gd["answers"]["ward"] = name
+    gd["answers"]["district"] = name  # backward compat: parsed field
+    gd.pop("wsearch", None)
+    _guided_advance(gd)
+    await _guided_show(update, ctx, edit=True)
+
+
+async def guided_wback(update, ctx):
+    """Back from ward search results -> re-show the ward step."""
+    q = update.callback_query
+    await q.answer()
+    gd = ctx.user_data.get("guided")
+    if not gd:
+        return
+    gd.pop("wsearch", None)
     await _guided_show(update, ctx, edit=True)
 
 
@@ -1606,21 +1609,80 @@ async def handle_guided_text(update, ctx, gd, text):
                                         reply_markup=InlineKeyboardMarkup(rows))
         return True
     if awaiting == "street":
+        # typed street -> search the 3682-street catalog
         if not t:
             await update.message.reply_text(
                 "Anh gõ lại giúp em nhé 🤔")
             gd["awaiting_free"] = awaiting
             return True
-        answers[awaiting] = t
-        _guided_advance(gd)
-        await _guided_show(update, ctx, edit=False)
+        if len(t) < 2:
+            await update.message.reply_text(
+                "Anh gõ thêm vài chữ nữa giúp em nhé (tối thiểu 2 chữ) 🔍")
+            gd["awaiting_free"] = awaiting
+            return True
+        results = _loc().search_streets(t, limit=5)
+        gd["ssearch"] = {"query": t, "names": results}
+        rows = []
+        for i, name in enumerate(results):
+            rows.append([InlineKeyboardButton(
+                name[:40], callback_data=f"guided:sset:{i}")])
+        rows.append([InlineKeyboardButton(
+            f"➕ Dùng đúng chữ em gõ: \"{t[:30]}\"",
+            callback_data="guided:sset:custom")])
+        rows.append([InlineKeyboardButton("⬅️ Quay lại",
+                                         callback_data="guided:sback")])
+        if results:
+            msg = f"Em tìm được {len(results)} đường, phải cái này không anh?"
+        else:
+            msg = (f"Em không tìm thấy \"{t}\" trong danh sách 😅\n"
+                   f"Anh dùng đúng chữ đã gõ nhé?")
+        await update.message.reply_text(msg,
+                                        reply_markup=InlineKeyboardMarkup(rows))
         return True
 
-    if step in ("bedrooms", "bathrooms", "ptype", "district", "area_loc",
-                "street", "furnishing", "pet", "amenities",
+    if awaiting == "ward":
+        # typed ward/commune -> search all 94 units + legacy names
+        if not t:
+            await update.message.reply_text(
+                "Anh gõ lại giúp em nhé 🤔")
+            gd["awaiting_free"] = awaiting
+            return True
+        results = _loc().search_wards(t, limit=5)
+        gd["wsearch"] = {"query": t,
+                         "names": [r["name"] for r in results]}
+        rows = []
+        for i, r in enumerate(results):
+            label = r["name"]
+            if r.get("type") == "legacy_district":
+                label += " (khu vực cũ)"
+            rows.append([InlineKeyboardButton(
+                label[:40], callback_data=f"guided:wset:{i}")])
+        rows.append([InlineKeyboardButton("⬅️ Quay lại",
+                                         callback_data="guided:wback")])
+        if results:
+            msg = f"Em tìm được {len(results)}, phải cái này không anh?"
+        else:
+            msg = (f"Em không tìm thấy \"{t}\" 😅\n"
+                   f"Anh gõ lại hoặc bấm Quay lại chọn từ danh sách nhé.")
+        await update.message.reply_text(msg,
+                                        reply_markup=InlineKeyboardMarkup(rows))
+        return True
+
+    if step in ("bedrooms", "bathrooms", "ptype", "ward",
+                "furnishing", "pet", "amenities",
                 "pay_schedule"):
         await update.message.reply_text("Anh bấm nút giúp em nhé 👆")
         return True
+
+    if step == "street":
+        # broker typed a street name directly at the street step
+        gd["awaiting_free"] = "street"
+        return await handle_guided_text(update, ctx, gd, text)
+
+    if step == "ward":
+        # broker typed a ward name directly at the ward step
+        gd["awaiting_free"] = "ward"
+        return await handle_guided_text(update, ctx, gd, text)
 
     if step == "landmark":
         # broker typed again instead of tapping a search result -> new search
@@ -1707,7 +1769,7 @@ def _guided_to_raw(a):
         parts.append(f"giá {a['price_vnd'] / 1_000_000:g}tr/tháng")
     if a.get("area"):
         parts.append(f"{a['area']:g}m2")
-    # hierarchical location: building -> landmark -> street -> area -> district
+    # hierarchical location: building -> landmark -> street -> ward
     loc = []
     if a.get("building_detail"):
         loc.append(a["building_detail"])
@@ -1715,10 +1777,8 @@ def _guided_to_raw(a):
         loc.append(f"gần {a['landmark']}")
     if a.get("street"):
         loc.append(f"đường {a['street']}")
-    if a.get("area_loc"):
-        loc.append(a["area_loc"])
-    if a.get("district"):
-        loc.append(a["district"])
+    if a.get("ward"):
+        loc.append(a["ward"])
     if loc:
         parts.append(", ".join(loc))
     if a.get("floor"):

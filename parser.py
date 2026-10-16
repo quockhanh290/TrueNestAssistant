@@ -137,6 +137,14 @@ def parse_area(text):
 
 
 def parse_district(text):
+    # post-merger wards/communes first (real catalog), then legacy names
+    try:
+        import locations as _loc
+        hit = _loc.find_ward(text)
+        if hit:
+            return hit, "high"
+    except Exception:
+        pass
     t = _norm(text)
     for d in DISTRICTS:
         if d.lower() in t:
@@ -154,10 +162,19 @@ def parse_district(text):
 def parse_street(text):
     """Extract street name from English/Vietnamese listings.
 
-    Handles: "630 Vo Nguyen Giap St", "Vo Nguyen Giap Street",
-    "đường Võ Nguyên Giáp", "630 Vo Nguyen Giap".
+    First tries the real 3682-street catalog (high confidence), then falls
+    back to regex extraction for unlisted streets.
     Returns street name or None.
     """
+    # 1. Real catalog street mentioned in text?
+    try:
+        import locations as _loc
+        hit = _loc.find_street_in_text(text)
+        if hit:
+            return hit, "high"
+    except Exception:
+        pass
+    # 2. Regex fallback (existing logic)
     # "Location: 630 Vo Nguyen Giap St, Son Tra" or "Address: ..."
     m = re.search(
         r"(?:location|address|địa chỉ|dia chi)\s*:\s*"
