@@ -5,7 +5,7 @@ import logging
 import random
 import time
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, Update, WebAppInfo
 from telegram.ext import ContextTypes
 
 import config
@@ -25,6 +25,7 @@ from utils import (
     natural_delay, PROCESSING_HINTS, react_heart,
     maybe_send_hint, maybe_send_hint_to_chat,
     fmt_price, listing_line, _confirm_summary,
+    webapp_url,
 )
 
 log = logging.getLogger("linh")
@@ -573,9 +574,6 @@ async def _send_picker_dm(ctx, user_id, r, scored):
     Web app flow (Khanh 2026-10-16): broker picks up to 5 listings via
     web app instead of Telegram inline keyboard.
     """
-    from telegram import WebAppInfo
-    from utils import webapp_url
-
     req = r["requirements_summary"]
     url = webapp_url(view="propose", request_id=r["id"])
     kb = InlineKeyboardMarkup([[
@@ -648,6 +646,35 @@ async def _notify_new_response(ctx, r, n):
                     callback_data=f"mresp:view:{r['id']}")]]))
     except Exception as e:
         log.warning("notify broker failed: %s", e)
+
+
+async def process_outbox_notifications(ctx):
+    """Bot poller: send queued webapp notifications (e.g. slot reopened).
+
+    Call periodically from the bot's job queue. Sends each unsent
+    notification to the broker group channel, then marks it sent.
+    """
+    for n in db.pop_unsent_notifications():
+        try:
+            if n["ntype"] == "slot_reopened":
+                payload = n.get("payload") or {}
+                summary = payload.get("summary") or "yêu cầu này"
+                r = db.get_match_request(n["request_id"]) if n.get("request_id") else None
+                if not r or not config.BROKER_GROUP_ID:
+                    continue
+                # Reply to the original broadcast message for context
+                group_msg_id = r.get("group_message_id")
+                await ctx.bot.send_message(
+                    chat_id=int(config.BROKER_GROUP_ID),
+                    text=(f"📢 Slot vừa mở lại!\n\n"
+                          f"Yêu cầu: {summary}\n\n"
+                          f"Ai có tin phù hợp thì reply tin gốc ngay nhé! 🤝"),
+                    reply_to_message_id=group_msg_id,
+                )
+            # Mark sent regardless of type (unknown types are dropped)
+            db.mark_notification_sent(n["id"])
+        except Exception as e:
+            log.warning("outbox notification %s failed: %s", n.get("id"), e)
 
 
 async def match_pick_send(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -739,11 +766,27 @@ async def on_group_reply(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         except Exception:
             pass
         return
-    # 4th+ responder (recorded + in-pick) -> tell them it's full.
+    # 4th+ responder (recorded + in-pick) -> tell them it's full,
+    # but point them to the cross-broker fallback (Khanh 2026-10-16).
     if db.count_responses(r["id"]) + len(pend) >= db.MAX_RESPONDERS:
         try:
+            c = db.get_client(r["client_id"])
+            summary = _client_req_summary(c) if c else "yêu cầu này"
             await msg.reply_text(
-                "Yêu cầu này đã đủ 3 môi giới phản hồi rồi ạ.")
+                "Đã hết slot cho yêu cầu này rồi ạ 😔\n\n"
+                "💡 Nhưng đừng bỏ cuộc! Có 2 cách vẫn còn cơ hội:\n"
+                "• Theo dõi kênh này — nếu người reserve không có tin"
+                " phù hợp, slot sẽ mở lại\n"
+                "• Dùng Match liên broker trong web app để tìm tin"
+                " từ broker khác\n\n"
+                f"Yêu cầu: {summary}",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton(
+                        "🔗 Mở match liên broker",
+                        web_app=WebAppInfo(url=webapp_url(view="xbroker")),
+                    ),
+                ]]),
+            )
         except Exception as e:
             log.warning("full reply failed: %s", e)
         return
@@ -763,7 +806,13 @@ async def on_group_reply(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             log.warning("no-match reply failed: %s", e)
         return
     # Reserve the slot, then DM the picker.
+    # Create DB row immediately so web app check_broker_slot() works
+    # (in-memory _pending_picks alone is invisible to the web app).
     pend.add(replier.id)
+    try:
+        db.save_propose_response(r["id"], replier.id, [], {})
+    except Exception as e:
+        log.warning("reserve DB row failed: %s", e)
     try:
         await _send_picker_dm(ctx, replier.id, r, scored)
     except Exception as e:
