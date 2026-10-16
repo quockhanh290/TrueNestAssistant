@@ -64,10 +64,28 @@ Bot gửi tin nhắn với inline keyboard, mỗi lần bấm sẽ sửa lại t
 ⏰ Còn 58 phút
 ```
 
-- Bấm vào từng dòng để tick ✅ / bỏ ☐ (tối đa 5 tin)
+- Bấm vào từng dòng → xem chi tiết tin (kèm ảnh) trước khi quyết định
 - "Xem thêm" → hiện 5 tin tiếp theo (match % thấp dần)
 - Nút Submit hiện số tin đã chọn, cập nhật realtime
 - Mỗi nút 1 hàng riêng → dễ bấm trên điện thoại
+
+**Chi tiết tin (2 lớp):**
+- Lớp 1: danh sách rút gọn (bấm vào từng dòng)
+- Lớp 2: bot gửi ảnh đại diện + caption chi tiết:
+```
+[Ảnh]
+
+🏠 2PN An Thượng, 12tr/tháng
+📍 123 Trần Hưng Đạo, Sơn Trà
+📐 75m² | Tầng 12 | Ban công ĐN
+🛋️ Full nội thất | Cho pet
+Match: 95% (giá ✓, vị trí ✓, PN ✓)
+
+[📸 Xem thêm 7 ảnh] [✅ Chọn tin này]
+[⬅️ Về danh sách]
+```
+- Broker xem đủ ảnh + thông tin rồi mới bấm chọn
+- Bấm "Chọn" → quay về danh sách, tin đó thành ✅
 
 **Giới hạn nền tảng Telegram:**
 - 1 tin nhắn tối đa ~10 nút inline (5 tin + 3 action = vừa đủ)
