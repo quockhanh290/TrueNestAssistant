@@ -70,7 +70,9 @@
         }
         url = '/api/listings?' + parts.join('&');
       } else {
-        url = `/api/listings?broker_id=${brokerId}&demo=${demo}&limit=50`;
+        // Ultimate fallback: Khanh's ID (local single-user server)
+        const fallbackId = brokerId || '8214732977';
+        url = `/api/listings?broker_id=${fallbackId}&demo=1&limit=50`;
       }
       const res = await fetch(url);
       if (!res.ok) {
