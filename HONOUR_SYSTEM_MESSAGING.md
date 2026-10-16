@@ -210,3 +210,8 @@ Khách KHÔNG xác nhận
 **Logic:** broker tự cân nhắc — ăn trọn 1 deal nhưng mất nguồn lead tương lai, hay chia ít cho platform để giữ uy tín và nhận lead tiếp.
 
 **Lưu ý:** vì platform đã lấy thấp (20%), động cơ gian lận vốn đã thấp. Cơ chế này chỉ là lớp bảo vệ thêm.
+
+**Điểm uy tín = rào cản tự nhiên chống gian lận:**
+- Broker điểm cao đã đầu tư công sức xây dựng uy tín → không dại đánh đổi vì 1 deal
+- Càng lên cao càng không muốn nhảy xuống — hệ thống tự cân bằng
+- Broker điểm thấp chưa chứng minh được gì → tự động bị hạn chế cơ hội
