@@ -97,6 +97,57 @@ def section_awaiting_choice():
         print("6d. Không có khách nào đang chờ chọn căn.")
 
 
+def section_stale_listings():
+    """6e. Listings not updated in 7+ days — batched availability check.
+
+    Prints one batched message per broker (10 listings/page, always with
+    the total count). The sender delivers it with inline buttons; taps
+    route to stale:* callbacks in feat_stale.py (stateless).
+    """
+    import time as _time
+    any_out = False
+    stale = db.stale_listings(older_than_days=7,
+                              statuses=("submitted", "uncertain"))
+    by_broker = {}
+    for l in stale:
+        by_broker.setdefault(l["broker_id"], []).append(l)
+    for uid, items in by_broker.items():
+        # most-active first so wholesalers see important ones first
+        items.sort(key=lambda l: (l.get("inquiry_count", 0) * 10 +
+                                  l.get("view_count", 0)),
+                   reverse=True)
+        any_out = True
+        b = db.get_broker(uid) or {}
+        name = _broker_name(b)
+        total = len(items)
+        page = items[:10]
+        print(f"--- to user_id={uid} ({name}) ---")
+        print(f"6e. [STALE_BATCH total={total} page=0]")
+        lines = [f"📋 Anh có {total} tin cũ cần cập nhật (đang hiện 1-"
+                 f"{min(10, total)}):", ""]
+        for i, l in enumerate(page, start=1):
+            p = l.get("parsed") or {}
+            br = p.get("bedrooms")
+            br_s = ("Studio" if br == 0.0
+                    else (f"{int(br)}PN" if br else "?PN"))
+            loc = p.get("building_name") or p.get("district") or "?"
+            price = p.get("price_vnd")
+            price_s = f"{price / 1_000_000:g}tr" if price else "?/tháng"
+            days = int((_time.time() - l["updated_at"]) / 86400)
+            lines.append(f"{i}. 🏠 {br_s} {loc}, {price_s}"
+                         f" — {days} ngày chưa update")
+            lines.append(f"   [{i} ✅ -> stale:ok:{l['id']}]"
+                         f" [{i} ❌ -> stale:rented:{l['id']}]"
+                         f" [{i} ❓ -> stale:unsure:{l['id']}]")
+        lines += ["", "Mỗi tin chọn 1 nhé 👇"]
+        if total > 10:
+            lines.append(f"[Xem thêm 10 tin (11-{min(20, total)}/{total})"
+                         f" -> stale:more:1]")
+        print("\n".join(lines))
+    if not any_out:
+        print("6e. Không có tin cũ nào cần cập nhật.")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true",
@@ -110,6 +161,8 @@ def main():
     section_unseen_responses()
     print()
     section_awaiting_choice()
+    print()
+    section_stale_listings()
 
 
 if __name__ == "__main__":
