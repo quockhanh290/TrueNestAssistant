@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS brokers (
     username       TEXT,
     display_name   TEXT,
     name           TEXT,
+    pronoun        TEXT,
     phone          TEXT,
     zalo           TEXT,
     facebook       TEXT,
@@ -72,7 +73,7 @@ def init_db(path=None):
 def _migrate_brokers(conn):
     """Add contact columns to brokers on pre-existing DBs (no data loss)."""
     cols = {r["name"] for r in conn.execute("PRAGMA table_info(brokers)")}
-    for col in ("name", "zalo", "facebook"):
+    for col in ("name", "zalo", "facebook", "pronoun"):
         if col not in cols:
             conn.execute(f"ALTER TABLE brokers ADD COLUMN {col} TEXT")
 
@@ -105,7 +106,7 @@ def get_or_create_broker(user_id, username=None, display_name=None, path=None):
 
 
 def update_broker(user_id, path=None, **fields):
-    allowed = {"username", "display_name", "name", "phone", "zalo",
+    allowed = {"username", "display_name", "name", "pronoun", "phone", "zalo",
                "facebook", "status", "listings_count", "approved_count"}
     sets = ", ".join(f"{k} = ?" for k in fields if k in allowed)
     if not sets:
