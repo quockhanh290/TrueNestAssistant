@@ -574,6 +574,66 @@ def looks_like_query(text):
     return any(kw in t for kw in QUERY_KEYWORDS)
 
 
+# Signals that text is a rental listing (not spam/irrelevant)
+RENTAL_KEYWORDS = [
+    # rental intent
+    "cho thuê", "cho thue", "cần thuê", "can thue", "cho mướn",
+    # property types
+    "căn hộ", "can ho", "chung cư", "chung cu", "nhà", "nha",
+    "phòng", "phong", "villa", "biệt thự", "biet thu",
+    "penthouse", "shophouse", "studio",
+    # specs
+    "pn", "phòng ngủ", "phong ngu", "wc", "toilet",
+    "m2", "m²", "diện tích", "dien tich",
+    # money
+    "tr/tháng", "tr/thang", "triệu", "trieu", "vnd", "đ/tháng",
+    # lease terms
+    "cọc", "coc", "đặt cọc", "hợp đồng", "hop dong",
+]
+
+SPAM_KEYWORDS = [
+    # financial scams
+    "vay tiền", "vay tien", "lãi suất thấp", "coin", "crypto",
+    "đầu tư", "dau tu", "forex", "chứng khoán",
+    # unrelated ads
+    "khuyến mãi", "khuyen mai", "giảm giá sốc", "sale off",
+    "mỹ phẩm", "my pham", "thực phẩm chức năng",
+    # irrelevant
+    "tuyển dụng", "tuyen dung", "việc làm", "viec lam",
+]
+
+
+def is_rental_relevant(text):
+    """Check if text looks like a rental listing.
+
+    Returns (is_relevant: bool, reason: str).
+    Used to auto-reject spam/irrelevant forwards.
+    """
+    if not text or len(text.strip()) < 10:
+        return False, "quá ngắn"
+    t = _norm(text)
+
+    # Explicit spam → reject
+    for kw in SPAM_KEYWORDS:
+        if kw in t:
+            return False, f"chứa từ spam: {kw}"
+
+    # Count rental signals
+    signals = sum(1 for kw in RENTAL_KEYWORDS if kw in t)
+
+    # Need at least 2 rental signals, OR 1 strong signal (price + property)
+    has_price = bool(re.search(r"\d+\s*(?:tr|triệu|k|vnd)", t))
+    has_property = any(kw in t for kw in
+                       ["căn hộ", "can ho", "chung cư", "nhà", "phòng",
+                        "villa", "studio", "penthouse"])
+
+    if signals >= 2:
+        return True, "ok"
+    if has_price and has_property:
+        return True, "ok"
+    return False, "không giống tin cho thuê"
+
+
 def parse_query(text):
     """Extract search filters from a natural-language broker query.
 

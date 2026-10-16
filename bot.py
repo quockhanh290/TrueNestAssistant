@@ -574,6 +574,16 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
 
     # 4. otherwise treat as a fresh listing
+    # spam/relevance check first
+    is_rel, reason = listing_parser.is_rental_relevant(text)
+    if not is_rel:
+        await natural_delay(update)
+        await update.message.reply_text(
+            f"Tin này em thấy {reason}, không giống tin cho thuê nhà 😅\n"
+            f"Anh gửi tin cho thuê giúp em nhé!",
+            reply_markup=MENU_KB,
+        )
+        return
     if db.count_recent_listings(uid, hours=1) >= config.RATE_LIMIT_PER_HOUR:
         await natural_delay(update)
         await update.message.reply_text(
