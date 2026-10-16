@@ -1,19 +1,13 @@
 # TrueNest: start webapp + bot in one command
 # Usage: .\start-all.ps1
-# Token: set $env:TELEGRAM_BOT_TOKEN before running, or edit TOKEN below (local only, don't commit)
+# Token doc 1 lan: tao file token.txt cung folder, paste token vao (file nay ko push len GitHub)
 
-param(
-    [string]$Token = ""
-)
-
-# Priority: -Token param > existing env > value below
-if ($Token) { $env:TELEGRAM_BOT_TOKEN = $Token }
-if (-not $env:TELEGRAM_BOT_TOKEN -or $env:TELEGRAM_BOT_TOKEN -like "*PASTE*") {
-    # Edit this line locally with your token (don't push the real token)
-    $env:TELEGRAM_BOT_TOKEN = "<PASTE_TOKEN_HERE>"
+$tokenFile = Join-Path $PSScriptRoot "token.txt"
+if (Test-Path $tokenFile) {
+    $env:TELEGRAM_BOT_TOKEN = (Get-Content $tokenFile -Raw).Trim()
 }
-if ($env:TELEGRAM_BOT_TOKEN -like "*PASTE*") {
-    Write-Host "Chua co token! Chay: `$env:TELEGRAM_BOT_TOKEN='<token>'; .\start-all.ps1" -ForegroundColor Red
+if (-not $env:TELEGRAM_BOT_TOKEN) {
+    Write-Host "Chua co token! Tao file token.txt va paste token vao." -ForegroundColor Red
     exit 1
 }
 
