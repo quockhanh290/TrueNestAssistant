@@ -119,11 +119,6 @@ async def show_query_detail(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         lines.append(f"Diện tích: {p['area_m2']:g}m²")
     if p.get("furnishing"):
         lines.append(f"Nội thất: {p['furnishing']}")
-    hl = p.get("highlights") or []
-    if hl:
-        lines.append("✨ Điểm nổi bật:")
-        for h in hl:
-            lines.append(f"   • {h}")
     kb = []
     if l["status"] not in ("rented", "negotiating", "deposited", "deleted"):
         kb.append([InlineKeyboardButton("🔑 Đánh dấu đã cho thuê",
@@ -310,19 +305,10 @@ def _detail_content(l, page, filt):
         f"Trạng thái: {STATUS_EMOJI.get(l['status'], '')} "
         f"{STATUS_LABEL.get(l['status'], l['status'])}",
     ]
-    if l.get("status") == "uncertain":
-        lines.append("⚠️ <i>Tin này cần xác nhận lại tình trạng</i>")
-    if l.get("duplicate_of"):
-        lines.append("🔗 <i>Tin trùng (tham khảo)</i>")
     if p.get("area_m2"):
         lines.append(f"Diện tích: {p['area_m2']:g}m²")
     if p.get("furnishing"):
         lines.append(f"Nội thất: {p['furnishing']}")
-    _hl = p.get("highlights") or []
-    if _hl:
-        lines.append("✨ Điểm nổi bật:")
-        for _h in _hl:
-            lines.append(f"   • {_h}")
 
     # completeness score + suggestions (listing's own data only)
     score, missing = completeness_score(l)
@@ -678,20 +664,26 @@ async def _commit_addphotos(uid, chat_id, ctx):
 
 
 async def cmd_cancel_addphoto(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """/huy — cancel 'adding photos' mode, discarding buffered photos."""
+    """/huy — cancel 'adding photos' mode, guided intake, or buffers."""
     uid = update.effective_user.id
     pend = _addphoto_pending.pop(uid, None)
     if pend and pend.get("task"):
         pend["task"].cancel()
+    cancelled = []
     if ctx.user_data.pop("adding_photos", None) is not None or pend:
-        await update.message.reply_text(
-            "Đã hủy, không thêm ảnh nào nhé.", reply_markup=MENU_KB)
-        return
-    # guided intake in progress?
+        cancelled.append("adding_photos")
     if ctx.user_data.pop("guided", None) is not None:
-        _buffers.pop(uid, None)
+        cancelled.append("guided")
+    # Also clear intake buffer if present
+    try:
+        from utils import _buffers
+        if _buffers.pop(uid, None) is not None:
+            cancelled.append("buffer")
+    except ImportError:
+        pass
+    if cancelled:
         await update.message.reply_text(
-            "Đã hủy, không lưu tin nào nhé.", reply_markup=MENU_KB)
+            "Đã hủy rồi nhé 😊", reply_markup=MENU_KB)
 
 
 # ---------------------------------------------------------------- edit listing
@@ -1057,10 +1049,7 @@ async def cmd_edit(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
     db.get_or_create_broker(u.id, u.username, u.full_name)
     await natural_delay(update)
-    items = db.list_broker_listings(u.id, limit=5, offset=0,
-                                     statuses=["submitted", "draft",
-                                               "pending_info", "rented",
-                                               "expired"])
+    items = db.list_broker_listings(u.id, limit=5, offset=0)
     if not items:
         await update.message.reply_text(
             "Anh chưa có tin nào để sửa. Bấm 📝 Gửi tin mới nhé!",

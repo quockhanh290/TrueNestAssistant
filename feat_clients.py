@@ -1009,11 +1009,21 @@ async def client_status_picker(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not c:
         return
     kb = []
-    for st in db.CLIENT_STATUSES:
-        mark = "● " if c.get("status") == st else ""
-        kb.append([InlineKeyboardButton(
-            f"{mark}{CLIENT_STATUS_EMOJI[st]} {CLIENT_STATUS_LABEL[st]}",
-            callback_data=f"client:setstatus:{client_id}:{st}")])
+    # Group into 2 columns for phone readability (was 10 single rows)
+    statuses = [st for st in db.CLIENT_STATUSES if st != "cancelled"]
+    for i in range(0, len(statuses), 2):
+        row = []
+        for st in statuses[i:i+2]:
+            mark = "● " if c.get("status") == st else ""
+            row.append(InlineKeyboardButton(
+                f"{mark}{CLIENT_STATUS_EMOJI[st]} {CLIENT_STATUS_LABEL[st]}",
+                callback_data=f"client:setstatus:{client_id}:{st}"))
+        kb.append(row)
+    # Cancelled on its own row at the bottom
+    mark = "● " if c.get("status") == "cancelled" else ""
+    kb.append([InlineKeyboardButton(
+        f"{mark}{CLIENT_STATUS_EMOJI['cancelled']} {CLIENT_STATUS_LABEL['cancelled']}",
+        callback_data=f"client:setstatus:{client_id}:cancelled")])
     kb.append([InlineKeyboardButton(
         "⬅️ Quay lại", callback_data=f"client:{client_id}:0:a:a")])
     await q.edit_message_text("Đổi trạng thái khách:",
