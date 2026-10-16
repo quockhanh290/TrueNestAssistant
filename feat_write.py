@@ -114,17 +114,47 @@ def generate_post(listing, lang="vi"):
     deposit = p.get("deposit_months")
     n_photos = len(p.get("photos") or [])
 
+    # ---- shared title location: building + district ----
+    _bld = p.get("building_name") or ""
+    _dist = p.get("district") or ""
+    if _bld and _dist:
+        title_loc = f"{_bld}, {_dist}"
+    else:
+        title_loc = _bld or _dist
+
+    # studio: bedrooms and property_type both say "studio" — avoid duplication
+    _is_studio = (br == 0.0) or (ptype == "studio")
+
+    def _deposit_text(lang):
+        if not deposit:
+            return ""
+        n = deposit
+        if lang == "vi":
+            return f"(cọc {n} tháng)"
+        if lang == "en":
+            return f"({n}-month deposit)" if n != 1 else "(1-month deposit)"
+        if lang == "ko":
+            return f"(보증금 {n}개월)"
+        if lang == "zh":
+            return f"(押金{n}个月)"
+        if lang == "ru":
+            return f"(залог {n} мес.)"
+        return ""
+
     def build_vi():
-        title_br = f" {br_vi}" if br_vi else ""
-        lines = [f"🏠 CHO THUÊ {ptype_vi.upper()}{title_br}"
-                 + (f" - {loc}" if loc else "")]
-        lines.append("")
+        br_part = "" if _is_studio else (f" {br_vi}" if br_vi else "")
+        title = f"🏠 Cho thuê {ptype_vi}{br_part}"
+        if title_loc:
+            title += f" — {title_loc}"
+        lines = [title, ""]
+        if desc:
+            lines.append(desc)
+            lines.append("")
         if address:
-            lines.append(f"📍 Địa chỉ: {address}")
+            lines.append(f"📍 {address}")
         if price_vi:
-            lines.append(f"💰 Giá: {price_vi}")
-        if deposit:
-            lines.append(f"🔑 Cọc: {deposit} tháng")
+            dep = _deposit_text("vi")
+            lines.append(f"💰 {price_vi}" + (f" {dep}" if dep else ""))
         specs = []
         if br_vi:
             specs.append(f"🛏️ {br_vi}")
@@ -132,35 +162,38 @@ def generate_post(listing, lang="vi"):
             specs.append(f"🛁 {int(ba)} WC")
         if area:
             specs.append(f"📐 {area:g}m²")
-        if specs:
-            lines.append(" | ".join(specs))
         if furn and furn in FURN_VI:
-            lines.append(f"🛋️ Nội thất: {FURN_VI[furn]}")
+            specs.append(FURN_VI[furn])
+        if specs:
+            lines.append(" · ".join(specs))
+        if amenities:
+            lines.append(f"✨ {', '.join(amenities)}")
         if pet is True:
             lines.append("🐾 Cho nuôi pet")
         elif pet is False:
             lines.append("🐾 Không nuôi pet")
-        if amenities:
-            lines.append(f"✨ Tiện ích: {', '.join(amenities)}")
-        if desc:
-            lines.append("")
-            lines.append(f"📝 {desc}")
         if n_photos:
             lines.append(f"📸 {n_photos} ảnh chi tiết")
         lines.append("")
         if phone:
-            lines.append(f"📞 Liên hệ: {phone} (Zalo/Call)")
+            lines.append(f"📞 {phone} (Zalo/Call)")
         return "\n".join(lines).rstrip()
 
     def build_en():
-        title_br = f" {br_en}" if br_en else ""
-        lines = [f"🏠 FOR RENT{title_br} {ptype_en.upper()}"
-                 + (f" - {loc}" if loc else "")]
-        lines.append("")
+        br_part = "" if _is_studio else (f" {br_en}" if br_en else "")
+        ptype_cap = ptype_en[:1].upper() + ptype_en[1:] if ptype_en else ""
+        title = f"🏠{br_part} {ptype_cap} for Rent"
+        if title_loc:
+            title += f" — {title_loc}"
+        lines = [title, ""]
+        if desc:
+            lines.append(desc)
+            lines.append("")
         if address:
-            lines.append(f"📍 Location: {address}")
+            lines.append(f"📍 {address}")
         if price_en:
-            lines.append(f"💰 Price: {price_en}")
+            dep = _deposit_text("en")
+            lines.append(f"💰 {price_en}" + (f" {dep}" if dep else ""))
         specs = []
         if br_en:
             specs.append(f"🛏️ {br_en}")
@@ -168,35 +201,44 @@ def generate_post(listing, lang="vi"):
             specs.append(f"🛁 {int(ba)} BA")
         if area:
             specs.append(f"📐 {area:g}sqm")
-        if specs:
-            lines.append(" | ".join(specs))
         if furn and furn in FURN_EN:
-            lines.append(f"🛋️ Furnishing: {FURN_EN[furn]}")
+            specs.append(FURN_EN[furn])
+        if specs:
+            lines.append(" · ".join(specs))
+        if amenities:
+            lines.append(f"✨ {', '.join(amenities)}")
         if pet is True:
             lines.append("🐾 Pet-friendly")
         elif pet is False:
             lines.append("🐾 No pets")
-        if amenities:
-            lines.append(f"✨ Amenities: {', '.join(amenities)}")
-        if desc:
-            lines.append("")
-            lines.append(f"📝 {desc}")
         if n_photos:
-            lines.append(f"📸 {n_photos} detailed photos")
+            lines.append(f"📸 {n_photos} detailed photo"
+                         + ("s" if n_photos != 1 else ""))
         lines.append("")
         if phone:
-            lines.append(f"📞 Contact: {phone} (Zalo/Call)")
+            lines.append(f"📞 {phone} (Zalo/Call)")
         return "\n".join(lines).rstrip()
 
     def build_ko():
-        title_br = f" {br_ko}" if br_ko else ""
-        lines = [f"🏠 임대{title_br} {ptype_ko}"
-                 + (f" - {loc}" if loc else "")]
-        lines.append("")
+        br_part = "" if _is_studio else (f" {br_ko}" if br_ko else "")
+        # "Monarchy 2BR 아파트 임대 — Son Tra"
+        if _bld:
+            title = f"🏠 {_bld}{br_part} {ptype_ko} 임대"
+            if _dist:
+                title += f" — {_dist}"
+        elif _dist:
+            title = f"🏠 {_dist}{br_part} {ptype_ko} 임대"
+        else:
+            title = f"🏠{br_part} {ptype_ko} 임대"
+        lines = [title, ""]
+        if desc:
+            lines.append(desc)
+            lines.append("")
         if address:
-            lines.append(f"📍 위치: {address}")
+            lines.append(f"📍 {address}")
         if price_ko:
-            lines.append(f"💰 가격: {price_ko}")
+            dep = _deposit_text("ko")
+            lines.append(f"💰 {price_ko}" + (f" {dep}" if dep else ""))
         specs = []
         if br_ko:
             specs.append(f"🛏️ {br_ko}")
@@ -204,71 +246,75 @@ def generate_post(listing, lang="vi"):
             specs.append(f"🛁 {int(ba)} BA")
         if area:
             specs.append(f"📐 {area:g}sqm")
-        if specs:
-            lines.append(" | ".join(specs))
         if furn and furn in FURN_KO:
-            lines.append(f"🛋️ 가구: {FURN_KO[furn]}")
+            specs.append(FURN_KO[furn])
+        if specs:
+            lines.append(" · ".join(specs))
+        if amenities:
+            lines.append(f"✨ {', '.join(amenities)}")
         if pet is True:
             lines.append("🐾 반려동물 가능")
         elif pet is False:
             lines.append("🐾 반려동물 불가")
-        if amenities:
-            lines.append(f"✨ 편의시설: {', '.join(amenities)}")
-        if desc:
-            lines.append("")
-            lines.append(f"📝 {desc}")
         if n_photos:
             lines.append(f"📸 상세 사진 {n_photos}장")
         lines.append("")
         if phone:
-            lines.append(f"📞 연락처: {phone} (Zalo/Call)")
+            lines.append(f"📞 {phone} (Zalo/Call)")
         return "\n".join(lines).rstrip()
 
     def build_zh():
-        title_br = f" {br_zh}" if br_zh else ""
-        lines = [f"🏠 出租{title_br}{ptype_zh}"
-                 + (f" - {loc}" if loc else "")]
-        lines.append("")
+        br_part = "" if _is_studio else br_zh  # e.g. "2房", no leading space
+        title = f"🏠 出租{br_part}{ptype_zh}"
+        if title_loc:
+            title += f" — {title_loc}"
+        lines = [title, ""]
+        if desc:
+            lines.append(desc)
+            lines.append("")
         if address:
-            lines.append(f"📍 地址: {address}")
+            lines.append(f"📍 {address}")
         if price_zh:
-            lines.append(f"💰 价格: {price_zh}")
+            dep = _deposit_text("zh")
+            lines.append(f"💰 {price_zh}" + (f" {dep}" if dep else ""))
         specs = []
         if br_zh:
             specs.append(f"🛏️ {br_zh}")
         if ba:
-            specs.append(f"🛁 {int(ba)} 卫")
+            specs.append(f"🛁 {int(ba)}卫")
         if area:
             specs.append(f"📐 {area:g}平米")
-        if specs:
-            lines.append(" | ".join(specs))
         if furn and furn in FURN_ZH:
-            lines.append(f"🛋️ 家具: {FURN_ZH[furn]}")
+            specs.append(FURN_ZH[furn])
+        if specs:
+            lines.append(" · ".join(specs))
+        if amenities:
+            lines.append(f"✨ {', '.join(amenities)}")
         if pet is True:
             lines.append("🐾 可养宠物")
         elif pet is False:
             lines.append("🐾 不可养宠物")
-        if amenities:
-            lines.append(f"✨ 设施: {', '.join(amenities)}")
-        if desc:
-            lines.append("")
-            lines.append(f"📝 {desc}")
         if n_photos:
             lines.append(f"📸 {n_photos}张详细照片")
         lines.append("")
         if phone:
-            lines.append(f"📞 联系: {phone} (Zalo/Call)")
+            lines.append(f"📞 {phone} (Zalo/Call)")
         return "\n".join(lines).rstrip()
 
     def build_ru():
-        title_br = f" {br_ru}" if br_ru else ""
-        lines = [f"🏠 АРЕНДА{title_br} {ptype_ru}"
-                 + (f" - {loc}" if loc else "")]
-        lines.append("")
+        br_part = "" if _is_studio else (f" {br_ru}" if br_ru else "")
+        title = f"🏠 Сдаётся{br_part} {ptype_ru}"
+        if title_loc:
+            title += f" — {title_loc}"
+        lines = [title, ""]
+        if desc:
+            lines.append(desc)
+            lines.append("")
         if address:
-            lines.append(f"📍 Адрес: {address}")
+            lines.append(f"📍 {address}")
         if price_ru:
-            lines.append(f"💰 Цена: {price_ru}")
+            dep = _deposit_text("ru")
+            lines.append(f"💰 {price_ru}" + (f" {dep}" if dep else ""))
         specs = []
         if br_ru:
             specs.append(f"🛏️ {br_ru}")
@@ -276,24 +322,21 @@ def generate_post(listing, lang="vi"):
             specs.append(f"🛁 {int(ba)} ван.")
         if area:
             specs.append(f"📐 {area:g}м²")
-        if specs:
-            lines.append(" | ".join(specs))
         if furn and furn in FURN_RU:
-            lines.append(f"🛋️ Мебель: {FURN_RU[furn]}")
+            specs.append(FURN_RU[furn])
+        if specs:
+            lines.append(" · ".join(specs))
+        if amenities:
+            lines.append(f"✨ {', '.join(amenities)}")
         if pet is True:
             lines.append("🐾 Можно с животными")
         elif pet is False:
             lines.append("🐾 Без животных")
-        if amenities:
-            lines.append(f"✨ Удобства: {', '.join(amenities)}")
-        if desc:
-            lines.append("")
-            lines.append(f"📝 {desc}")
         if n_photos:
             lines.append(f"📸 {n_photos} детальных фото")
         lines.append("")
         if phone:
-            lines.append(f"📞 Контакт: {phone} (Zalo/Call)")
+            lines.append(f"📞 {phone} (Zalo/Call)")
         return "\n".join(lines).rstrip()
 
     if lang == "en":
@@ -314,7 +357,7 @@ def generate_post(listing, lang="vi"):
 
 
 async def on_write_post_prompt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """User tapped ✍️ Viết tin FB — pick a listing or enter a new one."""
+    """User tapped ✍️ Viết bài đăng — pick a listing from inventory."""
     q = update.callback_query
     await q.answer()
     uid = q.from_user.id
@@ -325,18 +368,15 @@ async def on_write_post_prompt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     for i, l in enumerate(items, start=1):
         kb.append([InlineKeyboardButton(
             f"{i}. {listing_line(l)}", callback_data=f"write:{l['id']}")])
-    kb.append([InlineKeyboardButton("➕ Tin mới (nhập tay)",
-                                    callback_data="write:new")])
     kb.append([InlineKeyboardButton("⬅️ Menu", callback_data="menu:back")])
     await natural_delay(update)
     if items:
         total = db.count_broker_listings(uid)
-        text = (f"Anh muốn viết tin cho căn nào? "
-                f"Em thấy anh có {total} tin gần đây nè:")
+        text = (f"Anh muốn viết bài đăng cho căn nào trong kho? "
+                f"Em thấy anh có {total} căn nè:")
     else:
-        text = ("Anh chưa có tin nào trong hệ thống. "
-                "Anh gửi thông tin căn hộ cho em nhé — "
-                "giá, địa chỉ, số PN... gửi thoải mái như đăng group là được!")
+        text = ("Anh chưa có căn nào trong kho. "
+                "Bấm 📝 Nhập căn cho thuê mới để thêm căn trước nhé!")
     await q.edit_message_text(text, reply_markup=InlineKeyboardMarkup(kb))
 
 
