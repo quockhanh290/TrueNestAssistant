@@ -19,10 +19,10 @@ log = logging.getLogger("linh")
 # ---------------------------------------------------------------- helpers
 
 MENU_KB = InlineKeyboardMarkup([
-    [InlineKeyboardButton("📝 Gửi tin mới", callback_data="menu:new")],
+    [InlineKeyboardButton("📝 Nhập căn cho thuê mới", callback_data="menu:new")],
     [InlineKeyboardButton("📋 Tin của tôi", callback_data="menu:list:0:s:a"),
      InlineKeyboardButton("👥 Khách hàng", callback_data="menu:clients")],
-    [InlineKeyboardButton("✍️ Viết tin", callback_data="menu:write"),
+    [InlineKeyboardButton("✍️ Viết bài đăng từ căn đã có", callback_data="menu:write"),
      InlineKeyboardButton("📅 Lịch xem", callback_data="menu:viewings")],
     [InlineKeyboardButton("🤝 Liên kết broker", callback_data="menu:match"),
      InlineKeyboardButton("💰 Hoa hồng", callback_data="menu:deals")],
@@ -482,6 +482,21 @@ def get_forward_source(msg):
             pass
         return "tin forward"
     return None
+
+
+def content_hash_for_listing(texts, photos):
+    """sha256 of normalized text + sorted photo file_ids.
+
+    Used for exact-duplicate suggestion (never auto-merge): if a broker
+    forwards the same listing twice, the hashes match.
+    """
+    import hashlib
+    norm_texts = sorted(
+        t.strip().lower() for t in (texts or []) if t and t.strip())
+    norm_photos = sorted(photos or [])
+    blob = "\n".join(norm_texts) + "||" + ",".join(norm_photos)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
 
 # album (media group) reassembly: {f"{uid}:{media_group_id}": {...}}
 # Telegram splits an album into separate messages sharing one media_group_id;
