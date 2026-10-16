@@ -59,8 +59,15 @@
       if (initData || tgUid) {
         // Send both: server validates initData, falls back to tg_user_id
         const parts = ['limit=50'];
-        if (initData) parts.push('init_data_b64=' + btoa(initData).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''));
         if (tgUid) parts.push('tg_user_id=' + tgUid);
+        if (initData) {
+          try {
+            // base64url encode (btoa throws on Unicode, so try/catch)
+            var b64 = btoa(unescape(encodeURIComponent(initData)));
+            b64 = b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+            parts.push('init_data_b64=' + b64);
+          } catch (e) { /* skip initData, tg_user_id is enough */ }
+        }
         url = '/api/listings?' + parts.join('&');
       } else {
         url = `/api/listings?broker_id=${brokerId}&demo=${demo}&limit=50`;
