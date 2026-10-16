@@ -243,6 +243,37 @@ def set_status(broker_id, listing_id, status):
     return {"status": status}, 200
 
 
+def refresh_listing(broker_id, listing_id, claimed_status):
+    """POST /api/listing/<id>/refresh — broker verifies listing status.
+
+    Body: {"status": "available" | "rented"} (Khanh 2026-10-16, revised:
+    refresh is NOT 1-tap — broker must confirm real-world verification).
+    - "available": bump updated_at, reset freshness age to 0, log claim.
+    - "rented": set status to rented, log claim.
+    False "available" claims are penalized (-10 profile points each;
+    3 strikes -> 7-day propose cooldown).
+    """
+    row = db.get_listing(listing_id)
+    if not row or row.get("broker_id") != broker_id:
+        return {"error": "not_found"}, 404
+    if claimed_status == "rented":
+        db.set_listing_status(listing_id, "rented", changed_by="webapp")
+        db.log_refresh_claim(listing_id, broker_id, "rented")
+        return {"ok": True, "status": "rented",
+                "message_vi": "Đã đánh dấu đã cho thuê."}, 200
+    if claimed_status != "available":
+        return {"error": "invalid_status",
+                "error_vi": "Trạng thái không hợp lệ."}, 400
+    if not db.refresh_listing(listing_id, broker_id=broker_id,
+                              claimed_status="available"):
+        return {"error": "not_found"}, 404
+    return {"ok": True, "status": "available", "age_days": 0.0,
+            "freshness_emoji": "🟢", "freshness_label": "Mới",
+            "warning_vi": (
+                "Cập nhật mà không kiểm tra thực tế, nếu bị phát hiện "
+                "sẽ bị trừ điểm uy tín.")}, 200
+
+
 def get_post(broker_id, listing_id, lang="vi"):
     """GET /api/post/<id>?lang=vi"""
     row = db.get_listing(listing_id)
@@ -368,6 +399,36 @@ def list_shares(broker_id):
 
 # ---------------------------------------------------------------- propose flow
 
+# Freshness tiers for propose flow (Khanh 2026-10-16, revised):
+# pushes brokers to keep listing status fresh. (max_age_days, emoji, label,
+# score_multiplier). Listings older than the last tier are excluded like a
+# hard filter and require re-verification.
+# Market reality: listings can legitimately sit 2-3 months, so 30-60d only
+# gets a 0.5 multiplier instead of being hidden.
+FRESHNESS_TIERS = [
+    (7, "🟢", "Mới", 1.0),
+    (14, "🟡", "Cần cập nhật", 0.9),
+    (30, "🟠", "Cũ", 0.7),
+    (60, "🔴", "Rất cũ", 0.5),
+]
+
+
+def freshness_info(row, now=None):
+    """(age_days, emoji, label, multiplier, tier) for a listing row.
+
+    Age is measured from updated_at (last status refresh), falling back to
+    created_at. Returns tier "stale" with multiplier 0 when age > 60 days.
+    """
+    import time
+    now = now if now is not None else time.time()
+    ts = row.get("updated_at") or row.get("created_at") or now
+    age_days = max(0.0, (now - ts) / 86400)
+    for max_age, emoji, label, mult in FRESHNESS_TIERS:
+        if age_days < max_age:
+            return age_days, emoji, label, mult, "fresh"
+    return age_days, "⛔", "Quá cũ", 0.0, "stale"
+
+
 def get_propose(broker_id, request_id):
     """GET /api/propose/<request_id> — broker's propose view data.
 
@@ -399,21 +460,40 @@ def get_propose(broker_id, request_id):
 
     # Score own inventory — hard-filtered FIRST by the lead's hard criteria
     # (Khanh 2026-10-16: no bypass, prevents irrelevant submissions).
+    # Then freshness-filtered: >30-day listings are excluded like a hard
+    # filter; 7-30 day listings get a match-score multiplier (Khanh 2026-10-16).
     rows = db.list_broker_listings(broker_id, limit=200, offset=0)
     eligible, failed_summary = feat_match.filter_hard_criteria(rows, client)
-    scored = []
+    fresh_rows, stale_ids = [], []
     for r in eligible:
+        age_days, emoji, flabel, mult, tier = freshness_info(r, now)
+        if tier == "stale":
+            stale_ids.append(r["id"])
+            continue
+        fresh_rows.append((r, age_days, emoji, flabel, mult))
+    if stale_ids:
+        failed_summary["stale"] = {
+            "count": len(stale_ids),
+            "label": "Quá cũ (>60 ngày)",
+        }
+    scored = []
+    for r, age_days, emoji, flabel, mult in fresh_rows:
         try:
             ms = feat_match.score_match(r, client)
         except Exception:
             ms = 0
+        ms = round(ms * mult, 1)
         p = master_schema.normalize_parsed(r.get("parsed") or {})
         photo_count = len(r.get("photo_file_ids") or [])
         qs, missing_detailed, potential = master_schema.quality_breakdown(
             p, photo_count)
         item = listing_summary(r)
-        item["match_score"] = round(ms, 1)
+        item["match_score"] = ms
         item["quality_score"] = qs
+        item["age_days"] = round(age_days, 1)
+        item["freshness_emoji"] = emoji
+        item["freshness_label"] = flabel
+        item["freshness_mult"] = mult
         # Detailed quality info for improvement suggestions (Khanh 2026-10-16)
         item["quality_missing"] = [
             {"label": label, "weight": w} for label, w in missing_detailed
@@ -453,9 +533,12 @@ def get_propose(broker_id, request_id):
         },
         "has_slot": has_slot,
         "slot_released": slot_released,
+        "propose_cooldown_until": db.get_refresh_cooldown(broker_id),
         "already_submitted": already_submitted,
         "listings": scored,
         "failed_summary": failed_summary,
+        "stale_count": len(stale_ids),
+        "stale_ids": stale_ids,
         "max_listings": db.PROPOSE_MAX_LISTINGS,
     }, 200
 
@@ -490,6 +573,18 @@ def get_xbroker_requests(broker_id):
 def submit_propose(broker_id, request_id, listing_ids):
     """POST /api/propose/<request_id> — save broker's proposed listings."""
     import time
+
+    # Reputation cooldown (Khanh 2026-10-16): 3 false refresh claims ->
+    # 7-day propose ban.
+    cooldown_until = db.get_refresh_cooldown(broker_id)
+    if cooldown_until:
+        import datetime
+        until = datetime.datetime.fromtimestamp(cooldown_until).strftime(
+            "%d/%m/%Y")
+        return {"error": "propose_cooldown",
+                "error_vi": (
+                    "Anh đang bị hạn chế đề xuất đến " + until +
+                    " do báo sai trạng thái tin 3 lần.")}, 403
 
     req = db.get_propose_request(request_id)
     if not req:
