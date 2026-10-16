@@ -1,6 +1,9 @@
 """Da Nang building catalog: load, find, fuzzy search, add.
 
-Source: data/building_catalog.json (curated by Khanh).
+Sources (merged):
+- data/building_catalog.json (curated by Khanh + broker-added entries) — wins on dedupe
+- data/danang_locations.json -> projects_buildings (952 OSM buildings, junk-filtered)
+
 Matching is accent-insensitive (NFD normalize) and covers aliases.
 """
 import json
@@ -19,25 +22,47 @@ def _norm(s):
     return stripped.replace("đ", "d").replace("Đ", "D").lower()
 
 
+def _prep_entry(b):
+    keys = [_norm(b.get("name", ""))]
+    keys += [_norm(a) for a in b.get("aliases", []) if a]
+    keys = [k for k in keys if k]
+    keys.sort(key=len, reverse=True)  # most specific first
+    b["_keys"] = keys
+    # word-boundary patterns: "ori garden" must not match "hiyori garden"
+    b["_patterns"] = [
+        (re.compile(r"(?<![a-z0-9])" + re.escape(k) + r"(?![a-z0-9])"),
+         len(k))
+        for k in keys
+    ]
+    return b
+
+
 def load_catalog():
-    """Load (and cache) the building list. Each entry gets _keys for matching."""
+    """Load (and cache) the merged building list.
+
+    User catalog first (Khanh's 57 + broker-added), then the 952 OSM
+    buildings, deduped by normalized name — user entries win.
+    """
     global _CATALOG
     if _CATALOG is None:
         with open(_CATALOG_PATH, encoding="utf-8") as f:
             data = json.load(f)
-        entries = data.get("buildings", [])
-        for b in entries:
-            keys = [_norm(b.get("name", ""))]
-            keys += [_norm(a) for a in b.get("aliases", []) if a]
-            keys = [k for k in keys if k]
-            keys.sort(key=len, reverse=True)  # most specific first
-            b["_keys"] = keys
-            # word-boundary patterns: "ori garden" must not match "hiyori garden"
-            b["_patterns"] = [
-                (re.compile(r"(?<![a-z0-9])" + re.escape(k) + r"(?![a-z0-9])"),
-                 len(k))
-                for k in keys
-            ]
+        entries = [_prep_entry(b) for b in data.get("buildings", [])]
+        seen = {_norm(b.get("name", "")) for b in entries}
+        # merge OSM catalog buildings (junk already filtered in locations.py)
+        try:
+            import locations as _loc
+            for p in _loc.catalog_buildings():
+                if _norm(p["name"]) in seen:
+                    continue
+                seen.add(_norm(p["name"]))
+                entries.append(_prep_entry({
+                    "name": p["name"],
+                    "aliases": [],
+                    "source": "osm",
+                }))
+        except Exception:
+            pass
         _CATALOG = entries
     return _CATALOG
 
