@@ -147,6 +147,17 @@ class Handler(BaseHTTPRequestHandler):
         body = self._body()
         return self._api_put(broker_id, path[len("/api/"):], query, body)
 
+    def do_POST(self):
+        parsed = urlparse(self.path)
+        query = dict(parse_qsl(parsed.query))
+        path = parsed.path
+        if not path.startswith("/api/"):
+            return self._json(404, {"error": "not_found"})
+        broker_id = self._auth(query)
+        if not broker_id:
+            return self._json(401, {"error": "unauthorized"})
+        return self._api_post(broker_id, path[len("/api/"):], query)
+
     # -- static -------------------------------------------------------
     def _static(self, name):
         safe = os.path.normpath(name).lstrip("/")
@@ -193,6 +204,9 @@ class Handler(BaseHTTPRequestHandler):
             data, code = api.get_post(broker_id, parts[1],
                                       lang=query.get("lang", "vi"))
             return self._json(code, data)
+        if parts[0] == "trial" and len(parts) == 2:
+            data, code = api.get_trial(broker_id, parts[1])
+            return self._json(code, data)
         return self._json(404, {"error": "not_found"})
 
     def _api_put(self, broker_id, rest, query, body):
@@ -209,6 +223,13 @@ class Handler(BaseHTTPRequestHandler):
             data, code = api.put_post(broker_id, parts[1],
                                       body.get("lang", "vi"),
                                       body.get("text", ""))
+            return self._json(code, data)
+        return self._json(404, {"error": "not_found"})
+
+    def _api_post(self, broker_id, rest, query):
+        parts = rest.split("/")
+        if parts[0] == "trial" and len(parts) == 3 and parts[2] == "use":
+            data, code = api.use_trial(broker_id, parts[1])
             return self._json(code, data)
         return self._json(404, {"error": "not_found"})
 
