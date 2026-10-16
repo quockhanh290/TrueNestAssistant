@@ -70,6 +70,80 @@
       .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
 
+  // ---------- trial / upsell helpers ----------
+  var TIER_LABEL = { pro: "Pro 💎", max: "Max 💎💎" };
+  var TIER_PRICE = { pro: "99k/tháng", max: "199k/tháng" };
+  var TRIAL_FEATURE_NAMES = {
+    xbroker_match: "Match liên broker",
+    send2client: "Gửi tin cho khách",
+  };
+  var _trialCache = {};
+
+  function trialCheck(feature) {
+    // GET /api/trial/<feature> — cached per session; use trialRefresh() to bust.
+    if (_trialCache[feature]) return Promise.resolve(_trialCache[feature]);
+    return api("/api/trial/" + feature).then(function (d) {
+      _trialCache[feature] = d;
+      return d;
+    });
+  }
+  function trialRefresh(feature) {
+    if (feature) delete _trialCache[feature];
+    else _trialCache = {};
+  }
+  function trialUse(feature) {
+    // POST /api/trial/<feature>/use — consume one trial use.
+    return api("/api/trial/" + feature + "/use", { method: "POST" })
+      .then(function (d) {
+        trialRefresh(feature);
+        return d;
+      });
+  }
+  function trialBadgeHtml(trial) {
+    // "Dùng thử: còn X/3 lượt" — hidden when unlimited (remaining === -1).
+    if (!trial || trial.remaining < 0) return "";
+    return '<span class="trial-badge">🎁 Dùng thử: còn ' +
+      trial.remaining + "/" + trial.limit + " lượt</span>";
+  }
+  function showUpgradeModal(requiredTier, feature) {
+    var old = document.getElementById("upgrade-modal");
+    if (old) old.remove();
+    var fname = TRIAL_FEATURE_NAMES[feature] || "Tính năng này";
+    var label = TIER_LABEL[requiredTier] || requiredTier;
+    var price = TIER_PRICE[requiredTier] || "";
+    var m = document.createElement("div");
+    m.id = "upgrade-modal";
+    m.className = "modal-overlay";
+    m.innerHTML =
+      '<div class="modal">' +
+      '<div class="modal-title">🔒 Hết lượt dùng thử</div>' +
+      '<div class="modal-body">' + esc(fname) + " cần gói <b>" + esc(label) +
+      "</b>" + (price ? " (" + esc(price) + ")" : "") + ".</div>" +
+      '<button class="btn btn-primary" id="um-upgrade">⭐ Nâng cấp ngay</button>' +
+      '<button class="btn" id="um-later">Để sau</button>' +
+      "</div>";
+    document.body.appendChild(m);
+    document.getElementById("um-later").onclick = function () { m.remove(); };
+    document.getElementById("um-upgrade").onclick = function () {
+      m.remove();
+      // Broker completes the upgrade inside the bot chat (/premium flow).
+      toast("Mở bot và gõ /premium để nâng cấp ⭐");
+      if (tg && tg.close) { setTimeout(function () { tg.close(); }, 1200); }
+    };
+    m.onclick = function (e) { if (e.target === m) m.remove(); };
+  }
+  function trialGate(feature, fn) {
+    // Check trial before running fn. Shows upgrade modal when exhausted.
+    // fn receives the trial status object.
+    return trialCheck(feature).then(function (t) {
+      if (!t.allowed) {
+        showUpgradeModal(t.required_tier, feature);
+        return null;
+      }
+      return fn(t);
+    }).catch(function () { toast("Không kiểm tra được lượt dùng thử"); });
+  }
+
   // ---------- list view ----------
   var state = { q: "", bedrooms: "", status: "", items: [] };
 
