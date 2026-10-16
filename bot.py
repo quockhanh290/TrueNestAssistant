@@ -41,6 +41,7 @@ import feat_evening
 import feat_payment
 import feat_premium
 import feat_sendclient
+import hints
 from utils import (
     MENU_KB, STATUS_EMOJI, STATUS_LABEL, LIST_FILTERS,
     CLIENT_STATUS_EMOJI, CLIENT_STATUS_LABEL,
@@ -782,8 +783,53 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     asyncio.create_task(feat_intake._flush_after(uid, ctx))
 
 
+async def _maybe_show_hint(update: Update, ctx: ContextTypes.DEFAULT_TYPE,
+                         menu_data: str, handler_coro):
+    """Show first-time hint for a menu feature, or run handler directly.
+
+    Returns True if hint was shown (handler NOT run yet).
+    The hint has [Bắt đầu →] which marks seen and re-dispatches
+    to the original menu_data, and [Để sau] which goes back to menu.
+    """
+    q = update.callback_query
+    uid = q.from_user.id
+    hint_key = hints.MENU_HINT_MAP.get(menu_data)
+    if hint_key and hints.should_show_hint(uid, hint_key):
+        text = hints.get_hint_text(hint_key)
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("Bắt đầu →",
+                                  callback_data=f"hint:go:{menu_data}")],
+            [InlineKeyboardButton("Để sau", callback_data="hint:skip")],
+        ])
+        # remember which hint is pending so hint:skip can mark it seen
+        ctx.user_data["pending_hint_key"] = hint_key
+        await q.edit_message_text(text, reply_markup=kb, parse_mode="HTML")
+        return True
+    await handler_coro()
+    return False
+
+
 async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     data = update.callback_query.data
+    # hint proceed/skip — handle before normal dispatch
+    if data.startswith("hint:go:"):
+        original = data[len("hint:go:"):]
+        hint_key = hints.MENU_HINT_MAP.get(original)
+        if hint_key:
+            hints.mark_seen(update.callback_query.from_user.id, hint_key)
+        ctx.user_data.pop("pending_hint_key", None)
+        # re-dispatch to the original menu action (hint now marked seen,
+        # so it goes straight to the handler)
+        update.callback_query.data = original
+        await on_callback(update, ctx)
+        return
+    if data == "hint:skip":
+        # user dismissed the hint — mark seen so we don't nag again
+        pending = ctx.user_data.pop("pending_hint_key", None)
+        if pending:
+            hints.mark_seen(update.callback_query.from_user.id, pending)
+        await show_menu(update, ctx)
+        return
     if data == "menu:new":
         await feat_intake.on_new_listing_prompt(update, ctx)
     elif data.startswith("menu:list:"):
@@ -791,7 +837,9 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("flt:"):
         await feat_listings.show_filter_picker(update, ctx)
     elif data == "menu:write":
-        await feat_write.on_write_post_prompt(update, ctx)
+        await _maybe_show_hint(
+            update, ctx, data,
+            lambda: feat_write.on_write_post_prompt(update, ctx))
     elif data == "write:new":
         await feat_write.on_write_new(update, ctx)
     elif data.startswith("writeview:"):
@@ -811,7 +859,9 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     elif data == "menu:help":
         await show_help(update, ctx)
     elif data == "menu:profile":
-        await show_profile(update, ctx)
+        await _maybe_show_hint(
+            update, ctx, data,
+            lambda: show_profile(update, ctx))
     elif data == "menu:back":
         await show_menu(update, ctx)
     elif data == "premium:plans":
@@ -821,15 +871,25 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     elif data == "premium:paid":
         await feat_premium.premium_paid_cb(update, ctx)
     elif data == "menu:clients":
-        await feat_clients.show_clients(update, ctx)
+        await _maybe_show_hint(
+            update, ctx, data,
+            lambda: feat_clients.show_clients(update, ctx))
     elif data == "menu:premium":
-        await feat_premium.cmd_premium(update, ctx)
+        await _maybe_show_hint(
+            update, ctx, data,
+            lambda: feat_premium.cmd_premium(update, ctx))
     elif data == "menu:match":
-        await feat_match.match_requests_list(update, ctx)
+        await _maybe_show_hint(
+            update, ctx, data,
+            lambda: feat_match.match_requests_list(update, ctx))
     elif data == "menu:deals":
-        await feat_deals.cmd_commission(update, ctx)
+        await _maybe_show_hint(
+            update, ctx, data,
+            lambda: feat_deals.cmd_commission(update, ctx))
     elif data == "menu:templates":
-        await feat_templates.tpl_list_cb(update, ctx)
+        await _maybe_show_hint(
+            update, ctx, data,
+            lambda: feat_templates.tpl_list_cb(update, ctx))
     elif data == "stray:yes":
         await feat_intake.stray_confirm_yes(update, ctx)
     elif data == "stray:new":
@@ -868,14 +928,16 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     elif data == "guided:skip":
         await feat_intake.guided_skip(update, ctx)
     elif data == "menu:viewings":
-        if not feat_premium.requires_tier(update.callback_query.from_user.id,
-                                          "viewings"):
-            await update.callback_query.answer()
-            await feat_premium.send_gate(update.callback_query, "viewings",
-                                         update.callback_query.from_user.id,
-                                         edit=True)
-        else:
-            await feat_viewings.cmd_viewings_cb(update, ctx)
+        async def _viewings_flow():
+            if not feat_premium.requires_tier(update.callback_query.from_user.id,
+                                              "viewings"):
+                await update.callback_query.answer()
+                await feat_premium.send_gate(update.callback_query, "viewings",
+                                             update.callback_query.from_user.id,
+                                             edit=True)
+            else:
+                await feat_viewings.cmd_viewings_cb(update, ctx)
+        await _maybe_show_hint(update, ctx, data, _viewings_flow)
     elif data.startswith("vw:"):
         act, payload = _parse_vw_cb(data)
         if act == "ok":
