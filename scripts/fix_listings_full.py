@@ -5,6 +5,7 @@ import sqlite3
 import json
 import os
 import random
+import time
 
 db_path = os.environ.get("BOT_DB_PATH", "broker_bot.db")
 conn = sqlite3.connect(db_path)
@@ -55,8 +56,8 @@ for row in c.fetchall():
 
     if updated:
         c.execute(
-            "UPDATE tg_listings SET parsed = ?, updated_at = datetime('now') WHERE id = ?",
-            (json.dumps(p, ensure_ascii=False), lid)
+            "UPDATE tg_listings SET parsed = ?, updated_at = ? WHERE id = ?",
+            (json.dumps(p, ensure_ascii=False), time.time(), lid)
         )
         fixed += 1
 
