@@ -32,9 +32,13 @@ input::placeholder{color:#7f90a1}
 /* Telegram + iOS safe areas */
 .main-wrap { padding-top: env(safe-area-inset-top); }
 </style>
+
+<style>
+.sticky-header { position: sticky; top: 0; z-index: 50; background: #071420; }
+</style>
 </head>
 <body>
-<div class="main-wrap" style="width:100%;max-width:420px;margin:0 auto;min-height:100vh;background:#071420">
+<div class="main-wrap" style="width:100%;max-width:420px;margin:0 auto;min-height:100vh;background:#071420"><div class="sticky-header">
 
 <helmet>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap">
@@ -80,7 +84,7 @@ input::placeholder{color:#7f90a1}
 <button type="button" style="flex: none; height: 36px; padding: 0 16px 0 12px; background: none; border: 0; color: #93a3b3; font: 500 13px/18px 'Be Vietnam Pro', sans-serif; white-space: nowrap">Xoá tất cả</button>
 </div>
 
-<div style="<div id="cards" style="display: flex; flex-direction: column; gap: 10px; padding-bottom: 88px; padding-left: 16px; padding-right: 16px;"></div>
+<div style="</div><div id="debug" style="padding:8px 16px;color:#7f90a1;font:400 11px/14px monospace;word-break:break-all"></div><div id="cards" style="display: flex; flex-direction: column; gap: 10px; padding-bottom: 88px; padding-left: 16px; padding-right: 16px;"></div>
 
 
 </div>
@@ -175,6 +179,9 @@ input::placeholder{color:#7f90a1}
   }
   
   async function load() {
+    const dbg = document.getElementById('debug');
+    const url = apiUrl('/api/listings');
+    if (dbg) dbg.textContent = 'API: ' + url;
     const box = document.getElementById('cards');
     try {
       const res = await fetch(apiUrl('/api/listings'));
@@ -187,7 +194,8 @@ input::placeholder{color:#7f90a1}
       }
       box.innerHTML = items.map(cardHtml).join('');
     } catch(e) {
-      box.innerHTML = '<div style="text-align:center;color:#7f90a1;padding:48px 16px">Không tải được. Mở lại từ bot nhé.</div>';
+      if (dbg) dbg.textContent += ' | ERROR: ' + e.message;
+      box.innerHTML = '<div style="text-align:center;color:#7f90a1;padding:48px 16px">Lỗi: ' + esc(e.message) + '</div>';
     }
   }
   
