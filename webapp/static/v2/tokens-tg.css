@@ -1,0 +1,155 @@
+/* TrueNest v2 - design tokens (tầng 1).
+ * Hướng 17/10: giao diện theo HOÀN TOÀN theme Telegram của người dùng (giống mini app BotFather).
+ * Mỗi token ngữ nghĩa lấy từ biến --tg-theme-* do Telegram đặt; nếu chưa có (ngoài Telegram) thì dùng bộ
+ * dự phòng --fb-*: một bộ tối và một bộ sáng giống Telegram mặc định, chọn theo data-scheme
+ * (platform.js đặt theo Telegram.colorScheme, hoặc prefers-color-scheme khi chạy ngoài Telegram).
+ * Ngoại lệ duy nhất có màu riêng: màu trạng thái (--st-*, --c-good/warn): bộ nhỏ, đủ sáng/tối, không lấn màu nút.
+ * Cách đọc tên: --c-* màu · --f-* chữ · --s-* khoảng cách · --r-* bo góc · --sh-* đổ bóng · --z-* lớp.
+ */
+
+/* ---- Bộ dự phòng: Telegram tối (mặc định) ---- */
+:root {
+  color-scheme: dark;
+  --fb-bg:          #212121;
+  --fb-secondary:   #0f0f0f;
+  --fb-section:     #1c1c1d;
+  --fb-section-hd:  #6ab3f3;
+  --fb-separator:   #2c2c2e;
+  --fb-text:        #ffffff;
+  --fb-hint:        #8d8e99;
+  --fb-subtitle:    #98a2ae;
+  --fb-link:        #6ab3f3;
+  --fb-accent:      #6ab2f2;
+  --fb-button:      #2ea6ff;
+  --fb-button-text: #ffffff;
+  --fb-destructive: #ec3942;
+  --fb-header:      #212121;
+  /* Trạng thái: nền / viền / chữ */
+  --st-open-bg: rgba(76, 175, 80, 0.16);   --st-open-bd: rgba(76, 175, 80, 0.55);   --st-open-fg: #7bdc75;
+  --st-soon-bg: rgba(106, 179, 243, 0.16); --st-soon-bd: rgba(106, 179, 243, 0.55); --st-soon-fg: #8cc4f7;
+  --st-rented-bg: rgba(141, 142, 153, 0.16); --st-rented-bd: rgba(141, 142, 153, 0.5); --st-rented-fg: #a9aab4;
+  --st-attn-bg: rgba(255, 176, 32, 0.16);  --st-attn-bd: rgba(255, 176, 32, 0.55);  --st-attn-fg: #ffb020;
+  --c-good: #7bdc75;
+  --c-warn: #ffb020;
+  --c-scrim: rgba(0, 0, 0, 0.6);
+  --sh-sheet: 0 -10px 30px rgba(0, 0, 0, 0.5);
+}
+:root[data-scheme="light"] {
+  color-scheme: light;
+  --fb-bg:          #ffffff;
+  --fb-secondary:   #efeff4;
+  --fb-section:     #ffffff;
+  --fb-section-hd:  #6d6d72;
+  --fb-separator:   #d9d9de;
+  --fb-text:        #000000;
+  --fb-hint:        #8a8a8e;
+  --fb-subtitle:    #6d6d72;
+  --fb-link:        #2481cc;
+  --fb-accent:      #168acd;
+  --fb-button:      #40a7e3;
+  --fb-button-text: #ffffff;
+  --fb-destructive: #d14e4e;
+  --fb-header:      #ffffff;
+  --st-open-bg: rgba(46, 125, 50, 0.10);   --st-open-bd: rgba(46, 125, 50, 0.45);   --st-open-fg: #2e7d32;
+  --st-soon-bg: rgba(36, 129, 204, 0.10);  --st-soon-bd: rgba(36, 129, 204, 0.45);  --st-soon-fg: #1c6fb0;
+  --st-rented-bg: rgba(110, 110, 115, 0.10); --st-rented-bd: rgba(110, 110, 115, 0.4); --st-rented-fg: #5f5f64;
+  --st-attn-bg: rgba(176, 108, 0, 0.10);   --st-attn-bd: rgba(176, 108, 0, 0.45);   --st-attn-fg: #9a5b00;
+  --c-good: #2e7d32;
+  --c-warn: #9a5b00;
+  --c-scrim: rgba(0, 0, 0, 0.35);
+  --sh-sheet: 0 -10px 30px rgba(0, 0, 0, 0.15);
+}
+
+:root {
+  /* ---- Màu ngữ nghĩa: giao diện chỉ dùng nhóm này ---- */
+  --c-bg:            var(--tg-theme-secondary-bg-color, var(--fb-secondary));   /* nền sau các cụm */
+  --c-surface:       var(--tg-theme-section-bg-color, var(--fb-section));       /* cụm dòng, thẻ, ô nhập */
+  --c-surface-quiet: var(--tg-theme-bg-color, var(--fb-bg));
+  --c-header-bg:     var(--tg-theme-header-bg-color, var(--fb-header));
+  --c-border:        var(--tg-theme-section-separator-color, var(--fb-separator));
+  --c-section-title: var(--tg-theme-section-header-text-color, var(--fb-section-hd));
+  --c-text:          var(--tg-theme-text-color, var(--fb-text));
+  --c-text-2:        var(--c-text);
+  --c-text-3:        var(--tg-theme-subtitle-text-color, var(--fb-subtitle));
+  --c-text-quiet:    var(--c-text-3);
+  --c-muted:         var(--tg-theme-hint-color, var(--fb-hint));
+  --c-dim:           var(--c-muted);
+  --c-placeholder:   var(--c-muted);
+  --c-dot:           var(--c-muted);
+  --c-accent:        var(--tg-theme-link-color, var(--fb-link));
+  --c-accent-text:   var(--tg-theme-accent-text-color, var(--fb-accent));
+  --c-primary:       var(--tg-theme-button-color, var(--fb-button));
+  --c-on-primary:    var(--tg-theme-button-text-color, var(--fb-button-text));
+  --c-bad:           var(--tg-theme-destructive-text-color, var(--fb-destructive));
+
+  /* Dẫn xuất (pha loãng từ màu theme, nên đổi theo theme) */
+  --c-surface-thumb:       color-mix(in srgb, var(--c-text) 9%, var(--c-surface));
+  --c-surface-thumb-quiet: color-mix(in srgb, var(--c-text) 6%, var(--c-surface));
+  --c-surface-badge:       var(--c-surface);
+  --c-thumb-fg:            var(--c-muted);
+  --c-accent-soft:   color-mix(in srgb, var(--c-accent) 14%, transparent);
+  --c-chip-bg:       color-mix(in srgb, var(--c-primary) 14%, transparent);
+  --c-chip-border:   color-mix(in srgb, var(--c-primary) 35%, transparent);
+  --c-primary-ring:  color-mix(in srgb, var(--c-primary) 60%, transparent);
+  --c-icon-btn-bg:   color-mix(in srgb, var(--c-text) 8%, transparent);
+  --c-skel-hi:       color-mix(in srgb, var(--c-text) 8%, var(--c-surface));
+  --c-good-soft:     color-mix(in srgb, var(--c-good) 14%, transparent);
+  --c-bad-soft:      color-mix(in srgb, var(--c-bad) 14%, transparent);
+  --c-warn-soft:     color-mix(in srgb, var(--c-warn) 14%, transparent);
+  --c-warn-line:     color-mix(in srgb, var(--c-warn) 34%, transparent);
+  --c-warn-card:     color-mix(in srgb, var(--c-warn) 45%, transparent);
+
+  /* ---- Chữ: phông hệ thống; số dùng tabular-nums ở nơi hiển thị tiền/giờ ---- */
+  --f-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --f-mono: var(--f-body);
+  --f-num:  var(--f-body);
+
+  --t-title:   600 17px/24px var(--f-body);
+  --t-card:    600 15px/22px var(--f-body);
+  --t-price:   600 17px/22px var(--f-num);
+  --t-body:    400 14px/20px var(--f-body);
+  --t-input:   400 16px/22px var(--f-body);
+  --t-meta:    500 13px/18px var(--f-body);
+  --t-quiet:   400 13px/18px var(--f-body);
+  --t-chip:    500 14px/18px var(--f-body);
+  --t-badge:   600 11px/14px var(--f-body);
+  --t-score:   600 11px/14px var(--f-mono);
+  --t-count:   500 13px/18px var(--f-body);
+  --t-mono-sm: 600 12px/16px var(--f-mono);
+  --t-section: 500 13px/18px var(--f-body);
+
+  /* ---- Khoảng cách / kích thước ---- */
+  --s-1: 4px;  --s-2: 8px;  --s-3: 12px;  --s-4: 16px;  --s-5: 24px;
+  --gutter: 16px;
+  --app-max: 420px;
+  --header-h: 52px;
+  --tap: 44px;
+  --field-h: 46px;
+  --chip-h: 36px;
+  --thumb-w: 112px;
+  --thumb-min-h: 100px;
+
+  /* ---- Bo góc ---- */
+  --r-card: 12px;
+  --r-field: 10px;
+  --r-btn: 10px;
+  --r-thumb: 8px;
+  --r-tag: 6px;
+  --r-pill: 9999px;
+
+  --z-sticky: 50; --z-sheet: 200; --z-toast: 300;
+
+  /* ---- Vùng an toàn ----
+   * Telegram (Bot API 8.0+) đặt --tg-safe-area-inset-* và --tg-content-safe-area-inset-*;
+   * trình duyệt thường dùng env(safe-area-inset-*). Lấy lớn hơn của hai nguồn rồi cộng vùng nội dung của Telegram.
+   */
+  --safe-top:    calc(max(env(safe-area-inset-top, 0px),    var(--tg-safe-area-inset-top, 0px))    + var(--tg-content-safe-area-inset-top, 0px));
+  --safe-bottom: calc(max(env(safe-area-inset-bottom, 0px), var(--tg-safe-area-inset-bottom, 0px)) + var(--tg-content-safe-area-inset-bottom, 0px));
+  --safe-left:   max(env(safe-area-inset-left, 0px),  var(--tg-safe-area-inset-left, 0px));
+  --safe-right:  max(env(safe-area-inset-right, 0px), var(--tg-safe-area-inset-right, 0px));
+}
+
+:root { --motion: 160ms; }
+@media (prefers-reduced-motion: reduce) {
+  :root { --motion: 0s; }
+}

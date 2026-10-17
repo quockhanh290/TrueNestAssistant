@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>TrueNest</title>
+<!--
+  Trang vào duy nhất của mini app v2. Máy chủ trả tệp này cho mọi đường dẫn /v2/... không phải tệp thật;
+  router (router.js) đọc đường dẫn và dựng đúng trang. Điều hướng: trang chính -> trang con -> chi tiết,
+  không có thanh tab dưới (docs/design/navigation-2026-10-17.md).
+  Bốn tầng: tokens-tg.css -> api2.js -> platform.js (nơi duy nhất đọc đối tượng nền tảng) -> giao diện.
+  Đường dẫn tuyệt đối /static/v2/... vì trang này được phục vụ ở nhiều đường dẫn sâu.
+-->
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="stylesheet" href="/static/v2/tokens-tg.css">
+<link rel="stylesheet" href="/static/v2/app2.css">
+</head>
+<body>
+<main class="app" id="app"></main>
+<script src="/static/v2/platform.js"></script>
+<script src="/static/v2/api2.js"></script>
+<script src="/static/v2/ui2.js"></script>
+<script src="/static/v2/router.js"></script>
+<script src="/static/v2/pages-hub.js"></script>
+<script src="/static/v2/pages-listings.js"></script>
+<script src="/static/v2/pages-lists.js"></script>
+<script src="/static/v2/pages-static.js"></script>
+<script>
+  TrueNestPlatform.init();
+  TrueNestApp.start(document.getElementById('app'));
+</script>
+</body>
+</html>

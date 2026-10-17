@@ -51,6 +51,10 @@ MIME = {
     ".png": "image/png",
     ".jpg": "image/jpeg",
     ".svg": "image/svg+xml",
+    ".webp": "image/webp",
+    ".woff2": "font/woff2",
+    ".woff": "font/woff",
+    ".ico": "image/x-icon",
 }
 
 
@@ -159,8 +163,10 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith("/static/"):
             return self._static(path[len("/static/"):])
         # V2 Stitch UI (Khanh 2026-10-16) — new design system
-        if path == "/v2/" or path == "/v2":
-            return self._static("v2/listings.html")
+        # Every /v2/... path serves the SPA entry page (client-side router),
+        # unless it names a real file under static/v2/.
+        if path == "/v2" or path.startswith("/v2/"):
+            return self._v2(path[len("/v2"):])
         if path == "/api/health":
             return self._json(200, {"ok": True})
 
@@ -218,15 +224,28 @@ class Handler(BaseHTTPRequestHandler):
         return self._api_post(broker_id, path[len("/api/"):], query, body)
 
     # -- static -------------------------------------------------------
-    def _static(self, name):
-        # Resolve AFTER joining: normpath on the bare name kept a leading
-        # "..", and the joined "static/../.." string still passed the
-        # prefix check, serving token.txt and broker_bot.db.
+    @staticmethod
+    def _resolve(name):
+        """(full_path, inside_static). Resolve AFTER joining: normpath on the
+        bare name kept a leading "..", and the joined "static/../.." string
+        still passed the prefix check, serving token.txt and broker_bot.db."""
         full = os.path.realpath(os.path.join(STATIC_DIR, name.lstrip("/\\")))
         try:
             inside = os.path.commonpath([full, STATIC_DIR]) == STATIC_DIR
         except ValueError:  # another drive, e.g. "C:/..."
             inside = False
+        return full, inside
+
+    def _v2(self, rest):
+        full, inside = self._resolve("v2/" + rest.lstrip("/"))
+        if not inside:
+            return self._json(404, {"error": "not_found"})
+        if os.path.isfile(full):
+            return self._static("v2/" + rest.lstrip("/"))
+        return self._static("v2/index.html")
+
+    def _static(self, name):
+        full, inside = self._resolve(name)
         if not inside or not os.path.isfile(full):
             return self._json(404, {"error": "not_found"})
         ext = os.path.splitext(full)[1].lower()
@@ -283,6 +302,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(code, data)
         if parts[0] == "xbroker" and len(parts) == 1:
             data, code = api.get_xbroker_requests(broker_id)
+            return self._json(code, data)
+        if parts[0] == "today" and len(parts) == 1:
+            data, code = api.get_today(broker_id)
             return self._json(code, data)
         # ---- clients / deals / profile (api_clients_deals) ----
         if parts[0] == "clients" and len(parts) == 1:
