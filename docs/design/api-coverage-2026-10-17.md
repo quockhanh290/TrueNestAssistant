@@ -611,3 +611,19 @@ Số giờ công: tôi chưa ước lượng (không có số đo năng suất t
 | Q10 | Lượt thử trừ ở đâu? | **A.** "gửi cho khách" trừ ở cả bot và web; "liên broker" trừ khi giữ chỗ. **B.** giữ như cũ (web trừ, bot không; liên broker không ai trừ) | **A.** Hiện tại cùng một hành động có giá khác nhau tuỳ làm ở đâu |
 | Q11 | Các tính năng chỉ có trên màn Stitch (mục 1.23) | **A.** bỏ khỏi màn. **B.** giữ dạng "Sắp có" cho vài cái. **C.** đưa vào kế hoạch | **A** cho số bịa và tính năng tiền/pháp lý; **B** cho đăng nhóm Telegram và tỉ lệ chốt (làm được bằng dữ liệu đang có) |
 | Q12 | Liên broker (nhóm 8) có làm ngay không? | **A.** làm, kèm sửa bot dùng chung hàm giữ chỗ. **B.** trên web chỉ xem và đề xuất khi đã giữ chỗ qua nhóm Telegram | **B** cho đợt này. Giữ chỗ trên web buộc phải sửa luồng bot đang chạy (danh sách tạm trong RAM), rủi ro hai đường cùng cấp chỗ. Làm A khi có test hai tiến trình |
+
+## 7. Quyết định của chủ dự án (17/10/2026)
+
+| Câu | Quyết định |
+|---|---|
+| Q1 Ảnh căn | Máy chủ chuyển tiếp ảnh từ Telegram trước (kiểm chủ trước khi trả ảnh); sửa công cụ tải lên kho ảnh để sau. |
+| Q2 Hoa hồng | Thêm cột "broker đã nhận tiền", tách khỏi "đã trả phí sàn"; màn hiện cả hai, phí sàn kèm hướng dẫn chuyển khoản. |
+| Q3 Độ mới | Tách mốc "xác nhận còn trống" (confirmed_at) khỏi updated_at; sửa giá/tải ảnh không làm căn mới. |
+| Q4 Xếp khớp | Căn hợp với khách và khách hợp với căn dùng chung điểm khớp của luồng liên broker, cho cả bot và web. |
+| Q5/Q6 Huỷ, xoá | Không xoá cứng: buổi xem đánh dấu "đã huỷ", khách bị ẩn; hỏi lại bằng showConfirm. |
+| Q8 Giới hạn 20 căn | Chưa áp giới hạn cho gói miễn phí; bỏ hàm kiểm thừa. |
+| Q9 Ghi chú kín | Có trường ghi chú kín cho căn, kèm test trang khách không lộ. |
+| Q11 Ngoài Stitch | Bỏ số bịa và các việc tiền/pháp lý (hoá đơn, hợp đồng); "Sắp có" cho đăng nhóm. |
+| Q12 Liên broker | Đợt này web chỉ xem và đề xuất; giữ chỗ nguyên tử trong DB làm đợt sau. |
+
+Q7 (trang khách hiện số của ai) và Q10 (trừ lượt thử ở đâu) chưa hỏi: Q10 theo khuyến nghị trừ giống nhau ở bot và web; Q7 chờ đọc share.py.
