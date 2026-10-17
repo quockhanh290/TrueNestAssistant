@@ -6,13 +6,24 @@ Từ 17/10/2026, mọi việc thiết kế hoặc dựng giao diện (mini app t
 trang chia sẻ cho khách, mẫu mới trong `UI/`) phải tuân thủ
 `docs/research/tma-design-2026-10-17.md`. Trước khi làm, đọc mục 0, 1, 2, 3 của tài liệu đó.
 
-Chuẩn thiết kế: **hình thức như mini app BotFather** (chủ dự án quyết 17/10/2026). Màu lấy
-hoàn toàn từ theme Telegram của người dùng (`--tg-theme-*`, có dự phòng sáng/tối xanh Telegram);
-ngoại lệ duy nhất là bộ nhỏ màu trạng thái có biến thể sáng-tối. Phông hệ thống (SF Pro /
-Roboto / Segoe UI), không phông tuỳ biến; số dùng `tabular-nums`. Danh sách gom nhóm bo góc, dòng
-có icon nét mảnh + `›`, nút đặc màu nút của theme, nút nguy hiểm màu đỏ của theme.
-`webapp/static/v2/tokens.css` là nơi duy nhất ánh xạ các màu này. `UI/Main.dc.html` chỉ còn
-dùng để tham khảo bố cục thẻ căn, không còn là chuẩn màu/phông.
+Chuẩn thiết kế (chủ dự án quyết 17/10/2026): **khung như mini app BotFather, nội dung trang
+làm đầy đủ.**
+- **Khung** (theo BotFather): màu nền/chữ/nút lấy từ theme Telegram của người dùng
+  (`--tg-theme-*`, có dự phòng sáng/tối xanh Telegram); phông hệ thống (SF Pro / Roboto /
+  Segoe UI), không phông tuỳ biến, số dùng `tabular-nums`; thanh đầu và nút gốc do Telegram vẽ;
+  trang chính và Cài đặt là danh sách gom nhóm bo góc, dòng có icon + `›`; nút đặc màu nút của
+  theme, nút nguy hiểm màu destructive của theme.
+- **Nội dung từng trang làm đầy đủ**, không rút gọn thành danh sách cài đặt: thẻ căn có ảnh (bố
+  cục theo `UI/Main.dc.html`), ô số liệu lớn, ảnh đại diện chữ cái đầu, lưới thông số có icon,
+  biểu đồ, nhãn trạng thái. Đầy đủ không có nghĩa là nhồi: câu hỏi chính của mỗi màn (ví dụ
+  giá + liên hệ của căn) phải trả lời được trên khung nhìn đầu tiên, không cần cuộn, và mỗi màn
+  vẫn chỉ một hành động chính.
+- **Màu ngoài theme** chỉ có hai bộ cố định, mỗi màu có biến thể sáng-tối: bộ nhỏ màu trạng
+  thái (còn trống, đã thuê, gấp...) và **bộ 6 màu nhấn** kiểu trang Cài đặt Telegram (xanh dương,
+  cam, tím, đỏ, xanh lá, xanh ngọc) cho icon nền màu, biểu đồ, ảnh đại diện. Không màu nào khác.
+- Tệp token của v2 là nơi duy nhất ánh xạ các màu này (hiện là `webapp/static/v2/tokens-tg.css`,
+  gộp về `tokens.css` khi bỏ trang cũ). `UI/Main.dc.html` chỉ dùng để tham khảo bố cục thẻ căn,
+  không còn là chuẩn màu/phông.
 Điều hướng theo `docs/design/navigation-2026-10-17.md` (chủ dự án duyệt 17/10/2026). Tài liệu
 này thay các chỗ về tab dưới/FAB trong tài liệu nghiên cứu (mục 0 ý 4, 1.3, 2.1, 2.5).
 `stitch_ui/DESIGN.md` đã lỗi thời (mâu thuẫn phông chữ với mẫu mới), không dùng làm chuẩn.
@@ -90,6 +101,8 @@ này thay các chỗ về tab dưới/FAB trong tài liệu nghiên cứu (mục
 - Mở trong Telegram thật (ít nhất một máy iOS hoặc Android) trước khi báo xong.
 - Cập nhật bản đồ trang; đếm chạm từ trang chính tới mọi hành động thường dùng: không cái nào > 2.
 - Không còn thanh tab dưới hay nút nổi tự vẽ trong tệp giao diện.
+- Ảnh 390px khung đầu tiên của mỗi màn: thấy được câu trả lời cho câu hỏi chính của màn mà
+  không cuộn; màu ngoài theme chỉ thuộc bộ trạng thái hoặc bộ 6 màu nhấn.
 
 ## Vận hành
 - Khởi động/restart: `.\start-all.ps1`. Script tự tắt bản cũ; luôn chỉ có 1 bot + 1 webapp.
