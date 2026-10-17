@@ -14,7 +14,7 @@ Nhãn dữ liệu: **có** = trường có thật trong JSON; **chưa có API** 
 2. Với mỗi màn, dán **một khối prompt ở mục 2** (mỗi khối tự đứng được, nhưng vẫn dựa vào Bối cảnh chung đã dán). Mỗi lần một màn; đợi kết quả, kiểm, rồi mới sang màn tiếp để phong cách không trôi.
 3. Thứ tự dựng đề xuất: (1) Trang chính; (2) Căn hộ; (3) Chi tiết căn; (4) Khách; (5) Chi tiết khách; (6) Lịch xem; (7) Đặt lịch xem; (8) Hoa hồng; (9) Ghi nhận hoa hồng; (10) Căn hợp với khách; (11) Trang đã chia sẻ; (12) Liên kết broker; (13) Đề xuất căn; (14) Hồ sơ; (15) Nâng cấp gói; (16) Cài đặt thông báo; (17) Thêm khách; (18) Thêm căn; (19) Sửa căn; (20) Bài đăng; (21) Công cụ; (22) Hướng dẫn. Lý do: sáu màn đầu quyết định ngôn ngữ chung (nhóm dòng, thẻ, nhãn trạng thái, khung nút Telegram); các màn sau tái dùng.
 4. Khi nhận kết quả, đối chiếu **bảng cổng kiểm ở mục 3**. Màn nào trượt một dòng thì gửi lại đúng dòng đó kèm câu "sửa mục X của bảng cổng kiểm", đừng viết lại cả prompt.
-5. Mục 4 liệt kê chỗ chưa chắc cần chủ dự án quyết trước hoặc trong lúc duyệt. Hai điểm nên quyết trước khi dựng: thẻ căn có ảnh hay không, và độ dày khối "Hôm nay".
+5. Mục 4 liệt kê chỗ chưa chắc cần chủ dự án quyết trước hoặc trong lúc duyệt. Hai điểm đã quyết 17/10: thẻ căn CÓ ảnh nhỏ vuông bên trái, thiếu ảnh thì icon tòa nhà; khối "Hôm nay" tối đa 3 dòng mỗi khối + "Xem tất cả ›".
 6. Không dán token, ID thật, số điện thoại thật. Mọi dữ liệu trong prompt là mẫu tự đặt.
 
 ---
@@ -113,7 +113,7 @@ MỤC ĐÍCH: môi giới mở app là thấy ngay việc hôm nay, có 3 lối 
 
 NỘI DUNG TỪ TRÊN XUỐNG:
 1. Tiêu đề lớn đậm "Hôm nay", bên phải cùng dòng chữ hint "Thứ Bảy, 17/10".
-2. MỘT thẻ lớn (một cụm gom nhóm) chia ba khối, mỗi khối có tiêu đề nhóm đậm nhỏ bên trái và số đếm bên phải:
+2. MỘT thẻ lớn (một cụm gom nhóm) chia ba khối, mỗi khối có tiêu đề nhóm đậm nhỏ bên trái và số đếm bên phải. Mỗi khối hiện TỐI ĐA 3 DÒNG; nhiều hơn thì dòng cuối là "Xem tất cả ›" (màu link) dẫn vào trang con tương ứng:
    a. "Lịch xem" - "2 buổi". Mỗi dòng: giờ ở cột trái dạng chữ số đều "10:00" (đậm vừa), bên phải tên khách đậm "Chị Lan" và dòng phụ "2PN An Thượng"; mũi tên ›. Dòng 2: "15:30", "Anh Minh", "Studio Luxury Bạch Đằng".
    b. "Khách cần theo dõi" - "2 người". Dòng: "Anh Minh" + dòng phụ "1PN <12 tr · Sơn Trà" + nhãn trạng thái "Gấp" (hổ phách) + ›. Dòng: "Chị Hạnh" + dòng phụ "6 ngày chưa cập nhật" + ›.
    c. "Căn cần làm mới" - "5 căn". Một dòng có icon cảnh báo: "Quá 7 ngày chưa xác nhận còn trống" + ›.
@@ -773,8 +773,8 @@ Nguồn: `docs/design/navigation-2026-10-17.md` mục 5.
 
 ### 4.3 Chưa chắc / cần chủ dự án quyết
 
-1. **Thẻ căn có ảnh hay không.** `photo_urls` hiện rỗng với dữ liệu thật. Prompt yêu cầu thẻ phải đọc được khi không có ảnh nhưng vẫn chừa ô ảnh vuông ở trái (theo mockup đã duyệt). Câu hỏi: giữ ô ảnh giả hay bỏ hẳn cho tới khi có ảnh (tiết kiệm chiều cao, thấy được nhiều căn hơn)? Chưa đo số thẻ nhìn thấy trên màn 360x640.
-2. **Độ dày khối "Hôm nay".** Mockup: 2 buổi + 2 khách + 1 dòng căn làm mới, chiếm khoảng một nửa màn hình đầu (khoảng 430 px trên 844 px, ước từ ảnh, chưa đo). Cần quyết: giới hạn tối đa bao nhiêu dòng mỗi khối (đề xuất 3 và "Xem tất cả ›"), và có cho thu gọn không.
+1. **[ĐÃ QUYẾT 17/10: có ảnh nhỏ vuông bên trái, thiếu ảnh thì icon tòa nhà; cần thêm việc cho API trả link ảnh.] Thẻ căn có ảnh hay không.** `photo_urls` hiện rỗng với dữ liệu thật. Prompt yêu cầu thẻ phải đọc được khi không có ảnh nhưng vẫn chừa ô ảnh vuông ở trái (theo mockup đã duyệt). Câu hỏi: giữ ô ảnh giả hay bỏ hẳn cho tới khi có ảnh (tiết kiệm chiều cao, thấy được nhiều căn hơn)? Chưa đo số thẻ nhìn thấy trên màn 360x640.
+2. **[ĐÃ QUYẾT 17/10: tối đa 3 dòng mỗi khối + "Xem tất cả ›".] Độ dày khối "Hôm nay".** Mockup: 2 buổi + 2 khách + 1 dòng căn làm mới, chiếm khoảng một nửa màn hình đầu (khoảng 430 px trên 844 px, ước từ ảnh, chưa đo). Cần quyết: giới hạn tối đa bao nhiêu dòng mỗi khối (đề xuất 3 và "Xem tất cả ›"), và có cho thu gọn không.
 3. **Bố cục từ mockup cũ có dựa trên màu riêng.** Quyết định mới (theo theme Telegram) làm mất màu thương hiệu cố định; các nhãn nhấn như giá màu xanh nhạt trong mockup cũ nay thành `link_color`, có thể đổi sắc theo theme người dùng. Cần chủ dự án duyệt trên một theme lạ (cam, tím) trước khi chốt.
 4. **Màu trạng thái "Gấp" hổ phách vs nút theme màu cam.** Nếu người dùng chọn màu nút cam, nhãn "Gấp" dễ lẫn với nút. Chưa có đề xuất chắc; cổng kiểm #30 sẽ bắt ra.
 5. **Kết quả của Claude Design có thể tự thêm màu hoặc phông.** Cổng #6 và #9 là cách bắt. Chưa biết Claude Design tuân thủ "chỉ biến theme" tới mức nào; cần thử ở màn đầu (Trang chính) trước khi dán tiếp.
