@@ -52,9 +52,17 @@ def parse_price(text):
     """12tr, 12 triệu, 12,000,000, 12.000.000, $500 -> VND float."""
     t = _norm(text)
     # "12tr" / "12 tr" / "12triệu" / "12 triệu"
-    m = re.search(r"(\d+(?:[.,]\d+)?)\s*(?:tr|triệu|trieuj|mil)", t)
+    m = re.search(
+        r"(\d+(?:[.,]\d+)?)\s*(?:triệu|trieuj|mil|tr)"
+        r"(?:(\d{1,3})(?!\d|[^\W\d_])| (\d{1,3})(?=$|[^\w\s]|\r?\n))?",
+        t,
+    )
     if m:
-        return float(m.group(1).replace(",", ".")) * 1_000_000, "high"
+        value = float(m.group(1).replace(",", ".")) * 1_000_000
+        trailing = m.group(2) or m.group(3)
+        if trailing:
+            value += int(trailing) * 10 ** (6 - len(trailing))
+        return value, "high"
     # "$500" / "500$" / "500 usd"
     m = re.search(r"\$\s*(\d+(?:[.,]\d+)?)|(\d+(?:[.,]\d+)?)\s*(?:usd|\$)", t)
     if m:

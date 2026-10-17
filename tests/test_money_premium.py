@@ -136,7 +136,7 @@ class TestMoneyReader(unittest.TestCase):
             "18,500,000 VND/month": 18_500_000,
             "rent 18500000": 18_500_000,
             "$500": 12_500_000,
-            "cho thuê 2PN 8tr5 sơn trà": 8_000_000,
+            "cho thuê 2PN 8tr5 sơn trà": 8_500_000,
             "15000000": None, "500k": None,
         }
         for text, want in pinned.items():
