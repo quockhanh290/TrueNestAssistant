@@ -450,3 +450,14 @@ khoá dữ liệu của trang hoa hồng).
   khách chưa kiểm chủ); cách tính ngày trong các script nhắc/tóm tắt (đã xác nhận chúng không gửi gì).
 - Không đọc các trang v2 ngoài màn "Trang đã chia sẻ" và router.
 - Có thể còn cái tôi chưa nghĩ tới: ba vùng chỉ đọc lướt ở trên là nơi nên rà tiếp.
+
+## Quyết định của chủ dự án (17/10/2026)
+
+| Câu | Quyết định |
+|---|---|
+| C-Q1 Phạt khi khách báo "đã cho thuê" | Không phạt tự động nữa: báo cáo vào hàng chờ, admin duyệt qua /baocao (phạt hoặc bỏ qua). |
+| C-Q2 "Tiện ích không đúng thực tế" | Lưu báo cáo, không phạt; môi giới và admin thấy để sửa tin. |
+| C-Q4 Dữ liệu người lạ đặt lịch | Xoá 90 ngày sau khi link hết hạn; môi giới huỷ được link. Khách môi giới đã lưu không bị đụng. |
+| C-Q5 Luồng khách thuê | Để sau; viết đặc tả trước. Nhánh ui-client-flow và ui-broker-flow không gộp. |
+| C-Q3 Giao diện trang khách | Theo khuyến nghị (chưa hỏi riêng): bộ token sáng/tối riêng, làm sau B1/B2. |
+| C-Q6 Câu hứa "nhắc trước 1 tiếng" | Theo khuyến nghị (chưa hỏi riêng): bỏ câu hứa ngay; nối việc nhắc (giờ VN, cột "đã nhắc") khi làm. |
