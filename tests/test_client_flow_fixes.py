@@ -269,6 +269,28 @@ class TestClientFlowFixes(LinhFlowTest):
         self.assertIn("đã được lưu", self.last_text().lower())
         self.assertEqual(len(db.list_deals(uid)), 1)
 
+    def test_a5_same_deal_after_30_days_is_a_new_deal(self):
+        uid = self.broker(tier="pro")
+        cid = db.create_client(uid, name="Khách A")
+        listing = self.listing(uid)
+        first = db.create_deal(uid, client_id=cid, client_name="Khách A",
+                               listing_id=listing["id"],
+                               commission_vnd=15_000_000)
+        conn = db.connect()
+        conn.execute("UPDATE deals SET created_at = created_at - ? WHERE id = ?",
+                     (31 * 86400, first))
+        conn.commit()
+        conn.close()
+        renewal = db.create_deal(uid, client_id=cid, client_name="Khách A",
+                                 listing_id=listing["id"],
+                                 commission_vnd=15_000_000)
+        self.assertIsNotNone(renewal)
+        self.assertIsNone(db.create_deal(uid, client_id=cid,
+                                         client_name="Khách A",
+                                         listing_id=listing["id"],
+                                         commission_vnd=15_000_000))
+        self.assertEqual(len(db.list_deals(uid)), 2)
+
     def test_a8_no_unimplemented_reminder_promise(self):
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         promises = ("nhắc trước 1 tiếng", "2 ngày nữa em sẽ nhắc")

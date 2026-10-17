@@ -31,6 +31,11 @@ def deals_closed_between(broker_id, start_ts, end_ts, path=None):
         return [dict(r) for r in rows]
 
 
+# A second deal for the same broker, client and listing inside this window is
+# a double submit; after it, a renewal or a new lease is a real deal (owner 17/10).
+DUPLICATE_DEAL_WINDOW_S = 30 * 86400
+
+
 def create_deal(broker_id, client_id=None, client_name="", listing_id=None,
                 commission_vnd=None, closed_at=None, notes="", path=None):
     now = _now()
@@ -53,8 +58,9 @@ def create_deal(broker_id, client_id=None, client_name="", listing_id=None,
         if client_id and listing_id:
             duplicate = conn.execute(
                 "SELECT 1 FROM deals WHERE broker_id = ? AND client_id = ?"
-                " AND listing_id = ? LIMIT 1",
-                (broker_id, client_id, listing_id),
+                " AND listing_id = ? AND created_at > ? LIMIT 1",
+                (broker_id, client_id, listing_id,
+                 now - DUPLICATE_DEAL_WINDOW_S),
             ).fetchone()
             if duplicate:
                 conn.rollback()
