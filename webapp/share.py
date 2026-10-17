@@ -191,6 +191,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 
 
 PAGE_JS = """
+var shareToken=document.querySelector('.wrap').dataset.token;
+var sharePath='/s/'+encodeURIComponent(shareToken);
 function toggleForm(i){
   var f=document.getElementById('form-'+i);
   f.classList.toggle('open');
@@ -203,7 +205,7 @@ function submitBooking(e,i,listingId){
   var phone=(fd.get('phone')||'').replace(/[^0-9+]/g,'');
   if(phone.replace(/[^0-9]/g,'').length<8){msg.className='form-msg err';msg.textContent='Số điện thoại chưa đúng.';return false;}
   msg.className='form-msg';msg.textContent='Đang gửi...';
-  fetch('book',{method:'POST',headers:{'Content-Type':'application/json'},
+  fetch(sharePath+'/book',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({listing_id:listingId,name:fd.get('name'),phone:fd.get('phone'),preferred_date:fd.get('date'),note:fd.get('note')})})
   .then(function(r){return r.json().then(function(j){return {s:r.status,j:j};});})
   .then(function(r){
@@ -224,7 +226,7 @@ function submitReport(e,i,listingId){
   var msg=document.getElementById('rmsg-'+i);
   if(!sel){msg.className='form-msg err';msg.textContent='Vui lòng chọn lý do.';return false;}
   msg.className='form-msg';msg.textContent='Đang gửi...';
-  fetch('report',{method:'POST',headers:{'Content-Type':'application/json'},
+  fetch(sharePath+'/report',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({listing_id:listingId,reason:sel.value})})
   .then(function(r){return r.json().then(function(j){return {s:r.status,j:j};});})
   .then(function(r){
@@ -272,7 +274,7 @@ def render_share_page(token):
         if bphone else '<span class="who-note">Liên hệ qua TrueNest</span>'
     )
     body = f"""
-    <div class="wrap">
+    <div class="wrap" data-token="{_esc(token)}">
       <div class="brand"><span class="logo">🏠</span>
         <div><div class="name">TrueNest</div><div class="tag">Thuê nhà Đà Nẵng tin cậy</div></div>
       </div>
@@ -318,9 +320,15 @@ def handle_booking(token, data):
     listing_id = data.get("listing_id")
     if listing_id and listing_id not in (page["listing_ids"] or []):
         listing_id = None
+    preferred_date = data.get("preferred_date") or ""
+    if not isinstance(preferred_date, str):
+        preferred_date = ""
+    preferred_date = preferred_date[:20]
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", preferred_date):
+        preferred_date = ""
     bid = db.create_share_booking(
         token, page["broker_id"], name, phone, listing_id=listing_id,
-        preferred_date=(data.get("preferred_date") or "")[:20],
+        preferred_date=preferred_date,
         note=(data.get("note") or "")[:300],
     )
     # Queue real-time push to broker via bot (Khanh 2026-10-16)
@@ -329,7 +337,7 @@ def handle_booking(token, data):
             "booking_created", None,
             {"broker_id": page["broker_id"], "booking_id": bid,
              "name": name, "phone": phone, "listing_id": listing_id,
-             "preferred_date": (data.get("preferred_date") or "")[:20]})
+             "preferred_date": preferred_date})
     except Exception:
         pass
     return {"ok": True, "booking_id": bid}, 200

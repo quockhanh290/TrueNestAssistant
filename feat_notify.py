@@ -164,11 +164,21 @@ async def notify_new_booking(ctx, broker_id, booking):
 
     booking: dict with name, phone, listing_id, preferred_date, token.
     """
+    import html
+
     prefs = db.get_notify_prefs(broker_id)
     if not prefs.get("notify_booking", True):
         return
     lst = db.get_listing(booking.get("listing_id")) if booking.get("listing_id") else None
     p = (lst.get("parsed") if lst else {}) or {}
+    booking = dict(booking)
+    for key in ("name", "phone", "preferred_date"):
+        if booking.get(key):
+            booking[key] = html.escape(str(booking[key]))
+    p = dict(p)
+    for key in ("building_name", "district"):
+        if p.get(key):
+            p[key] = html.escape(str(p[key]))
     title = p.get("building_name") or p.get("district") or "tin"
     date = booking.get("preferred_date") or "chưa chọn ngày"
     try:
