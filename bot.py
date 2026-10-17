@@ -1198,9 +1198,31 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await feat_referral.handle_referral_callback(update, ctx)
 
 
+def _single_instance_lock():
+    """Hold an exclusive localhost port for the process lifetime.
+
+    Two copies polling the same token race for updates (in-memory
+    conversation state splits between them) and both run the outbox poller,
+    so queued DMs/penalties go out once per copy. The OS releases the port
+    when the process dies, so a crash never leaves a stale lock.
+    """
+    import os
+    import socket
+    port = int(os.environ.get("BOT_LOCK_PORT", "47831"))
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):  # Windows
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+    try:
+        s.bind(("127.0.0.1", port))
+    except OSError:
+        raise SystemExit(f"Another bot.py is already running (lock port {port}).")
+    return s
+
+
 def main():
     if not config.BOT_TOKEN:
         raise SystemExit("Set TELEGRAM_BOT_TOKEN env var first. See README.md")
+    _lock = _single_instance_lock()  # noqa: F841 — keep socket open
     db.init_db()
     app = Application.builder().token(config.BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", cmd_start))
