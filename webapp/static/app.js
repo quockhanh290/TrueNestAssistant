@@ -268,10 +268,10 @@
       ["📍 Địa chỉ", d.address || "—"],
       ["🏢 Tòa nhà", d.building_name || "—"],
       ["📌 Quận", d.district || "—"],
-      ["🛋️ Nội thất", d.furnished || "—"],
+      ["🛋️ Nội thất", ({ full: "Full", basic: "Cơ bản", empty: "Trống" })[d.furnishing] || d.furnishing || "—"],
       ["🐾 Pet", d.pet_friendly === true ? "Cho nuôi" :
         d.pet_friendly === false ? "Không" : "—"],
-      ["💵 Cọc", d.deposit || "—"],
+      ["💵 Cọc", d.deposit_months != null ? d.deposit_months + " tháng" : "—"],
       ["📸 Ảnh", d.photo_count + " ảnh"],
       ["📊 Trạng thái", statusLabel(d.status)],
     ];
@@ -455,8 +455,8 @@
       document.getElementById("f-street").value = d.address || "";
       document.getElementById("f-building").value = d.building_name || "";
       document.getElementById("f-district").value = d.district || "";
-      document.getElementById("f-deposit").value = d.deposit || "";
-      document.getElementById("f-furnished").value = d.furnished || "";
+      document.getElementById("f-deposit").value = d.deposit_months != null ? d.deposit_months : "";
+      document.getElementById("f-furnished").value = d.furnishing || "";
       document.getElementById("f-pet").value =
         d.pet_friendly === true ? "1" : d.pet_friendly === false ? "0" : "";
       document.getElementById("f-desc").value = d.raw_text || "";
