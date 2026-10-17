@@ -10,13 +10,17 @@ Env:
     WEBAPP_PORT  — port to listen on (default 8080)
     WEBAPP_URL   — public URL (used by the bot's web_app button)
     BOT_DB_PATH  — SQLite path (default broker_bot.db next to bot.py)
-    BOT_TOKEN    — Telegram bot token, for initData validation
+    TELEGRAM_BOT_TOKEN — Telegram bot token, for initData validation
+                   (same var as bot.py; BOT_TOKEN accepted as fallback)
+    WEBAPP_DEV   — "1" enables ?demo=1&broker_id=X (local testing only)
+    INIT_DATA_MAX_AGE — seconds an initData stays valid (default 86400)
 """
 import hashlib
 import hmac
 import json
 import os
 import sys
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qsl, urlparse
 
@@ -29,7 +33,12 @@ import api_clients_deals as api2  # noqa: E402
 import share  # noqa: E402
 
 PORT = int(os.environ.get("WEBAPP_PORT", "8080"))
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
+# start-all.ps1 and bot.py use TELEGRAM_BOT_TOKEN. Reading only BOT_TOKEN
+# here left the token empty, so every real initData failed validation.
+BOT_TOKEN = (os.environ.get("TELEGRAM_BOT_TOKEN")
+             or os.environ.get("BOT_TOKEN", ""))
+DEV_MODE = os.environ.get("WEBAPP_DEV") == "1"
+INIT_DATA_MAX_AGE = int(os.environ.get("INIT_DATA_MAX_AGE", "86400"))
 
 MIME = {
     ".html": "text/html; charset=utf-8",
@@ -60,6 +69,10 @@ def validate_init_data(init_data, bot_token):
                           hashlib.sha256).digest()
         calc = hmac.new(secret, check.encode(), hashlib.sha256).hexdigest()
         if not hmac.compare_digest(calc, received):
+            return None
+        # Reject replayed initData: a leaked string must not work forever.
+        auth_date = int(data.get("auth_date", "0"))
+        if not auth_date or time.time() - auth_date > INIT_DATA_MAX_AGE:
             return None
         user = json.loads(data.get("user", "{}"))
         return user if user.get("id") else None
@@ -103,8 +116,9 @@ class Handler(BaseHTTPRequestHandler):
             return {}
 
     def _auth(self, query):
-        """Return broker_id or None. Demo mode bypasses Telegram auth."""
-        if query.get("demo") == "1":
+        """Return broker_id or None. Demo mode (WEBAPP_DEV=1 only) bypasses
+        Telegram auth; otherwise a valid signed initData is required."""
+        if DEV_MODE and query.get("demo") == "1":
             try:
                 return int(query.get("broker_id", "0")) or None
             except ValueError:
@@ -126,11 +140,6 @@ class Handler(BaseHTTPRequestHandler):
         user = validate_init_data(init_data, BOT_TOKEN)
         if user:
             return user["id"]
-        # Fallback for internal Mini App: trust tg_user_id from Telegram WebView
-        # (hash validation failed, but WebView context is trusted)
-        tg_uid = query.get("tg_user_id", "")
-        if tg_uid and tg_uid.isdigit():
-            return int(tg_uid)
         return None
 
     # -- routing ------------------------------------------------------
@@ -366,9 +375,20 @@ class Handler(BaseHTTPRequestHandler):
             sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
 
 
+class Server(ThreadingHTTPServer):
+    # On Windows SO_REUSEADDR lets a second process bind the same port, which
+    # is how two webapp copies ended up sharing 8080. Without it the second
+    # copy fails to bind, so only one instance can run.
+    allow_reuse_address = os.name != "nt"
+
+
 def main():
-    srv = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
-    print(f"TrueNest webapp on http://localhost:{PORT}  (demo: ?demo=1&broker_id=<id>)",
+    if not BOT_TOKEN and not DEV_MODE:
+        raise SystemExit("Set TELEGRAM_BOT_TOKEN (or WEBAPP_DEV=1 for local "
+                         "demo) — without it no Telegram login can validate.")
+    srv = Server(("0.0.0.0", PORT), Handler)
+    print(f"TrueNest webapp on http://localhost:{PORT}"
+          + ("  (dev: ?demo=1&broker_id=<id>)" if DEV_MODE else ""),
           flush=True)
     try:
         srv.serve_forever()
