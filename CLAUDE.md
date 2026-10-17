@@ -6,7 +6,13 @@ Từ 17/10/2026, mọi việc thiết kế hoặc dựng giao diện (mini app t
 trang chia sẻ cho khách, mẫu mới trong `UI/`) phải tuân thủ
 `docs/research/tma-design-2026-10-17.md`. Trước khi làm, đọc mục 0, 1, 2, 3 của tài liệu đó.
 
-Chuẩn thiết kế duy nhất: `UI/Main.dc.html` + `webapp/static/v2/tokens.css`.
+Chuẩn thiết kế: **hình thức như mini app BotFather** (chủ dự án quyết 17/10/2026). Màu lấy
+hoàn toàn từ theme Telegram của người dùng (`--tg-theme-*`, có dự phòng sáng/tối xanh Telegram);
+ngoại lệ duy nhất là bộ nhỏ màu trạng thái có biến thể sáng-tối. Phông hệ thống (SF Pro /
+Roboto / Segoe UI), không phông tuỳ biến; số dùng `tabular-nums`. Danh sách gom nhóm bo góc, dòng
+có icon nét mảnh + `›`, nút đặc màu nút của theme, nút nguy hiểm màu đỏ của theme.
+`webapp/static/v2/tokens.css` là nơi duy nhất ánh xạ các màu này. `UI/Main.dc.html` chỉ còn
+dùng để tham khảo bố cục thẻ căn, không còn là chuẩn màu/phông.
 Điều hướng theo `docs/design/navigation-2026-10-17.md` (chủ dự án duyệt 17/10/2026). Tài liệu
 này thay các chỗ về tab dưới/FAB trong tài liệu nghiên cứu (mục 0 ý 4, 1.3, 2.1, 2.5).
 `stitch_ui/DESIGN.md` đã lỗi thời (mâu thuẫn phông chữ với mẫu mới), không dùng làm chuẩn.
@@ -61,7 +67,7 @@ này thay các chỗ về tab dưới/FAB trong tài liệu nghiên cứu (mục
 13. **Mỗi màn mới phải có đủ bốn trạng thái:** đang tải, rỗng, lỗi mạng, hết phiên (401).
 14. **Chia sẻ căn cho khách:** `savePreparedInlineMessage` (máy chủ) + `shareMessage` (app),
     đích là trang công khai `/s/<token>`.
-15. **Phông và ảnh tự lưu**, không nạp Google Fonts hay CDN nào ngoài `telegram-web-app.js`.
+15. **Phông hệ thống, ảnh tự lưu**, không nạp Google Fonts hay CDN nào ngoài `telegram-web-app.js`.
 16. **Mỗi trang có đường dẫn URL** (`/v2/...`) và, nếu mở trực tiếp được, một mã `startapp`
     ngắn chỉ gồm chữ thường, số, gạch dưới. Router không đọc `window.Telegram`/`location` ngoài
     lớp bọc nền tảng. `start_param` chỉ để chọn màn mở; quyền kiểm ở máy chủ.
@@ -77,6 +83,7 @@ này thay các chỗ về tab dưới/FAB trong tài liệu nghiên cứu (mục
 
 ### Cổng kiểm khi nộp một màn giao diện
 - Đổi Telegram sang theme sáng rồi tối: không còn chữ nhạt trên nền sáng, thanh đầu/đáy đổi màu theo.
+  Thử thêm một theme có màu nút khác xanh: app đổi theo.
 - Tìm `#[0-9a-fA-F]{3,6}` trong tệp giao diện: không có kết quả nào ngoài `tokens.css`.
 - Tìm `window.Telegram`, `location.search`, `fetch(`: chỉ có trong lớp bọc nền tảng và `api.js`.
 - Chụp ảnh khổ 390px cả bốn trạng thái, đặt cạnh `UI/Main.dc.html`.
