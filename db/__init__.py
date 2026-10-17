@@ -35,8 +35,6 @@ from .core import (
 from .brokers import (
     ENTERPRISE_LISTING_THRESHOLD,
     TIER_ORDER,
-    TIER_PRICE_VND,
-    upgrade_credit_days,
     add_checklist_item,
     bump_match_stats,
     clear_checklist,
@@ -99,9 +97,7 @@ from .clients import (
     add_note,
     clear_client_choice,
     clients_awaiting_choice,
-    CLOSED_CLIENT_STATUSES,
     count_clients,
-    followup_clients,
     create_client,
     create_template,
     delete_client,
@@ -123,7 +119,6 @@ from .viewings import (
     VIEWING_STATUSES,
     _parse_viewing_row,
     client_viewings,
-    list_viewings_between,
     create_viewing,
     delete_viewing,
     due_feedback_viewings,
@@ -197,18 +192,14 @@ from .share import (
     _gen_share_token,
     check_report_against_refresh,
     create_listing_report,
-    reserve_report_penalty,
     create_share_booking,
     create_share_page,
     get_latest_refresh_claim,
     get_share_page,
     list_share_bookings,
     list_share_pages,
-    list_recent_reports,
     list_unreviewed_reports,
-    mark_report_penalty_applied,
     mark_report_reviewed,
-    revoke_report_penalty,
 )
 
 from .trial import (
@@ -216,16 +207,9 @@ from .trial import (
     TRIAL_LIMITS,
     TRIAL_TIER,
     check_trial,
-    consume_trial,
     get_trial_usage,
     increment_trial_usage,
-    refund_trial,
 )
-
-from .validate import FieldError
-from .ownership import OWNER_TABLES, owner_of
-from .core import TYPED_NUMBER_COLUMNS, typed_columns
-from .listings import LISTING_STATUSES, confirmed_ts
 
 from .notify import (
     NOTIFY_PREFS,
@@ -237,6 +221,14 @@ from .notify import (
     queue_notification,
     set_notify_pref,
     was_notified,
+)
+
+from .zalo import (
+    PAIRING_TTL_SEC,
+    create_pairing_code,
+    get_telegram_id,
+    redeem_pairing_code,
+    unlink_zalo,
 )
 
 from .refresh import (
@@ -324,8 +316,6 @@ __all__ = [
     "init_db",
     "ENTERPRISE_LISTING_THRESHOLD",
     "TIER_ORDER",
-    "TIER_PRICE_VND",
-    "upgrade_credit_days",
     "add_checklist_item",
     "bump_match_stats",
     "clear_checklist",
@@ -382,9 +372,7 @@ __all__ = [
     "add_note",
     "clear_client_choice",
     "clients_awaiting_choice",
-    "CLOSED_CLIENT_STATUSES",
     "count_clients",
-    "followup_clients",
     "create_client",
     "create_template",
     "delete_client",
@@ -403,7 +391,6 @@ __all__ = [
     "VIEWING_STATUSES",
     "_parse_viewing_row",
     "client_viewings",
-    "list_viewings_between",
     "create_viewing",
     "delete_viewing",
     "due_feedback_viewings",
@@ -468,18 +455,14 @@ __all__ = [
     "_gen_share_token",
     "check_report_against_refresh",
     "create_listing_report",
-    "reserve_report_penalty",
     "create_share_booking",
     "create_share_page",
     "get_latest_refresh_claim",
     "get_share_page",
     "list_share_bookings",
     "list_share_pages",
-    "list_recent_reports",
     "list_unreviewed_reports",
-    "mark_report_penalty_applied",
     "mark_report_reviewed",
-    "revoke_report_penalty",
     "TRIAL_FEATURES",
     "TRIAL_LIMITS",
     "TRIAL_TIER",
@@ -542,13 +525,4 @@ __all__ = [
     "mark_qualified",
     "maybe_grant_inviter_reward",
     "run_fraud_checks",
-    "consume_trial",
-    "refund_trial",
-    "FieldError",
-    "OWNER_TABLES",
-    "owner_of",
-    "TYPED_NUMBER_COLUMNS",
-    "typed_columns",
-    "LISTING_STATUSES",
-    "confirmed_ts",
 ]
