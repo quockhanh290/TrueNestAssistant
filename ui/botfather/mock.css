@@ -1,0 +1,156 @@
+/* ============================================================================
+ * MOCK.CSS - KHUNG GIẢ LẬP TELEGRAM. KHÔNG PHẢI CODE CỦA APP.
+ * Tệp này chỉ để xem mockup tĩnh: vẽ giả thanh đầu, BackButton, MainButton,
+ * SecondaryButton (mà thật ra Telegram vẽ), thanh công cụ chọn theme/trạng thái,
+ * và đặt các biến --tg-theme-* giống Telegram sẽ đặt khi chạy thật.
+ * Đây là NƠI DUY NHẤT trong UI/botfather/ được viết mã màu cố định (bộ biến dự phòng bên dưới).
+ * Màu app (tokens-tg.css) đọc các biến này; trong app thật Telegram đặt chúng.
+ * ========================================================================== */
+
+/* ---- Bộ biến theme giả (thay cho Telegram) ---- */
+html[data-theme="dark"] {
+  --tg-theme-bg-color: #212121;
+  --tg-theme-secondary-bg-color: #0f0f0f;
+  --tg-theme-section-bg-color: #1c1c1d;
+  --tg-theme-section-header-text-color: #6ab3f3;
+  --tg-theme-section-separator-color: #2c2c2e;
+  --tg-theme-text-color: #ffffff;
+  --tg-theme-hint-color: #8d8e99;
+  --tg-theme-subtitle-text-color: #98a2ae;
+  --tg-theme-link-color: #6ab3f3;
+  --tg-theme-accent-text-color: #6ab2f2;
+  --tg-theme-button-color: #2ea6ff;
+  --tg-theme-button-text-color: #ffffff;
+  --tg-theme-destructive-text-color: #ff6f61;
+  --tg-theme-header-bg-color: #212121;
+}
+html[data-theme="light"] {
+  --tg-theme-bg-color: #ffffff;
+  --tg-theme-secondary-bg-color: #efeff4;
+  --tg-theme-section-bg-color: #ffffff;
+  --tg-theme-section-header-text-color: #6d6d72;
+  --tg-theme-section-separator-color: #d9d9de;
+  --tg-theme-text-color: #000000;
+  --tg-theme-hint-color: #8a8a8e;
+  --tg-theme-subtitle-text-color: #6d6d72;
+  --tg-theme-link-color: #2481cc;
+  --tg-theme-accent-text-color: #168acd;
+  --tg-theme-button-color: #40a7e3;
+  --tg-theme-button-text-color: #ffffff;
+  --tg-theme-destructive-text-color: #d14e4e;
+  --tg-theme-header-bg-color: #ffffff;
+}
+/* Theme có màu nút KHÔNG phải xanh: tím (tối) */
+html[data-theme="tim"] {
+  --tg-theme-bg-color: #1a1423;
+  --tg-theme-secondary-bg-color: #0e0a14;
+  --tg-theme-section-bg-color: #251c33;
+  --tg-theme-section-header-text-color: #b49cf5;
+  --tg-theme-section-separator-color: #3a2d4f;
+  --tg-theme-text-color: #f4eefc;
+  --tg-theme-hint-color: #a597bb;
+  --tg-theme-subtitle-text-color: #b8abcc;
+  --tg-theme-link-color: #b49cf5;
+  --tg-theme-accent-text-color: #b49cf5;
+  --tg-theme-button-color: #8e5cf0;
+  --tg-theme-button-text-color: #ffffff;
+  --tg-theme-destructive-text-color: #ff7a85;
+  --tg-theme-header-bg-color: #1a1423;
+}
+/* Theme cam (sáng): thử nhãn "Gấp" hổ phách có lẫn với nút cam không */
+html[data-theme="cam"] {
+  --tg-theme-bg-color: #fffaf5;
+  --tg-theme-secondary-bg-color: #f6efe8;
+  --tg-theme-section-bg-color: #ffffff;
+  --tg-theme-section-header-text-color: #8a6a4f;
+  --tg-theme-section-separator-color: #e6dccf;
+  --tg-theme-text-color: #1c1308;
+  --tg-theme-hint-color: #8f8374;
+  --tg-theme-subtitle-text-color: #6f6354;
+  --tg-theme-link-color: #c2570c;
+  --tg-theme-accent-text-color: #c2570c;
+  --tg-theme-button-color: #f2711c;
+  --tg-theme-button-text-color: #ffffff;
+  --tg-theme-destructive-text-color: #d03a3a;
+  --tg-theme-header-bg-color: #fffaf5;
+}
+
+/* ---- Trang xem mockup ---- */
+html { background: color-mix(in srgb, var(--tg-theme-text-color) 10%, var(--tg-theme-secondary-bg-color)); }
+body { margin: 0; }
+.mock-wrap { display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+
+/* ---- Thanh công cụ giả (chỉ để xem mockup, ẩn khi ?bare=1) ---- */
+.mock-bar {
+  width: 100%; max-width: 390px; padding: 8px 8px 6px; display: flex; flex-direction: column; gap: 6px;
+  font: 12px/16px system-ui, sans-serif; color: var(--tg-theme-text-color);
+}
+.mock-bar__row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.mock-bar b { color: var(--tg-theme-hint-color); font-weight: 600; margin-right: 2px; }
+.mock-bar button, .mock-bar a {
+  font: inherit; padding: 3px 8px; border-radius: 9999px; border: 1px solid var(--tg-theme-section-separator-color);
+  background: var(--tg-theme-section-bg-color); color: var(--tg-theme-text-color); text-decoration: none; cursor: pointer;
+}
+.mock-bar button[aria-pressed="true"] { background: var(--tg-theme-button-color); color: var(--tg-theme-button-text-color); border-color: transparent; }
+html.bare .mock-bar, html.bare .mock-notes { display: none !important; }
+
+/* ---- Khung điện thoại 390 ---- */
+.tgframe {
+  position: relative; width: 100%; max-width: 390px; min-height: 844px; display: flex; flex-direction: column;
+  background: var(--tg-theme-secondary-bg-color);
+}
+.tgframe > .app { flex: 1; min-height: 0; padding: 0; max-width: none; }
+html[data-state="filter"] .tgframe { height: 844px; min-height: 0; overflow: hidden; }
+.tgframe .scrim { position: absolute; }
+.tgframe .toast { position: absolute; }
+html.bare .mock-wrap { display: block; }
+html.bare body { background: var(--tg-theme-secondary-bg-color); }
+
+/* ---- Thanh đầu GIẢ (Telegram vẽ) ---- */
+.tg-top {
+  position: sticky; top: 0; z-index: 100; height: 56px; flex: none; display: flex; align-items: center; justify-content: space-between;
+  padding: 0 6px; background: var(--tg-theme-header-bg-color); color: var(--tg-theme-text-color);
+  border-bottom: 1px solid var(--tg-theme-section-separator-color);
+  font: 600 16px/20px system-ui, sans-serif;
+  background-image: repeating-linear-gradient(135deg, transparent 0 7px, color-mix(in srgb, var(--tg-theme-hint-color) 10%, transparent) 7px 8px);
+}
+.tg-top__btn { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: var(--tg-theme-link-color); }
+.tg-top__mid { display: flex; flex-direction: column; align-items: center; line-height: 1.15; }
+.tg-top__mid small { font: 500 10px/12px system-ui, sans-serif; color: var(--tg-theme-hint-color); letter-spacing: .02em; }
+
+/* ---- Thanh đáy GIẢ (Telegram vẽ MainButton / SecondaryButton) ---- */
+.tg-bottom {
+  position: sticky; bottom: 0; z-index: 100; min-height: 64px; flex: none; display: flex; align-items: center; gap: 8px;
+  padding: 8px 16px; background-color: var(--tg-theme-header-bg-color); border-top: 1px solid var(--tg-theme-section-separator-color);
+  background-image: repeating-linear-gradient(135deg, transparent 0 7px, color-mix(in srgb, var(--tg-theme-hint-color) 10%, transparent) 7px 8px);
+}
+.tg-bottom__tag {
+  position: absolute; top: -9px; left: 8px; padding: 0 5px; border-radius: 4px; background: var(--tg-theme-header-bg-color);
+  border: 1px dashed var(--tg-theme-hint-color); color: var(--tg-theme-hint-color); font: 600 9px/14px system-ui, sans-serif;
+}
+.tg-btn {
+  flex: 1; height: 48px; border-radius: 12px; border: 0; display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: var(--tg-theme-button-color); color: var(--tg-theme-button-text-color); font: 600 16px/20px system-ui, sans-serif;
+}
+.tg-btn--secondary { background: transparent; color: var(--tg-theme-button-color); box-shadow: inset 0 0 0 1.5px var(--tg-theme-button-color); }
+.tg-btn--off { opacity: .45; }
+.tg-btn .spin { width: 18px; height: 18px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: mock-spin .8s linear infinite; }
+@keyframes mock-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .tg-btn .spin { animation: none; } }
+
+/* ---- Ghi chú dưới khung: trường chưa có API, lệch khỏi prompt (không phải UI app) ---- */
+.mock-notes {
+  width: 100%; max-width: 390px; padding: 12px 12px 40px; font: 12px/18px system-ui, sans-serif; color: var(--tg-theme-hint-color);
+}
+.mock-notes h2 { margin: 0 0 4px; font: 700 12px/16px system-ui, sans-serif; color: var(--tg-theme-text-color); }
+.mock-notes ul { margin: 0 0 8px; padding-left: 16px; }
+
+/* ---- Màu nhấn cho icon trong ô vuông (kiểu Cài đặt của Telegram) ----
+ * NGOẠI LỆ MỚI cần chuyển vào tokens.css: 6 màu nhấn, mỗi màu có biến thể tối và sáng.
+ * Chỉ dùng làm nền ô icon 30 px và nền ảnh đại diện chữ cái đầu; chữ/icon trên đó là button-text-color. */
+html[data-scheme="dark"] {
+  --accent-blue: #2f7de1; --accent-green: #2fa84f; --accent-orange: #d9820f; --accent-red: #e5483f; --accent-purple: #9b59d0; --accent-teal: #1f9fb0;
+}
+html[data-scheme="light"] {
+  --accent-blue: #2481cc; --accent-green: #34a853; --accent-orange: #e8870e; --accent-red: #d9453b; --accent-purple: #8e55c7; --accent-teal: #178ea0;
+}
