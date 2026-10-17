@@ -23,11 +23,35 @@ if (Test-Path $urlFile) {
 # Duong dan tuyet doi: dong lenh cua tien trinh chua duong dan nay, nen chi tat dung
 # bot/webapp cua thu muc nay, khong dung bot.py cua du an khac.
 $botScript = Join-Path $PSScriptRoot "bot.py"
-$webScript = Join-Path $PSScriptRoot "webapp\server.py"
+$oldWebScript = Join-Path $PSScriptRoot "webapp\server.py"
+
+# Webapp chay tu ban sao sach cua main (git worktree) canh repo. Webapp doc tep tinh tu dia
+# moi request, nen chay ngay trong repo thi phien nao dang sua v2 la mini app that hong theo.
+$prodDir = Join-Path (Split-Path $PSScriptRoot -Parent) "TrueNestProd"
+$webScript = Join-Path $prodDir "webapp\server.py"
+$env:BOT_DB_PATH = Join-Path $PSScriptRoot "broker_bot.db"
+
+# Bot nap code luc khoi dong: restart khi repo con tep .py sua do = chay code do dang.
+$dirty = @(git -C $PSScriptRoot status --porcelain --untracked-files=no -- "*.py" | Where-Object { $_ })
+if ($dirty.Count -gt 0 -and -not $env:TRUENEST_FORCE) {
+    Write-Host "Repo co $($dirty.Count) tep .py chua commit - khong restart (dat TRUENEST_FORCE=1 neu chac):" -ForegroundColor Red
+    $dirty | ForEach-Object { Write-Host "  $_" }
+    exit 1
+}
+
+if (-not (Test-Path $prodDir)) {
+    git -C $PSScriptRoot worktree add --detach $prodDir main
+}
+git -C $prodDir checkout -q --detach main
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Khong cap nhat duoc $prodDir ve main. Dung lai." -ForegroundColor Red
+    exit 1
+}
 
 function Get-TrueNestProcs {
     Get-CimInstance Win32_Process -Filter "Name='python.exe' OR Name='pythonw.exe'" |
-        Where-Object { $_.CommandLine -and ($_.CommandLine.Contains($botScript) -or $_.CommandLine.Contains($webScript)) }
+        Where-Object { $_.CommandLine -and ($_.CommandLine.Contains($botScript) -or
+                       $_.CommandLine.Contains($webScript) -or $_.CommandLine.Contains($oldWebScript)) }
 }
 
 $old = @(Get-TrueNestProcs)
@@ -43,7 +67,7 @@ if ($old.Count -gt 0) {
 }
 
 Write-Host "Starting webapp..." -ForegroundColor Green
-Start-Process pythonw -WorkingDirectory $PSScriptRoot -WindowStyle Hidden -ArgumentList "`"$webScript`""
+Start-Process pythonw -WorkingDirectory $prodDir -WindowStyle Hidden -ArgumentList "`"$webScript`""
 
 Start-Sleep -Seconds 2
 
