@@ -9,7 +9,11 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script>
 if (window.Telegram?.WebApp) {
-  document.body.classList.add('in-telegram');
+  try { document.body.classList.add('in-telegram'); } catch(e) {
+    document.addEventListener('DOMContentLoaded', function() {
+      document.body.classList.add('in-telegram');
+    });
+  }
   const tg = window.Telegram.WebApp;
   tg.ready(); tg.expand();
   tg.setHeaderColor('#071420');
