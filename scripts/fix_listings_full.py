@@ -23,7 +23,7 @@ HIGHLIGHTS_POOL = [
     "Giá tốt", "Vị trí đẹp", "Yên tĩnh", "Mới renovate",
 ]
 
-c.execute("SELECT id, parsed FROM listings")
+c.execute("SELECT id, parsed FROM tg_listings")
 fixed = 0
 for row in c.fetchall():
     lid = row["id"]
@@ -55,7 +55,7 @@ for row in c.fetchall():
 
     if updated:
         c.execute(
-            "UPDATE listings SET parsed = ?, updated_at = datetime('now') WHERE id = ?",
+            "UPDATE tg_listings SET parsed = ?, updated_at = datetime('now') WHERE id = ?",
             (json.dumps(p, ensure_ascii=False), lid)
         )
         fixed += 1
