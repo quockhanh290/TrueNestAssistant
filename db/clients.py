@@ -205,7 +205,8 @@ def add_note(client_id, note, path=None):
     if not row:
         conn.close()
         return False
-    ts = time.strftime("%d/%m %H:%M", time.localtime(_now()))
+    from .vntime import fmt as _vn_fmt
+    ts = _vn_fmt(_now(), "%d/%m %H:%M")
     entry = f"[{ts}] {note.strip()}"
     notes = (row["notes"] + "\n" + entry).strip() if row["notes"] else entry
     conn.execute(

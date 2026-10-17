@@ -673,25 +673,11 @@ async def _commit_addphotos(uid, chat_id, ctx):
 
 
 async def cmd_cancel_addphoto(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """/huy — cancel 'adding photos' mode, guided intake, or buffers."""
+    """/huy — cancel whatever step is waiting for this user's input."""
+    import feat_intake  # lazy: avoid cycle
     uid = update.effective_user.id
-    pend = _addphoto_pending.pop(uid, None)
-    if pend and pend.get("task"):
-        pend["task"].cancel()
-    cancelled = []
-    if ctx.user_data.pop("adding_photos", None) is not None or pend:
-        cancelled.append("adding_photos")
-    if ctx.user_data.pop("guided", None) is not None:
-        cancelled.append("guided")
-    if ctx.user_data.pop("editing_post", None) is not None:
-        cancelled.append("editing_post")
-    # Also clear intake buffer if present
-    try:
-        from utils import _buffers
-        if _buffers.pop(uid, None) is not None:
-            cancelled.append("buffer")
-    except ImportError:
-        pass
+    cancelled = await feat_intake.release_pending_steps(
+        ctx, uid, update.effective_chat.id)
     if cancelled:
         await update.message.reply_text(
             "Đã hủy rồi nhé 😊", reply_markup=MENU_KB)

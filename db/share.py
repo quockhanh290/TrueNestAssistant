@@ -163,6 +163,30 @@ def create_listing_report(token, listing_id, broker_id, reason, path=None):
     return rid
 
 
+def reserve_report_penalty(token, listing_id, report_id, reason, path=None):
+    """Claim the single automatic penalty a public share link may cause.
+
+    Returns True for the first penalty-worthy report coming from `token`
+    and False for every later one (same listing again, or another listing
+    on the same page). The check-and-claim is one INSERT on a primary key,
+    so concurrent POSTs cannot both win. The report itself is always kept
+    for admin review; only the automatic strike is limited.
+    """
+    conn = connect(path)
+    _migrate_listing_reports(conn)
+    try:
+        cur = conn.execute(
+            "INSERT OR IGNORE INTO report_penalties"
+            " (token, listing_id, report_id, reason, created_at)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (token, listing_id, report_id, reason, _now()),
+        )
+        conn.commit()
+        return cur.rowcount == 1
+    finally:
+        conn.close()
+
+
 def get_latest_refresh_claim(listing_id, path=None):
     """Most recent refresh claim for a listing, or None."""
     conn = connect(path)

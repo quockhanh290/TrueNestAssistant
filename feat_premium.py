@@ -15,6 +15,7 @@ from telegram.ext import ContextTypes
 
 import config
 import db
+from db import vntime
 from utils import MENU_KB, get_pronoun, natural_delay
 
 TIER_LABEL = {"free": "Free", "pro": "Pro 💎", "max": "Max 💎💎"}
@@ -78,6 +79,10 @@ async def send_gate(update_or_q, feature, uid, edit=False):
     pn = get_pronoun(uid)
     text = premium_gate_text(feature, pn)
     kb = premium_gate_kb()
+    # an Update from a button tap has no .message — edit the button's message
+    if (not edit and getattr(update_or_q, "message", None) is None
+            and getattr(update_or_q, "callback_query", None) is not None):
+        update_or_q, edit = update_or_q.callback_query, True
     if edit:
         await update_or_q.edit_message_text(text, parse_mode="HTML",
                                             reply_markup=kb)
@@ -105,9 +110,7 @@ def _plans_text(uid, pn):
     mark = " ✅ <i>(đang dùng)</i>" if tier == "pro" else ""
     exp = ""
     if tier == "pro" and b.get("tier_expires_at"):
-        import datetime
-        d = datetime.datetime.fromtimestamp(b["tier_expires_at"])
-        exp = f" (hết hạn {d.strftime('%d/%m')})"
+        exp = f" (hết hạn {vntime.fmt(b['tier_expires_at'], '%d/%m')})"
     lines.append(
         f"\n💎 <b>Pro — 99k/tháng</b>{mark}{exp}\n"
         f"• Auto-match tin cho khách\n"
@@ -119,9 +122,7 @@ def _plans_text(uid, pn):
     mark = " ✅ <i>(đang dùng)</i>" if tier == "max" else ""
     exp = ""
     if tier == "max" and b.get("tier_expires_at"):
-        import datetime
-        d = datetime.datetime.fromtimestamp(b["tier_expires_at"])
-        exp = f" (hết hạn {d.strftime('%d/%m')})"
+        exp = f" (hết hạn {vntime.fmt(b['tier_expires_at'], '%d/%m')})"
     lines.append(
         f"\n💎💎 <b>Max — 199k/tháng</b>{mark}{exp}\n"
         f"• Tất cả của Pro\n"
@@ -204,7 +205,7 @@ async def premium_want_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("✅ Tôi đã chuyển khoản",
-                                  callback_data="premium:paid")],
+                                  callback_data=f"premium:paid:{tier}")],
             [InlineKeyboardButton("⬅️ Xem lại các gói",
                                   callback_data="premium:plans")],
         ]))
@@ -216,7 +217,12 @@ async def premium_paid_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await q.answer()
     uid = q.from_user.id
     pn = get_pronoun(uid)
-    tier = ctx.user_data.get("wanted_tier", "pro")
+    # The chosen tier travels in the button itself (premium:paid:<tier>) so
+    # it survives a bot restart; user_data is only a fallback for buttons
+    # sent before this change.
+    parts = (q.data or "").split(":")
+    tier = parts[2] if len(parts) > 2 else ctx.user_data.get("wanted_tier",
+                                                              "pro")
     if tier not in ("pro", "max"):
         tier = "pro"
     existing = db.get_pending_premium_request(uid)
@@ -288,18 +294,25 @@ async def cmd_approve(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not broker:
         await update.message.reply_text("Không tìm thấy broker này.")
         return
-    db.set_tier(target, tier, days=30)
-    # mark any pending request approved
+    # Grant exactly once, with the tier the ADMIN typed. Closing the pending
+    # request used to grant a second time with the tier the broker asked
+    # for, silently overriding the admin.
     req = db.get_pending_premium_request(target)
     if req:
-        db.decide_premium_request(req["id"], True)
+        decided = db.decide_premium_request(req["id"], True, tier=tier,
+                                            days=30)
+        exp = decided.get("expires_at")
+    else:
+        exp = db.set_tier(target, tier, days=30)
+    exp_txt = vntime.fmt(exp) if exp else "không giới hạn"
     try:
         await ctx.bot.send_message(
             target,
             f"🎉 Gói <b>{TIER_LABEL.get(tier)}</b> của anh đã được kích hoạt!\n"
-            f"Hạn dùng 30 ngày. Dùng /premium để xem chi tiết nhé 😊",
+            f"Dùng tới {exp_txt}. Dùng /premium để xem chi tiết nhé 😊",
             parse_mode="HTML")
     except Exception:
         pass
     await update.message.reply_text(
-        f"Đã kích hoạt {TIER_LABEL.get(tier)} cho {target} (30 ngày) ✅")
+        f"Đã kích hoạt {TIER_LABEL.get(tier)} cho {target}"
+        f" (hết hạn {exp_txt}) ✅")

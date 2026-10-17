@@ -599,9 +599,8 @@ def submit_propose(broker_id, request_id, listing_ids):
     # 7-day propose ban.
     cooldown_until = db.get_refresh_cooldown(broker_id)
     if cooldown_until:
-        import datetime
-        until = datetime.datetime.fromtimestamp(cooldown_until).strftime(
-            "%d/%m/%Y")
+        from db import vntime
+        until = vntime.fmt(cooldown_until, "%d/%m/%Y")
         return {"error": "propose_cooldown",
                 "error_vi": (
                     "Anh đang bị hạn chế đề xuất đến " + until +

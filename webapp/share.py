@@ -356,11 +356,16 @@ def handle_report(token, data):
     if not rid:
         return {"error": "invalid_reason",
                 "error_vi": "Lý do không hợp lệ."}, 400
+    # Anti-abuse: the link is public and unauthenticated, so one link may
+    # cause at most ONE automatic strike (any listing, any number of POSTs).
+    # Every report is still stored for admin review; only the automatic
+    # penalty is limited. Different links still add up as before.
     # Auto-match: rented report + recent 'available' refresh claim
     # -> probable false refresh -> penalize (Khanh 2026-10-16)
     if reason == "rented":
         claim = db.check_report_against_refresh(listing_id)
-        if claim:
+        if claim and db.reserve_report_penalty(token, listing_id, rid,
+                                               reason):
             try:
                 db.queue_notification(
                     "false_refresh_suspect", None,
@@ -371,7 +376,8 @@ def handle_report(token, data):
                 pass
     # Amenity fraud: client reports false amenities/highlights
     # -> same penalty track as false refresh (Khanh 2026-10-16)
-    elif reason == "amenity_wrong":
+    elif reason == "amenity_wrong" and db.reserve_report_penalty(
+            token, listing_id, rid, reason):
         try:
             db.queue_notification(
                 "false_amenity_suspect", None,

@@ -47,7 +47,8 @@ def is_muted_or_banned(broker_id, path=None):
         return True, _SPAM_MESSAGES["banned"]
     now = _now()
     if st["muted_until"] and st["muted_until"] > now:
-        until = time.strftime("%H:%M %d/%m", time.localtime(st["muted_until"]))
+        from .vntime import fmt as _vn_fmt
+        until = _vn_fmt(st["muted_until"], "%H:%M %d/%m")
         return True, _SPAM_MESSAGES["muted"].format(until=until)
     return False, ""
 

@@ -1,5 +1,6 @@
 """Broker accounts, tiers, premium, checklist."""
 from .core import connect, _now
+import config
 import json
 import uuid
 
@@ -136,14 +137,37 @@ def get_tier(broker_id, path=None):
     return tier if tier in TIER_ORDER else "free"
 
 
-def set_tier(broker_id, tier, days=30, path=None):
-    """Activate a tier for `days` (use days=0 for no expiry)."""
+def set_tier(broker_id, tier, days=30, stack=False, path=None):
+    """Activate a tier for `days` (use days=0 for no expiry).
+
+    stack=True is for granting a PAID period (decide_premium_request): an
+    early renewal of the same, still-active tier is counted from the current
+    expiry, so paying before the old period ends never throws days away.
+    stack=False (admin /approve without a pending request, referral, tests)
+    never adds on top: the same active tier ends at max(current expiry,
+    now + days), so typing /approve twice cannot hand out 60 days. A
+    different tier, or an expired one, starts from now. Returns the new
+    expiry (None = no expiry).
+    """
     if tier not in TIER_ORDER:
         raise ValueError(f"unknown tier: {tier}")
-    exp = _now() + days * 86400 if days else None
+    now = _now()
+    exp = None
+    if days:
+        start = now
+        b = get_broker(broker_id, path=path) or {}
+        cur_exp = b.get("tier_expires_at")
+        same_active = ((b.get("tier") or "free") == tier
+                       and cur_exp and cur_exp > now)
+        if same_active and stack:
+            start = cur_exp
+        exp = start + days * 86400
+        if same_active and not stack:
+            exp = max(exp, cur_exp)
     limit = config.FREE_LISTING_LIMIT if tier == "free" else 0  # 0 = unlimited
     update_broker(broker_id, path=path, tier=tier,
                   tier_expires_at=exp, listing_limit=limit)
+    return exp
 
 
 def tier_allows(broker_id, min_tier, path=None):
@@ -204,8 +228,15 @@ def list_pending_premium_requests(path=None):
     return [dict(r) for r in rows]
 
 
-def decide_premium_request(request_id, approve, path=None):
-    """Approve or reject a premium request. Returns the request dict."""
+def decide_premium_request(request_id, approve, tier=None, days=30,
+                           path=None):
+    """Approve or reject a premium request. Returns the request dict.
+
+    On approve this is the ONLY place the tier is granted (once). `tier`
+    overrides what the broker asked for — the admin's typed tier wins.
+    The granted tier/expiry are returned as req["granted_tier"] /
+    req["expires_at"].
+    """
     conn = connect(path)
     row = conn.execute(
         "SELECT * FROM premium_requests WHERE id = ?", (request_id,)
@@ -227,7 +258,10 @@ def decide_premium_request(request_id, approve, path=None):
     conn.commit()
     conn.close()
     if approve:
-        set_tier(req["broker_id"], req["tier_requested"], days=30, path=path)
+        granted = tier or req["tier_requested"]
+        req["granted_tier"] = granted
+        req["expires_at"] = set_tier(req["broker_id"], granted, days=days,
+                                     stack=True, path=path)
     req["status"] = status
     return req
 

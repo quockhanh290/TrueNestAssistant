@@ -549,6 +549,68 @@ _addphoto_pending = {}
 ADD_PHOTO_WINDOW = 3  # seconds of quiet before committing added photos
 
 
+# Every user_data key that makes the bot treat the user's NEXT message,
+# photo or button as the answer to an unfinished step. Leaving one behind
+# after the user walks away means a later, unrelated message is swallowed
+# by the old step (a pasted listing saved as a client note, its price
+# booked as a commission, ...). Not listed on purpose: preferences and
+# caches that are not steps (wanted_tier, last_query), the hint flow's own
+# pending_hint_key, batch_import (forward-batch summary; its listings are
+# already saved one by one), and match_picking (the old inline picker's
+# state: nothing writes it any more, and the reserved slot it points to
+# lives in feat_match._pending_picks + a DB row, released by mpick:cancel).
+PENDING_STEP_KEYS = (
+    # typed-text steps, in bot.on_text routing order
+    "onboarding", "onboarding2", "editing_contact", "editing_post",
+    "confirming", "confirming_queue", "awaiting", "editing",
+    "adding_client", "adding_note", "editing_client", "adding_deal",
+    "refresh_discount", "adding_template", "relaying", "client_extra_req",
+    "viewing_feedback", "send2client", "guided", "adding_photos",
+    "photo_delete",
+    # button-driven steps whose leftovers change later behaviour
+    "scheduling", "deal_new", "dup_check", "dup_confirmed", "imgdup_check",
+    "stray_photo", "receipt_pending", "enrich", "enrich_ctx",
+)
+
+# Steps whose drafts live on in the DB (status draft / pending_info) after
+# the step is cleared. Whoever clears them tells the broker and offers a way
+# back (feat_intake.release_pending_steps -> drafts:resume).
+DRAFT_STEP_KEYS = ("confirming", "confirming_queue", "awaiting", "dup_check")
+
+
+def clear_pending_steps(ctx, uid=None, keep_guided=False):
+    """Forget every unfinished step for this user (see PENDING_STEP_KEYS),
+    plus the free-form collection buffer and a pending add-photos commit.
+    The one place that /start, /menu, /huy, menu buttons and Cancel/Back
+    buttons use. Returns the names of what was cleared.
+
+    keep_guided=True (plain navigation: menu buttons, /menu, opening a
+    client card) keeps a guided step-by-step listing intake and its photo
+    buffer: its answers exist nowhere else, and it does not swallow other
+    flows' input (every other step is routed before it in bot.on_text).
+    Only /start, /huy and "new listing" drop it."""
+    cleared = []
+    ud = ctx.user_data
+    for key in PENDING_STEP_KEYS:
+        if keep_guided and key == "guided":
+            continue
+        if key in ud:
+            ud.pop(key, None)
+            cleared.append(key)
+    if uid is not None:
+        buf = _buffers.get(uid)
+        if buf is not None and not (keep_guided and buf.get("guided")):
+            _buffers.pop(uid, None)
+            cleared.append("buffer")
+        pend = _addphoto_pending.pop(uid, None)
+        if pend:
+            task = pend.get("task")
+            if task:
+                task.cancel()
+            cleared.append("addphoto_pending")
+    return cleared
+
+
 async def natural_delay(update: Update):
     """Typing indicator + human-like delay before replying."""
     try:

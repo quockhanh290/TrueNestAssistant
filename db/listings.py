@@ -2,6 +2,7 @@
 import json
 
 from .core import connect, _now
+import config
 from .refresh import log_refresh_claim
 import uuid
 

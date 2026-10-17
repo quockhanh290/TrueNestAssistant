@@ -4,6 +4,7 @@ import datetime
 import json
 import logging
 import random
+import re
 import time
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, Update
@@ -11,6 +12,7 @@ from telegram.ext import ContextTypes
 
 import config
 import db
+from db import vntime
 import parser as listing_parser
 from normalize import normalize_phone
 
@@ -31,15 +33,16 @@ from utils import (
 log = logging.getLogger("linh")
 
 def _month_bounds(yyyymm):
+    """Epoch bounds of a calendar month in Vietnam time."""
     y, m = int(yyyymm[:4]), int(yyyymm[4:])
     start = datetime.datetime(y, m, 1)
     end = (datetime.datetime(y + 1, 1, 1) if m == 12
            else datetime.datetime(y, m + 1, 1))
-    return start.timestamp(), end.timestamp()
+    return vntime.to_ts(start), vntime.to_ts(end)
 
 
 def _cur_yyyymm():
-    return datetime.datetime.now().strftime("%Y%m")
+    return vntime.now().strftime("%Y%m")
 
 
 def _fmt_month_vn(yyyymm):
@@ -51,7 +54,7 @@ def _fmt_money_full(v):
 
 
 def _deal_line(d):
-    dt = datetime.datetime.fromtimestamp(d["closed_at"]).strftime("%d/%m")
+    dt = vntime.fmt(d["closed_at"], "%d/%m")
     lst = ""
     if d.get("listing_id"):
         l = db.get_listing(d["listing_id"])
@@ -68,12 +71,23 @@ def _deal_line(d):
 
 
 async def cmd_commission(update, ctx):
+    """/commission command AND the menu:deals button (no update.message
+    on a button tap — answer by editing the menu message instead)."""
     import feat_premium
     uid = update.effective_user.id
+    q = update.callback_query
+    if q is not None:
+        await q.answer()
     if not feat_premium.requires_tier(uid, "commission"):
-        await feat_premium.send_gate(update, "commission", uid)
+        if q is not None:
+            await feat_premium.send_gate(q, "commission", uid, edit=True)
+        else:
+            await feat_premium.send_gate(update, "commission", uid)
         return
-    await _send_commission(update.message, uid, _cur_yyyymm(), edit=False)
+    if q is not None:
+        await _send_commission(q, uid, _cur_yyyymm(), edit=True)
+    else:
+        await _send_commission(update.message, uid, _cur_yyyymm(), edit=False)
 
 
 async def _send_commission(msg_or_q, uid, yyyymm, edit):
@@ -248,19 +262,52 @@ async def _ask_deal_amount(msg_or_q, ctx, uid, c, l, edit):
         await msg_or_q.reply_text(text, reply_markup=kb)
 
 
+# Words allowed next to the digits of a commission reply ("15tr",
+# "15 triệu", "7.500.000đ"). Only units that parser.parse_price actually
+# reads: a unit accepted here but unreadable there ("500k", "2 củ", "1 tỷ")
+# would only lead to "em chưa hiểu số tiền" anyway (test pins this).
+_AMOUNT_UNITS = {"tr", "triệu", "trieu", "đ"}
+_AMOUNT_MAX_LEN = 30
+
+
+def _looks_like_amount(text):
+    """True for a short, single-line money amount such as '15tr'."""
+    t = text.strip().lower()
+    if not t or len(t) > _AMOUNT_MAX_LEN or "\n" in t:
+        return False
+    if not re.search(r"\d", t):
+        return False
+    words = re.findall(r"[^\W\d_]+", t)
+    return all(w in _AMOUNT_UNITS for w in words)
+
+
 async def _handle_add_deal(update, ctx, ad, text):
+    """Commission-amount step. Returns True when the message was the
+    answer (or a skip); False when it clearly is something else -- then the
+    step is released and bot.on_text routes the message as usual, so e.g. a
+    pasted listing is not booked as a commission because it mentions 8tr."""
     uid = update.effective_user.id
     t = text.strip().lower()
     if t in ("bỏ qua", "bo qua", "skip", "hủy", "huy", "cancel"):
         ctx.user_data.pop("adding_deal", None)
         await update.message.reply_text("Ok, em không lưu deal này ạ.",
                                         reply_markup=MENU_KB)
-        return
+        return True
+    if not _looks_like_amount(text):
+        if len(t) > _AMOUNT_MAX_LEN or "\n" in t:
+            ctx.user_data.pop("adding_deal", None)
+            await update.message.reply_text(
+                "Em tạm gác bước nhập hoa hồng nhé — khi nào cần thì vào "
+                "💰 Hoa hồng ạ.")
+            return False
+        await update.message.reply_text(
+            "Em chưa hiểu số tiền, anh nhập lại giúp em nhé? (vd: 15tr)")
+        return True
     val, _ = listing_parser.parse_price(text)
     if not val or val <= 0:
         await update.message.reply_text(
             "Em chưa hiểu số tiền, anh nhập lại giúp em nhé? (vd: 15tr)")
-        return
+        return True
     deal_id = db.create_deal(uid, client_id=ad.get("client_id"),
                              client_name=ad.get("client_name") or "",
                              listing_id=ad.get("listing_id"),
@@ -279,6 +326,7 @@ async def _handle_add_deal(update, ctx, ad, text):
         await update.message.reply_text(
             feat_payment.payment_instructions_text(deal),
             parse_mode="HTML")
+    return True
 
 
 # ---------------------------------------------------------------- auto prompt

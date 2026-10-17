@@ -12,6 +12,7 @@ from telegram.ext import ContextTypes
 
 import config
 import db
+from db import vntime
 
 log = logging.getLogger("linh")
 
@@ -183,7 +184,7 @@ async def on_listing_submitted(ctx, broker_id):
     # reward at threshold
     exp = db.maybe_grant_inviter_reward(inviter_id)
     if exp and exp != "capped":
-        date_str = time.strftime("%d/%m/%Y", time.localtime(exp))
+        date_str = vntime.fmt(exp, "%d/%m/%Y")
         try:
             await ctx.bot.send_message(
                 inviter_id,

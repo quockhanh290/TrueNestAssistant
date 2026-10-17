@@ -1,5 +1,6 @@
 """Broadcast matching, responses, propose flow."""
 from .core import connect, _now
+import config
 from .listings import count_broker_listings
 from .brokers import bump_match_stats, get_broker
 import json

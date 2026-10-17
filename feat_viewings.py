@@ -11,6 +11,7 @@ from telegram.ext import ContextTypes
 
 import config
 import db
+from db import vntime
 import parser as listing_parser
 from normalize import normalize_phone
 
@@ -42,7 +43,7 @@ VN_WD_FULL = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5",
 def _next_days(n=7):
     """[(yyyymmdd, label)] for the date picker."""
     days = []
-    today = datetime.date.today()
+    today = vntime.today()
     for i in range(n):
         d = today + datetime.timedelta(days=i)
         ymd = d.strftime("%Y%m%d")
@@ -57,7 +58,7 @@ def _next_days(n=7):
 
 
 def _fmt_sched(ts):
-    d = datetime.datetime.fromtimestamp(ts)
+    d = vntime.from_ts(ts)
     return (f"{VN_WD_FULL[d.weekday()]}, {d.day}/{d.month} "
             f"lúc {d.strftime('%H:%M')}")
 
@@ -177,7 +178,7 @@ async def vw_pick_date(update, ctx):
 
 def _date_label(ymd):
     d = datetime.datetime.strptime(ymd, "%Y%m%d").date()
-    today = datetime.date.today()
+    today = vntime.today()
     delta = (d - today).days
     if delta == 0:
         return f"Hôm nay {d.day}/{d.month}"
@@ -331,12 +332,13 @@ async def vw_confirm(update, ctx):
         await q.edit_message_text("Phiên đặt lịch hết hạn, anh làm lại giúp em nhé.",
                                   reply_markup=MENU_KB)
         return
+    # the picked date/time is a Vietnam wall clock, not the host's
     dt = datetime.datetime.strptime(sched["date"] + sched["time"],
                                     "%Y%m%d%H%M")
     vid = db.create_viewing(uid, client_id=sched.get("client_id"),
                             client_name=sched.get("client_name") or "",
                             listing_ids=sched["listing_ids"],
-                            scheduled_at=dt.timestamp())
+                            scheduled_at=vntime.to_ts(dt))
     if sched.get("client_id"):
         db.touch_contact(sched["client_id"])
     n = len(sched["listing_ids"])
@@ -454,7 +456,19 @@ async def _begin_feedback(q, ctx, uid, vid):
         f" Cho em xin feedback từng căn nhé.\n\n"
         f"Căn 1/{n}: {_feedback_brief(lids[0])}\n"
         f"Khách nói sao ạ? (gõ “bỏ qua” nếu không có ý kiến)",
-        parse_mode="HTML")
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(
+            "❌ Hủy", callback_data=f"vw:fbcancel:{vid}")]]))
+
+
+async def vw_feedback_cancel(update, ctx):
+    """Cancel button on the feedback prompt. bot.on_callback has already
+    released the pending step (vw:fbcancel: is a leave-step button)."""
+    q = update.callback_query
+    await q.answer()
+    ctx.user_data.pop("viewing_feedback", None)
+    await q.edit_message_text("Ok, để sau nhập cũng được ạ 😊",
+                              reply_markup=MENU_KB)
 
 
 async def _handle_viewing_feedback(update, ctx, vf, text):

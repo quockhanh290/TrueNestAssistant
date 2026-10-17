@@ -730,6 +730,17 @@ def _migrate_listing_reports(conn):
         "CREATE INDEX IF NOT EXISTS idx_reports_listing"
         " ON listing_reports(listing_id)"
     )
+    # One row per share link that has already triggered an automatic
+    # penalty: a public link can cost the broker at most one strike.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS report_penalties (
+            token      TEXT PRIMARY KEY,
+            listing_id TEXT NOT NULL,
+            report_id  INTEGER,
+            reason     TEXT NOT NULL,
+            created_at REAL NOT NULL
+        )"""
+    )
 
 
 def _migrate_referrals(conn):

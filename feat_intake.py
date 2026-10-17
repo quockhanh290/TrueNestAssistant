@@ -79,6 +79,13 @@ async def _flush_after(uid, ctx):    # Wait until the buffer deadline passes (ex
         await asyncio.sleep(min(wait + 0.5, 5))
     buf = _buffers.get(uid)
     if not buf or (not buf["texts"] and not buf["photos"]):
+        if buf and buf.get("guided"):
+            # Guided photo step: picking photos often takes longer than
+            # 5s (and "no photos" has its own button). Keep the buffer so
+            # the photos still land in the guided flow; the first one that
+            # arrives restarts the timer (_wake_flush).
+            buf["idle"] = True
+            return
         _buffers.pop(uid, None)
         return
     # Ask: đủ chưa? (instead of auto-processing)
@@ -105,6 +112,13 @@ async def _flush_after(uid, ctx):    # Wait until the buffer deadline passes (ex
         buf = _buffers.pop(uid, None)
         if buf:
             await _process_buffer(uid, buf, ctx)
+
+
+def _wake_flush(uid, ctx, buf):
+    """Something was added to a buffer whose timer had stopped while it was
+    still empty (guided photo step) -- start the 'đủ chưa?' timer again."""
+    if buf.pop("idle", False):
+        asyncio.create_task(_flush_after(uid, ctx))
 
 
 async def buf_confirm_done(update, ctx):
@@ -295,6 +309,66 @@ async def _promote_next_confirming(ctx, chat_id, uid):
         return True
     ctx.user_data.pop("confirming_queue", None)
     return False
+
+
+# Unsaved drafts offered back after a cleared step: the broker's most recent
+# ones only, so a pile of long-abandoned drafts is not resurfaced forever.
+RESUME_DRAFT_DAYS = 7
+RESUME_DRAFT_MAX = 10
+
+
+def _unsaved_drafts(uid):
+    """Broker's recent drafts that were never saved (newest first)."""
+    cutoff = time.time() - RESUME_DRAFT_DAYS * 86400
+    rows = db.list_broker_listings(uid, limit=RESUME_DRAFT_MAX,
+                                   statuses=list(SAVEABLE_STATUSES))
+    return [l for l in rows if (l.get("created_at") or 0) >= cutoff]
+
+
+async def release_pending_steps(ctx, uid, chat_id, keep_guided=False):
+    """Clear every pending step (utils.clear_pending_steps) and, if that
+    dropped a draft confirmation or its queue, tell the broker how many
+    drafts are still unsaved with a button to reopen them -- the drafts are
+    still in the DB, only the in-memory step pointing at them is gone."""
+    from utils import clear_pending_steps, DRAFT_STEP_KEYS
+    cleared = clear_pending_steps(ctx, uid, keep_guided=keep_guided)
+    if not any(k in cleared for k in DRAFT_STEP_KEYS):
+        return cleared
+    n = len(_unsaved_drafts(uid))
+    if n and chat_id is not None:
+        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+        try:
+            await ctx.bot.send_message(
+                chat_id,
+                f"📝 Còn {n} tin nháp chưa lưu. Khi nào rảnh anh bấm nút "
+                "dưới để xác nhận tiếp nhé.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(
+                    "📝 Mở lại tin nháp", callback_data="drafts:resume")]]))
+        except Exception:
+            log.warning("unsaved-drafts notice failed", exc_info=True)
+    return cleared
+
+
+async def drafts_resume_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """[Mở lại tin nháp]: queue the unsaved drafts again and show the first
+    confirmation summary (with its [Đúng rồi, lưu tin] button)."""
+    q = update.callback_query
+    await q.answer()
+    uid = q.from_user.id
+    drafts = _unsaved_drafts(uid)
+    if not drafts:
+        await q.edit_message_text("Không còn tin nháp nào chưa lưu ạ ✓",
+                                  reply_markup=MENU_KB)
+        return
+    cur = (ctx.user_data.get("confirming") or {}).get("listing_id")
+    queue = ctx.user_data.setdefault("confirming_queue", [])
+    queued = {e.get("listing_id") for e in queue}
+    for l in reversed(drafts):              # oldest first
+        if l["id"] != cur and l["id"] not in queued:
+            queue.append({"listing_id": l["id"]})
+    await q.edit_message_text(f"Em mở lại {len(drafts)} tin nháp nhé 📝")
+    if not cur:
+        await _promote_next_confirming(ctx, q.message.chat_id, uid)
 
 
 async def hl_done_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -508,10 +582,40 @@ async def batch_done_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def confirm_save_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
-    await q.answer()
     lid = q.data.split(":", 2)[2]  # "cfm:save:<listing_id>" (ids contain ':')
-    await _finalize_after_confirm(q, ctx, q.from_user.id, lid,
+    uid = q.from_user.id
+    # The button stays on old summary messages forever. Only a draft of
+    # this broker that is the one being confirmed right now may be saved;
+    # otherwise an old button would re-submit a saved/rented listing and
+    # pop the confirmation state of whatever draft is current.
+    l = db.get_listing(lid)
+    if not l or l.get("broker_id") != uid:
+        await q.answer()
+        await q.edit_message_text("Tin này không còn nữa.",
+                                  reply_markup=MENU_KB)
+        return
+    if l.get("status") not in SAVEABLE_STATUSES:
+        await q.answer()
+        await q.edit_message_text("Tin này đã lưu rồi ạ ✓",
+                                  reply_markup=MENU_KB)
+        return
+    confirming = ctx.user_data.get("confirming")
+    if confirming and confirming.get("listing_id") != lid:
+        # another draft is on screen (this one is queued or abandoned):
+        # leave both untouched
+        await q.answer("Anh xác nhận tin đang hiện trước nhé 🙏",
+                       show_alert=True)
+        return
+    await q.answer()
+    # confirming is None: no other draft is being confirmed (e.g. the state
+    # was lost on a bot restart, or cleared by /huy) -- the broker is
+    # confirming this draft explicitly, so let it through.
+    await _finalize_after_confirm(q, ctx, uid, lid,
                                   q.message.chat_id, via_callback=True)
+
+
+# Listing statuses from which the [Đúng rồi, lưu tin] button may save.
+SAVEABLE_STATUSES = ("draft", "pending_info")
 
 
 async def _ask_duplicate_confirm(say, ctx, draft_id, old, pn, chat_id, uid,
@@ -1021,6 +1125,7 @@ async def _flush_media_group(key, ctx):
         buf["deadline"] = time.time() + COLLECT_WINDOW
         if not buf.get("forward_source") and entry.get("forward_source"):
             buf["forward_source"] = entry["forward_source"]
+        _wake_flush(uid, ctx, buf)
     else:
         _buffers[uid] = {
             "texts": [entry["caption"]] if entry["caption"] else [],
@@ -1230,6 +1335,7 @@ async def _handle_single_photo(update, ctx, uid, msg, file_id, caption=""):
         if caption:
             buf["texts"].append(caption)
         buf["deadline"] = time.time() + COLLECT_WINDOW
+        _wake_flush(uid, ctx, buf)
     else:
         # No active buffer — stray photo. Usually it's for the most recent
         # listing, so ask to confirm instead of starting a new one blindly.
@@ -1606,9 +1712,11 @@ def _guided_step_content(gd):
                 f"{tag}", _guided_back_kb(kb))
 
     if step == "photos":
+        kb = [[InlineKeyboardButton("➡️ Không có ảnh, tiếp tục",
+                                    callback_data="guided:nophoto")]]
         return ("Anh gửi ảnh nhé 📸 (gửi bao nhiêu cũng được — "
                 f"5s không gửi thêm thì em hỏi) {tag}",
-                _guided_back_kb())
+                _guided_back_kb(kb))
 
     if step == "description":
         kb = [[InlineKeyboardButton("Xong ⏭️", callback_data="guided:skip")]]
@@ -1947,6 +2055,23 @@ async def guided_skip(update, ctx):
         await _guided_arm_photos(update, q.from_user.id, ctx,
                                  chat_id=q.message.chat_id, edit=True)
         return
+    await _guided_show(update, ctx, edit=True)
+
+
+async def guided_no_photos(update, ctx):
+    """[Không có ảnh, tiếp tục] on the guided photo step: drop the photo
+    buffer and go on to the description step."""
+    q = update.callback_query
+    await q.answer()
+    gd = ctx.user_data.get("guided")
+    if not gd or GUIDED_STEPS[gd["step"]] != "photos":
+        return
+    buf = _buffers.get(q.from_user.id)
+    if buf and buf.get("guided"):
+        _buffers.pop(q.from_user.id, None)
+    # also forget photos stashed by an earlier visit to this step
+    gd["answers"].pop("photos", None)
+    gd["step"] = GUIDED_STEPS.index("description")
     await _guided_show(update, ctx, edit=True)
 
 

@@ -11,6 +11,7 @@ import random
 import time
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, Update
+from telegram.error import BadRequest
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -112,6 +113,7 @@ HELP_TEXT = (
 
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
+    await feat_intake.release_pending_steps(ctx, u.id, update.effective_chat.id)
     existing = db.get_broker(u.id)
     broker = db.get_or_create_broker(u.id, u.username, u.full_name)
     # Referral: /start ref_<inviter_id> from an invite link
@@ -251,6 +253,8 @@ async def _handle_onboarding2(update: Update, ctx: ContextTypes.DEFAULT_TYPE,
 
 async def cmd_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
+    await feat_intake.release_pending_steps(ctx, u.id, update.effective_chat.id,
+                                            keep_guided=True)
     db.get_or_create_broker(u.id, u.username, u.full_name)
     await natural_delay(update)
     pn = get_pronoun(u.id)
@@ -650,8 +654,10 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     # 1b5. entering a deal commission?
     ad = ctx.user_data.get("adding_deal")
     if ad:
-        await feat_deals._handle_add_deal(update, ctx, ad, text)
-        return
+        # False = not a commission answer; the step was released and the
+        # message continues through normal routing below.
+        if await feat_deals._handle_add_deal(update, ctx, ad, text):
+            return
 
     # 1b6. entering a new price for an old-listing refresh?
     rd = ctx.user_data.get("refresh_discount")
@@ -710,9 +716,20 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     # 2. part of an active collection buffer? (manual input only;
     # forwards are handled at 0b2 and never reach the buffer)
     buf = _buffers.get(uid)
+    if buf and buf.get("guided"):
+        # Guided photo step: its buffer only collects photos ("Đủ rồi"
+        # keeps buf["photos"] and nothing else), so text put there would
+        # silently vanish. The user has one buffer slot, so the text cannot
+        # start a second listing either -- say so instead of eating it.
+        await update.message.reply_text(
+            "Bước này em chỉ nhận ảnh 📸 Anh gửi ảnh, hoặc bấm "
+            "“Không có ảnh, tiếp tục”. Nếu muốn nhập một tin khác thì gõ "
+            "/huy rồi gửi lại tin đó giúp em nhé.")
+        return
     if buf:
         buf["texts"].append(text)
         buf["deadline"] = time.time() + COLLECT_WINDOW
+        feat_intake._wake_flush(uid, ctx, buf)
         return
 
     # 4. natural-language listing query? (not a new listing) — Pro feature
@@ -816,8 +833,61 @@ async def _maybe_show_hint(update: Update, ctx: ContextTypes.DEFAULT_TYPE,
     return False
 
 
+class _Override:
+    """Read-only view of a (frozen) PTB object with some attributes
+    replaced; everything else, including bound methods such as answer()
+    and edit_message_text(), is delegated to the wrapped object."""
+
+    def __init__(self, inner, **overrides):
+        object.__setattr__(self, "_inner", inner)
+        object.__setattr__(self, "_overrides", overrides)
+
+    def __getattr__(self, name):
+        ov = object.__getattribute__(self, "_overrides")
+        if name in ov:
+            return ov[name]
+        return getattr(object.__getattribute__(self, "_inner"), name)
+
+
+def _with_callback_data(update, data):
+    """The same update, but its callback_query.data reads `data`."""
+    q = _Override(update.callback_query, data=data)
+    return _Override(update, callback_query=q)
+
+
+# Buttons that leave or cancel whatever step the user was in. Tapping one
+# releases every pending step (utils.clear_pending_steps, via
+# feat_intake.release_pending_steps which also offers unsaved drafts back),
+# so a later typed
+# message is never swallowed by a step the user already walked away from.
+# Opening a client card (the catch-all "client:<id>:..." route, the target
+# of most "Hủy"/"Quay lại" buttons in client flows) does the same, below.
+_LEAVE_STEP_BUTTONS = frozenset({
+    "clients:cancel", "deal:skip_auto", "mresp:cancel", "rf:skip:", "vw:no",
+})
+_LEAVE_STEP_PREFIXES = (
+    "menu:", "cms:", "editcancel:", "mpick:cancel:", "tpl:list:",
+    "clients:list:", "vw:fbcancel:", "writeview:",
+)
+
+
+def _leaves_pending_steps(data):
+    return data in _LEAVE_STEP_BUTTONS or data.startswith(_LEAVE_STEP_PREFIXES)
+
+
+async def _release_steps(update, ctx, keep_guided):
+    q = update.callback_query
+    chat = getattr(update, "effective_chat", None)
+    await feat_intake.release_pending_steps(
+        ctx, q.from_user.id, chat.id if chat else q.from_user.id,
+        keep_guided=keep_guided)
+
+
 async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     data = update.callback_query.data
+    if _leaves_pending_steps(data):
+        # plain navigation keeps a guided intake; "new listing" restarts it
+        await _release_steps(update, ctx, keep_guided=(data != "menu:new"))
     # hint proceed/skip — handle before normal dispatch
     if data.startswith("hint:go:"):
         original = data[len("hint:go:"):]
@@ -826,9 +896,9 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             hints.mark_seen(update.callback_query.from_user.id, hint_key)
         ctx.user_data.pop("pending_hint_key", None)
         # re-dispatch to the original menu action (hint now marked seen,
-        # so it goes straight to the handler)
-        update.callback_query.data = original
-        await on_callback(update, ctx)
+        # so it goes straight to the handler). PTB objects are frozen, so
+        # the query cannot be rewritten in place — wrap it instead.
+        await on_callback(_with_callback_data(update, original), ctx)
         return
     if data == "hint:skip":
         # user dismissed the hint — mark seen so we don't nag again
@@ -875,7 +945,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await feat_premium.premium_plans_cb(update, ctx)
     elif data.startswith("premium:want:"):
         await feat_premium.premium_want_cb(update, ctx)
-    elif data == "premium:paid":
+    elif data == "premium:paid" or data.startswith("premium:paid:"):
         await feat_premium.premium_paid_cb(update, ctx)
     elif data == "menu:clients":
         await _maybe_show_hint(
@@ -934,6 +1004,8 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await feat_intake.guided_back(update, ctx)
     elif data == "guided:skip":
         await feat_intake.guided_skip(update, ctx)
+    elif data == "guided:nophoto":
+        await feat_intake.guided_no_photos(update, ctx)
     elif data == "menu:viewings":
         async def _viewings_flow():
             if not feat_premium.requires_tier(update.callback_query.from_user.id,
@@ -946,7 +1018,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 await feat_viewings.cmd_viewings_cb(update, ctx)
         await _maybe_show_hint(update, ctx, data, _viewings_flow)
     elif data.startswith("vw:"):
-        act, payload = _parse_vw_cb(data)
+        act, payload = feat_viewings._parse_vw_cb(data)
         if act == "ok":
             await feat_viewings.vw_confirm(update, ctx)
         elif act == "no":
@@ -973,8 +1045,10 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 await feat_viewings.vw_lpick_back(update, ctx)
         elif act == "fb":
             await feat_viewings.vw_feedback_start(update, ctx)
+        elif act == "fbcancel":
+            await feat_viewings.vw_feedback_cancel(update, ctx)
     elif data.startswith("tpl:"):
-        act, _ = _parse_tpl_cb(data)
+        act, _ = feat_templates._parse_tpl_cb(data)
         if act == "list":
             await feat_templates.tpl_list_cb(update, ctx)
         elif act == "use":
@@ -1008,6 +1082,8 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await feat_deals.deal_pick_client(update, ctx)
         elif rest.startswith("ml:"):
             await feat_deals.deal_pick_listing(update, ctx)
+        elif rest == "skip_auto":
+            await feat_deals.deal_skip_auto(update, ctx)
     elif data.startswith("cms:"):
         await feat_deals.cms_nav(update, ctx)
     elif data == "pay:receipt_yes":
@@ -1137,6 +1213,8 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("client:note:"):
         await feat_clients.client_note_prompt(update, ctx)
     elif data.startswith("client:"):
+        # opening a client card = leaving any step (see _LEAVE_STEP_BUTTONS)
+        await _release_steps(update, ctx, keep_guided=True)
         await feat_clients.show_client_detail(update, ctx)
     elif data == "onboard:skip_phone":
         await onboard_skip_phone(update, ctx)
@@ -1150,6 +1228,8 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await onboard_dname_cb(update, ctx)
     elif data.startswith("cfm:save:"):
         await feat_intake.confirm_save_cb(update, ctx)
+    elif data == "drafts:resume":
+        await feat_intake.drafts_resume_cb(update, ctx)
     elif data == "batch:more":
         await feat_intake.batch_more_cb(update, ctx)
     elif data == "batch:done":
@@ -1196,6 +1276,41 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await feat_notify.notify_pref_toggle(update, ctx)
     elif data.startswith("referral:"):
         await feat_referral.handle_referral_callback(update, ctx)
+
+
+ERROR_REPLY = ("Em gặp trục trặc khi xử lý thao tác này 😥 Anh thử lại giúp em,"
+               " hoặc gõ /menu để quay về menu nhé.")
+
+
+async def on_error(update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Application-wide error handler: full traceback to the log, one short
+    line to the user. Without it PTB only logs and the user sees a button
+    that does nothing."""
+    err = getattr(ctx, "error", None)
+    if isinstance(err, BadRequest) and "message is not modified" in str(
+            err).lower():
+        # re-tapping a button that would redraw the same text: harmless
+        log.info("ignored 'message is not modified' for update %r",
+                 getattr(update, "update_id", update))
+        return
+    log.error("unhandled error while handling update %r: %r",
+              getattr(update, "update_id", update), err,
+              exc_info=(type(err), err, err.__traceback__) if err else None)
+    if update is None:
+        return
+    try:
+        q = getattr(update, "callback_query", None)
+        if q is not None:
+            try:
+                await q.answer()
+            except Exception:
+                pass
+        chat = getattr(update, "effective_chat", None)
+        # apologise only in a private chat -- never into the broker group
+        if chat is not None and getattr(chat, "type", None) == "private":
+            await ctx.bot.send_message(chat.id, ERROR_REPLY)
+    except Exception as e:  # never let the error handler raise
+        log.warning("error reply failed: %r", e)
 
 
 def _single_instance_lock():
@@ -1250,6 +1365,7 @@ def main():
         filters.ChatType.GROUPS & filters.REPLY, feat_match.on_group_reply))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
     app.add_handler(MessageHandler(filters.PHOTO, feat_intake.on_photo))
+    app.add_error_handler(on_error)
     # Poller: send queued webapp notifications (e.g. slot reopened alerts).
     # Runs every 30s; cheap no-op when outbox is empty.
     async def _outbox_poller(ctx):

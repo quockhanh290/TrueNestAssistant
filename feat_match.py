@@ -1,5 +1,6 @@
 """Cross-broker matching/broadcast."""
 import asyncio
+import html
 import json
 import logging
 import random
@@ -30,7 +31,8 @@ from utils import (
 
 log = logging.getLogger("linh")
 
-from feat_clients import parse_client_cb, _client_req_summary
+from feat_clients import (parse_client_cb, _client_req_summary,
+                          CLIENT_URGENCY_EMOJI, CLIENT_URGENCY_LABEL)
 
 # ---- Phase 1: inventory verification + match scoring ----
 
@@ -475,11 +477,15 @@ async def match_broadcast_send(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def match_requests_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """List this client's open broadcast requests."""
+    """List this client's open broadcast requests (client:reqs:<cid>), or —
+    from the main-menu button (menu:match) — all of the broker's."""
     q = update.callback_query
     await q.answer()
     uid = q.from_user.id
     pn = get_pronoun(uid)
+    if not (q.data or "").startswith("client:reqs:"):
+        await _all_requests_overview(q, uid, pn)
+        return
     client_id, _ = parse_client_cb(q.data, "client:reqs")
     c = db.get_client(client_id)
     if not c or c["broker_id"] != uid:
@@ -488,23 +494,57 @@ async def match_requests_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             if r["client_id"] == client_id and r["status"] in ("open", "matched")]
     if not reqs:
         await q.edit_message_text(
-            f"Chưa có yêu cầu nào đang mở cho <b>{c.get('name')}</b>.",
+            f"Chưa có yêu cầu nào đang mở cho"
+            f" <b>{html.escape(c.get('name') or '')}</b>.",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton(
                     "⬅️ Quay lại",
                     callback_data=f"client:{client_id}:0:a:a")]]))
         return
-    lines = [f"📢 Yêu cầu đang mở của <b>{c.get('name')}</b>:"]
+    lines = [f"📢 Yêu cầu đang mở của <b>{html.escape(c.get('name') or '')}</b>:"]
     kb = []
     for i, r in enumerate(reqs, start=1):
         mark = " ✅ đủ 3 phản hồi" if r["status"] == "matched" else ""
-        lines.append(f"{i}. 💰 {r['requirements_summary']}{mark}")
+        # summaries look like "<15tr" -- unescaped, Telegram rejects the
+        # whole message ("can't parse entities")
+        lines.append(
+            f"{i}. 💰 {html.escape(r['requirements_summary'] or '')}{mark}")
         kb.append([InlineKeyboardButton(
             f"{i}. Đóng yêu cầu",
             callback_data=f"mreq:close:{r['id']}")])
     kb.append([InlineKeyboardButton(
         "⬅️ Quay lại", callback_data=f"client:{client_id}:0:a:a")])
+    await q.edit_message_text("\n".join(lines), parse_mode="HTML",
+                              reply_markup=InlineKeyboardMarkup(kb))
+
+
+async def _all_requests_overview(q, uid, pn):
+    """Main-menu view: every open/matched broadcast request of the broker."""
+    reqs = [r for r in db.list_broker_requests(uid)
+            if r["status"] in ("open", "matched")]
+    back = [InlineKeyboardButton("⬅️ Menu", callback_data="menu:back")]
+    if not reqs:
+        await q.edit_message_text(
+            f"🤝 <b>Liên kết broker</b>\n\n"
+            f"{pn.capitalize()} chưa có yêu cầu nào đang mở.\n"
+            f"Mở 👥 Khách hàng → chọn khách → 📢 Nhờ broker khác tìm"
+            f" để đăng yêu cầu lên nhóm môi giới nhé.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("👥 Khách hàng",
+                                      callback_data="menu:clients")],
+                back]))
+        return
+    lines = ["🤝 <b>Yêu cầu đang mở:</b>"]
+    kb = []
+    for i, r in enumerate(reqs, start=1):
+        mark = " ✅ đủ 3 phản hồi" if r["status"] == "matched" else ""
+        lines.append(
+            f"{i}. 💰 {html.escape(r['requirements_summary'] or '')}{mark}")
+        kb.append([InlineKeyboardButton(
+            f"{i}. Đóng yêu cầu", callback_data=f"mreq:close:{r['id']}")])
+    kb.append(back)
     await q.edit_message_text("\n".join(lines), parse_mode="HTML",
                               reply_markup=InlineKeyboardMarkup(kb))
 
@@ -746,6 +786,10 @@ async def process_outbox_notifications(ctx):
     Call periodically from the bot's job queue. Sends each unsent
     notification to the broker group channel, then marks it sent.
     """
+    # Every row popped here is marked done in `finally`, whatever happens:
+    # delivered, nothing to deliver (dropped), or failed. The queue is read
+    # oldest-first 20 at a time, so a row left unmarked would be re-read
+    # forever and 20 of them would starve every newer notification.
     for n in db.pop_unsent_notifications():
         try:
             if n["ntype"] == "slot_reopened":
@@ -753,7 +797,10 @@ async def process_outbox_notifications(ctx):
                 summary = payload.get("summary") or "yêu cầu này"
                 r = db.get_match_request(n["request_id"]) if n.get("request_id") else None
                 if not r or not config.BROKER_GROUP_ID:
-                    continue
+                    log.info("outbox %s dropped: slot_reopened without %s",
+                             n.get("id"),
+                             "request" if not r else "BROKER_GROUP_ID")
+                    continue  # `finally` still marks the row done
                 # Reply to the original broadcast message for context
                 group_msg_id = r.get("group_message_id")
                 await ctx.bot.send_message(
@@ -852,10 +899,15 @@ async def process_outbox_notifications(ctx):
                             parse_mode="HTML")
                     except Exception as e2:
                         log.warning("premium request DM failed: %s", e2)
-            # Mark sent regardless of type (unknown types are dropped)
-            db.mark_notification_sent(n["id"])
         except Exception as e:
-            log.warning("outbox notification %s failed: %s", n.get("id"), e)
+            log.warning("outbox notification %s failed (dropped): %s",
+                        n.get("id"), e)
+        finally:
+            # Mark done regardless of type/outcome (unknown types dropped)
+            try:
+                db.mark_notification_sent(n["id"])
+            except Exception as e3:
+                log.warning("outbox mark %s failed: %s", n.get("id"), e3)
 
 
 async def match_pick_send(update: Update, ctx: ContextTypes.DEFAULT_TYPE):

@@ -207,22 +207,23 @@ def list_deals_api(broker_id, month=None):
 
     month: "YYYY-MM" or None for current month.
     """
+    import datetime as _dt
+    from db import vntime
+    # month boundaries are Vietnam midnights, not the host's
     if month:
         try:
-            y, m = month.split("-")
-            start = time.mktime(time.strptime("%s-%s-01" % (y, m), "%Y-%m-%d"))
+            y, m = (int(x) for x in month.split("-"))
+            start = vntime.to_ts(_dt.datetime(y, m, 1))
             # first day of next month
-            nm = int(m) + 1
-            ny = int(y) + (1 if nm > 12 else 0)
+            nm = m + 1
+            ny = y + (1 if nm > 12 else 0)
             nm = nm if nm <= 12 else 1
-            end = time.mktime(time.strptime(
-                "%04d-%02d-01" % (ny, nm), "%Y-%m-%d"))
+            end = vntime.to_ts(_dt.datetime(ny, nm, 1))
         except (ValueError, TypeError):
             return {"error": "bad_month"}, 400
     else:
-        now = time.localtime()
-        start = time.mktime(time.strptime(
-            "%04d-%02d-01" % (now.tm_year, now.tm_mon), "%Y-%m-%d"))
+        now = vntime.now()
+        start = vntime.to_ts(_dt.datetime(now.year, now.month, 1))
         end = time.time() + 86400
 
     deals = db.list_deals(broker_id, start_ts=start, end_ts=end, limit=100)
@@ -248,7 +249,7 @@ def list_deals_api(broker_id, month=None):
             negotiating.append(item)
     return {
         "month_total": total,
-        "month": month or time.strftime("%Y-%m"),
+        "month": month or vntime.now().strftime("%Y-%m"),
         "closed": closed,
         "negotiating": negotiating,
     }, 200

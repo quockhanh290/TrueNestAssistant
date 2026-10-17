@@ -64,6 +64,7 @@ from telegram.ext import ContextTypes
 
 import config
 import db
+from db import vntime
 from utils import MENU_KB, fmt_price, get_pronoun
 
 log = logging.getLogger("linh")
@@ -181,7 +182,7 @@ async def forward_receipt_to_admin(ctx, broker_id, deal, file_id):
              or f"ID {broker_id}")
     fee = platform_fee_for(deal.get("commission_vnd"))
     closed = deal.get("closed_at")
-    date_s = time.strftime("%d/%m/%Y", time.localtime(closed)) if closed else "?"
+    date_s = vntime.fmt(closed, "%d/%m/%Y") if closed else "?"
     caption = (
         f"💰 Broker <b>{bname}</b> vừa up bill chuyển khoản!\n\n"
         f"💵 Số tiền: <b>{fmt_price(fee)}</b>\n"

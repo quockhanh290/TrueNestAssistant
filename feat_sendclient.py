@@ -17,6 +17,7 @@ from telegram.ext import ContextTypes
 
 import config
 import db
+from db import vntime
 
 from utils import (
     MENU_KB, CLIENT_STATUS_EMOJI, CLIENT_STATUS_LABEL,
@@ -65,7 +66,10 @@ def parse_vn_datetime(text, now=None):
     Understands: hôm nay/mai/mốt, thứ 2..7/chủ nhật, dd/mm,
     9h sáng, 2h chiều, 14:00, 9h30...
     """
-    now = now or datetime.datetime.now()
+    # The broker types a Vietnam wall clock; "today"/"mai" are Vietnam days.
+    now = now or vntime.now()
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=vntime.VN_TZ)
     t = _strip_accents(text.lower().strip())
 
     # ---- date part
@@ -133,7 +137,8 @@ def parse_vn_datetime(text, now=None):
         hour += 12
     if not (0 <= hour <= 23 and 0 <= minute <= 59):
         return None
-    dt = datetime.datetime.combine(day, datetime.time(hour, minute))
+    dt = datetime.datetime.combine(day, datetime.time(hour, minute),
+                                   tzinfo=now.tzinfo)
     if dt <= now:
         # time already passed today -> push to tomorrow (only when the
         # user didn't name an explicit date)
@@ -144,7 +149,7 @@ def parse_vn_datetime(text, now=None):
 
 
 def fmt_sched(ts):
-    d = datetime.datetime.fromtimestamp(ts)
+    d = vntime.from_ts(ts)
     return (f"{VN_WD_FULL[d.weekday()]}, {d.day}/{d.month} "
             f"lúc {d.strftime('%H:%M')}")
 
