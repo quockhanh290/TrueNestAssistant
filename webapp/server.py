@@ -8,6 +8,8 @@ Run:
 
 Env:
     WEBAPP_PORT  — port to listen on (default 8080)
+    WEBAPP_HOST  — interface to bind (default 127.0.0.1; cloudflared
+                   reaches it via localhost, so the LAN never needs it)
     WEBAPP_URL   — public URL (used by the bot's web_app button)
     BOT_DB_PATH  — SQLite path (default broker_bot.db next to bot.py)
     TELEGRAM_BOT_TOKEN — Telegram bot token, for initData validation
@@ -25,7 +27,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qsl, urlparse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-STATIC_DIR = os.path.join(HERE, "static")
+STATIC_DIR = os.path.realpath(os.path.join(HERE, "static"))
 
 sys.path.insert(0, HERE)
 import api  # noqa: E402
@@ -33,6 +35,7 @@ import api_clients_deals as api2  # noqa: E402
 import share  # noqa: E402
 
 PORT = int(os.environ.get("WEBAPP_PORT", "8080"))
+HOST = os.environ.get("WEBAPP_HOST", "127.0.0.1")
 # start-all.ps1 and bot.py use TELEGRAM_BOT_TOKEN. Reading only BOT_TOKEN
 # here left the token empty, so every real initData failed validation.
 BOT_TOKEN = (os.environ.get("TELEGRAM_BOT_TOKEN")
@@ -216,9 +219,15 @@ class Handler(BaseHTTPRequestHandler):
 
     # -- static -------------------------------------------------------
     def _static(self, name):
-        safe = os.path.normpath(name).lstrip("/")
-        full = os.path.join(STATIC_DIR, safe)
-        if not full.startswith(STATIC_DIR) or not os.path.isfile(full):
+        # Resolve AFTER joining: normpath on the bare name kept a leading
+        # "..", and the joined "static/../.." string still passed the
+        # prefix check, serving token.txt and broker_bot.db.
+        full = os.path.realpath(os.path.join(STATIC_DIR, name.lstrip("/\\")))
+        try:
+            inside = os.path.commonpath([full, STATIC_DIR]) == STATIC_DIR
+        except ValueError:  # another drive, e.g. "C:/..."
+            inside = False
+        if not inside or not os.path.isfile(full):
             return self._json(404, {"error": "not_found"})
         ext = os.path.splitext(full)[1].lower()
         with open(full, "rb") as f:
@@ -386,7 +395,7 @@ def main():
     if not BOT_TOKEN and not DEV_MODE:
         raise SystemExit("Set TELEGRAM_BOT_TOKEN (or WEBAPP_DEV=1 for local "
                          "demo) — without it no Telegram login can validate.")
-    srv = Server(("0.0.0.0", PORT), Handler)
+    srv = Server((HOST, PORT), Handler)
     print(f"TrueNest webapp on http://localhost:{PORT}"
           + ("  (dev: ?demo=1&broker_id=<id>)" if DEV_MODE else ""),
           flush=True)
