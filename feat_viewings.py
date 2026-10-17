@@ -14,6 +14,7 @@ import db
 from db import vntime
 import parser as listing_parser
 from normalize import normalize_phone
+from feat_clients import client_html, require_owned_client
 
 from utils import (
     MENU_KB, STATUS_EMOJI, STATUS_LABEL, LIST_FILTERS,
@@ -70,6 +71,15 @@ def _parse_vw_cb(data):
     return act, payload
 
 
+async def _require_scheduling_client(q, ctx, uid, sched):
+    """Re-authorize the client at every later scheduling callback."""
+    client_id = (sched or {}).get("client_id")
+    if not client_id:
+        return True
+    return bool(await require_owned_client(
+        q, ctx, uid, client_id, "scheduling"))
+
+
 async def vw_from_client(update, ctx):
     """Start scheduling from a client: pick date first, listings later."""
     q = update.callback_query
@@ -77,10 +87,8 @@ async def vw_from_client(update, ctx):
     uid = q.from_user.id
     pn = get_pronoun(uid)
     _, client_id = _parse_vw_cb(q.data)
-    c = db.get_client(client_id)
-    if not c or c["broker_id"] != uid:
-        await q.edit_message_text("Khách này không còn nữa.",
-                                  reply_markup=MENU_KB)
+    c = await require_owned_client(q, ctx, uid, client_id, "scheduling")
+    if not c:
         return
     ctx.user_data["scheduling"] = {"client_id": client_id,
                                    "client_name": c.get("name") or "",
@@ -127,7 +135,8 @@ async def vw_from_listing(update, ctx):
         callback_data=f"vw:cc:{c['id']}")] for c in clients]
     kb.append([InlineKeyboardButton("❌ Hủy", callback_data="vw:no")])
     await q.edit_message_text(
-        f"Dẫn khách xem tin <b>{listing_line(l).splitlines()[0]}</b> — chọn khách:",
+        f"Dẫn khách xem tin "
+        f"<b>{client_html(listing_line(l).splitlines()[0])}</b> — chọn khách:",
         parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
 
 
@@ -139,10 +148,8 @@ async def vw_pick(update, ctx):
     act, payload = _parse_vw_cb(q.data)
     sched = ctx.user_data.get("scheduling") or {}
     if act == "cc":
-        c = db.get_client(payload)
-        if not c or c["broker_id"] != uid:
-            await q.edit_message_text("Khách này không còn nữa.",
-                                      reply_markup=MENU_KB)
+        c = await require_owned_client(q, ctx, uid, payload, "scheduling")
+        if not c:
             return
         sched["client_id"] = payload
         sched["client_name"] = c.get("name") or ""
@@ -159,6 +166,8 @@ async def vw_pick_date(update, ctx):
     if not sched:
         await q.edit_message_text("Phiên đặt lịch hết hạn, anh làm lại giúp em nhé.",
                                   reply_markup=MENU_KB)
+        return
+    if not await _require_scheduling_client(q, ctx, q.from_user.id, sched):
         return
     sched["date"] = ymd
     ctx.user_data["scheduling"] = sched
@@ -197,6 +206,8 @@ async def vw_pick_time(update, ctx):
         await q.edit_message_text("Phiên đặt lịch hết hạn, anh làm lại giúp em nhé.",
                                   reply_markup=MENU_KB)
         return
+    if not await _require_scheduling_client(q, ctx, uid, sched):
+        return
     sched["time"] = hhmm
     sched.setdefault("listing_ids", [])
     ctx.user_data["scheduling"] = sched
@@ -208,7 +219,9 @@ def _picker_candidates(uid, sched):
     cands = []
     client_id = sched.get("client_id")
     if client_id:
-        c = db.get_client(client_id)
+        c = db.get_client(client_id, broker_id=uid)
+        if not c:
+            return []
         for lid in (c.get("viewed_listings") or []):
             l = db.get_listing(lid)
             if l and l.get("broker_id") == uid:
@@ -241,7 +254,8 @@ async def _send_listing_picker(q, ctx, uid, sched):
     kb = []
     for i, l in enumerate(cands, 1):
         mark = "✅" if l["id"] in sel else "⬜"
-        lines.append(f"{mark} {i}. {listing_line(l).splitlines()[0]}")
+        lines.append(
+            f"{mark} {i}. {client_html(listing_line(l).splitlines()[0])}")
         kb.append([InlineKeyboardButton(
             f"{mark} Căn {i}",
             callback_data=f"vw:lpick:toggle:{l['id']}")])
@@ -250,7 +264,8 @@ async def _send_listing_picker(q, ctx, uid, sched):
     kb.append([InlineKeyboardButton("❌ Hủy", callback_data="vw:no")])
     cname = sched.get("client_name") or "khách"
     await q.edit_message_text(
-        f"Đặt lịch cho <b>{cname}</b> — {lines[0]}\n" + "\n".join(lines[1:]),
+        f"Đặt lịch cho <b>{client_html(cname)}</b> — {lines[0]}\n"
+        + "\n".join(lines[1:]),
         parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
 
 
@@ -262,6 +277,8 @@ async def vw_lpick_toggle(update, ctx, listing_id):
     if not sched:
         await q.edit_message_text("Phiên đặt lịch hết hạn, anh làm lại giúp em nhé.",
                                   reply_markup=MENU_KB)
+        return
+    if not await _require_scheduling_client(q, ctx, uid, sched):
         return
     sel = sched.get("listing_ids", [])
     if listing_id in sel:
@@ -284,19 +301,24 @@ async def vw_lpick_done(update, ctx):
     if not sched or not sched.get("listing_ids"):
         await q.answer("Anh tích ít nhất 1 căn nhé!", show_alert=True)
         return
+    if sched.get("client_id"):
+        c = await require_owned_client(q, ctx, uid, sched["client_id"],
+                                       "scheduling")
+        if not c:
+            return
     cname = sched.get("client_name")
     if not cname and sched.get("client_id"):
-        c = db.get_client(sched["client_id"])
         cname = (c or {}).get("name") or "?"
     dt = datetime.datetime.strptime(sched["date"] + sched["time"],
                                     "%Y%m%d%H%M")
     when = (f"{VN_WD_FULL[dt.weekday()]}, {dt.day}/{dt.month} "
             f"lúc {dt.strftime('%H:%M')}")
-    lines = [f"📅 <b>Xác nhận lịch xem:</b>", f"👤 Khách: {cname}",
+    lines = [f"📅 <b>Xác nhận lịch xem:</b>",
+             f"👤 Khách: {client_html(cname)}",
              f"🕙 Thời gian: {when}", "🏠 Các căn:"]
     for i, lid in enumerate(sched["listing_ids"], 1):
         l = db.get_listing(lid)
-        brief = listing_line(l).splitlines()[0] if l else "?"
+        brief = client_html(listing_line(l).splitlines()[0]) if l else "?"
         lines.append(f"  {i}. {brief}")
     await q.edit_message_text(
         "\n".join(lines),
@@ -318,6 +340,8 @@ async def vw_lpick_back(update, ctx):
         await q.edit_message_text("Phiên đặt lịch hết hạn, anh làm lại giúp em nhé.",
                                   reply_markup=MENU_KB)
         return
+    if not await _require_scheduling_client(q, ctx, uid, sched):
+        return
     await _send_listing_picker(q, ctx, uid, sched)
 
 
@@ -325,13 +349,16 @@ async def vw_confirm(update, ctx):
     q = update.callback_query
     await q.answer()
     uid = q.from_user.id
-    pn = get_pronoun(uid)
     sched = ctx.user_data.pop("scheduling", None)
     if (not sched or not sched.get("date") or not sched.get("time")
             or not sched.get("listing_ids")):
         await q.edit_message_text("Phiên đặt lịch hết hạn, anh làm lại giúp em nhé.",
                                   reply_markup=MENU_KB)
         return
+    if sched.get("client_id"):
+        c = await require_owned_client(q, ctx, uid, sched["client_id"])
+        if not c:
+            return
     # the picked date/time is a Vietnam wall clock, not the host's
     dt = datetime.datetime.strptime(sched["date"] + sched["time"],
                                     "%Y%m%d%H%M")
@@ -340,10 +367,10 @@ async def vw_confirm(update, ctx):
                             listing_ids=sched["listing_ids"],
                             scheduled_at=vntime.to_ts(dt))
     if sched.get("client_id"):
-        db.touch_contact(sched["client_id"])
+        db.touch_contact(sched["client_id"], broker_id=uid)
     n = len(sched["listing_ids"])
     await q.edit_message_text(
-        f"Đã đặt lịch xem {n} căn ✓ Em sẽ nhắc {pn} trước 1 tiếng nhé!",
+        f"Đã đặt lịch xem {n} căn ✓",
         reply_markup=MENU_KB)
 
 
@@ -387,18 +414,19 @@ def _viewings_list(uid):
         lines.append("<b>📅 Lịch xem sắp tới:</b>")
         for v in items:
             lids = v.get("listing_ids") or []
-            cname = v.get("client_name") or "?"
+            cname = client_html(v.get("client_name") or "?")
             lines.append(f"\n🕙 {_fmt_sched(v['scheduled_at'])}\n👤 {cname}")
             for lid in lids:
                 l = db.get_listing(lid)
-                brief = listing_line(l).splitlines()[0] if l else "?"
+                brief = client_html(listing_line(l).splitlines()[0]) \
+                    if l else "?"
                 lines.append(f"  • {brief}")
             kb.append([InlineKeyboardButton(
                 "❌ Hủy lịch", callback_data=f"vw:del:{v['id']}")])
     if pending_fb:
         lines.append("\n<b>💬 Chưa có feedback:</b>")
         for v in pending_fb:
-            cname = v.get("client_name") or "?"
+            cname = client_html(v.get("client_name") or "?")
             lines.append(f"\n{_fmt_sched(v['scheduled_at'])} — 👤 {cname}")
             kb.append([InlineKeyboardButton(
                 f"💬 Nhập feedback ({cname})",
@@ -441,6 +469,11 @@ async def _begin_feedback(q, ctx, uid, vid):
         await q.edit_message_text("Lịch xem này không còn nữa.",
                                   reply_markup=MENU_KB)
         return
+    if v.get("client_id"):
+        c = await require_owned_client(q, ctx, uid, v["client_id"],
+                                       "viewing_feedback")
+        if not c:
+            return
     lids = v.get("listing_ids") or []
     if not lids:
         await q.edit_message_text("Lịch xem này không gắn căn nào.",
@@ -449,12 +482,12 @@ async def _begin_feedback(q, ctx, uid, vid):
     ctx.user_data["viewing_feedback"] = {
         "viewing_id": vid, "listing_ids": lids, "idx": 0, "fb": {},
     }
-    cname = v.get("client_name") or "khách"
+    cname = client_html(v.get("client_name") or "khách")
     n = len(lids)
     await q.edit_message_text(
         f"Hôm qua {get_pronoun(uid)} dẫn <b>{cname}</b> xem {n} căn."
         f" Cho em xin feedback từng căn nhé.\n\n"
-        f"Căn 1/{n}: {_feedback_brief(lids[0])}\n"
+        f"Căn 1/{n}: {client_html(_feedback_brief(lids[0]))}\n"
         f"Khách nói sao ạ? (gõ “bỏ qua” nếu không có ý kiến)",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(
@@ -476,6 +509,17 @@ async def _handle_viewing_feedback(update, ctx, vf, text):
     uid = update.effective_user.id
     pn = get_pronoun(uid)
     t = text.strip()
+    v = db.get_viewing(vf.get("viewing_id"))
+    if not v or v.get("broker_id") != uid:
+        ctx.user_data.pop("viewing_feedback", None)
+        await update.message.reply_text("Lịch xem này không còn nữa.",
+                                        reply_markup=MENU_KB)
+        return
+    if v.get("client_id"):
+        c = await require_owned_client(update.message, ctx, uid,
+                                       v["client_id"], "viewing_feedback")
+        if not c:
+            return
     if t.lower() in ("hủy", "huy", "cancel"):
         ctx.user_data.pop("viewing_feedback", None)
         await update.message.reply_text("Ok, để sau nhập cũng được ạ 😊",
@@ -500,12 +544,12 @@ async def _handle_viewing_feedback(update, ctx, vf, text):
                       status="done")
     v = db.get_viewing(vf["viewing_id"])
     if v and v.get("client_id"):
-        db.touch_contact(v["client_id"])
+        db.touch_contact(v["client_id"], broker_id=uid)
         # pipeline: viewing done -> client has viewed, awaiting decision
         # (auto-transition is Pro; viewings entry itself is Pro-gated)
         import feat_premium
         if feat_premium.requires_tier(uid, "send2client"):
-            db.update_client(v["client_id"], status="viewed")
+            db.update_client(v["client_id"], broker_id=uid, status="viewed")
     cname = (v.get("client_name") if v else None) or "khách"
     await update.message.reply_text(
         f"Cảm ơn {pn}! Em đã lưu feedback buổi xem với {cname} ✓",

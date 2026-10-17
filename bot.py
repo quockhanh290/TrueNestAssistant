@@ -89,7 +89,7 @@ HELP_TEXT = (
     "- Free: Việt, Anh\n"
     "- 💎 Gói Pro: thêm Hàn, Trung, Nga\n\n"
     "📅 <b>Lịch xem nhà</b> 💎:\n"
-    "- Đặt lịch dẫn khách xem tin, em nhắc trước 1 tiếng\n"
+    "- Đặt lịch dẫn khách xem tin\n"
     "- Sau buổi xem em hỏi feedback từng căn\n"
     "/viewings — xem lịch sắp tới\n\n"
     "💬 <b>Mẫu tin nhắn</b> 💎:\n"

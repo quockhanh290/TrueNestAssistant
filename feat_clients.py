@@ -1,5 +1,6 @@
 """Client/lead management (CRUD, notes, matching, urgency)."""
 import asyncio
+import html
 import logging
 import random
 import re
@@ -50,6 +51,31 @@ CLIENT_EDIT_FIELDS = [
     ("requirements", "💰 Nhu cầu"),
     ("urgency", "⏰ Mức gấp"),
 ]
+
+CLIENT_MISSING_TEXT = "Khách này không còn nữa."
+
+
+def client_html(value):
+    """Escape a user-entered value before interpolating Telegram HTML."""
+    return html.escape(str(value or ""), quote=False)
+
+
+async def require_owned_client(target, ctx, uid, client_id, *step_keys):
+    """Return this broker's client or give the same opaque missing reply.
+
+    ``target`` is a callback query or message.  Keeping this check shared
+    makes button and subsequent text-step authorization identical.
+    """
+    c = db.get_client(client_id, broker_id=uid)
+    if c:
+        return c
+    for key in step_keys:
+        ctx.user_data.pop(key, None)
+    send = (target.edit_message_text
+            if hasattr(target, "edit_message_text")
+            else target.reply_text)
+    await send(CLIENT_MISSING_TEXT, reply_markup=MENU_KB)
+    return None
 
 
 # Highlight options for the listing-enrichment flow (after match warnings).
@@ -115,11 +141,11 @@ def _client_line(c):
     urg = CLIENT_URGENCY_EMOJI.get(c.get("urgency") or "normal", "🟡")
     st = CLIENT_STATUS_EMOJI.get(c.get("status") or "new", "🆕")
     sl = CLIENT_STATUS_LABEL.get(c.get("status") or "new", "mới")
-    name = c.get("name") or "(chưa có tên)"
-    phone = c.get("phone") or "chưa có SĐT"
+    name = client_html(c.get("name") or "(chưa có tên)")
+    phone = client_html(c.get("phone") or "chưa có SĐT")
     return (f"👤 {name} {urg}\n"
             f"📱 {phone}\n"
-            f"💰 {_client_req_summary(c)} | {st} {sl}")
+            f"💰 {client_html(_client_req_summary(c))} | {st} {sl}")
 
 
 def _clients_back_kb(page, s, u):
@@ -335,11 +361,14 @@ def _paste_confirm_text(parsed):
     urg_e = CLIENT_URGENCY_EMOJI.get(parsed.get("urgency"), "🟡")
     urg_l = CLIENT_URGENCY_LABEL.get(parsed.get("urgency"), "Bình thường")
     lines = ["Em bóc được như này, đúng không ạ?"]
-    lines.append(f"👤 Tên: <b>{parsed.get('name') or '(chưa rõ)'}</b>")
-    lines.append(f"📱 SĐT: <b>{parsed.get('phone') or '(chưa có)'}</b>")
+    lines.append(
+        f"👤 Tên: <b>{client_html(parsed.get('name') or '(chưa rõ)')}</b>")
+    lines.append(
+        f"📱 SĐT: <b>{client_html(parsed.get('phone') or '(chưa có)')}</b>")
     lines.append(f"🛏️ Phòng: <b>{_fmt_bedrooms(req)}</b>")
     lines.append(f"💰 Ngân sách: <b>{_fmt_budget(req)}</b>")
-    lines.append(f"📍 Khu vực: <b>{req.get('district') or '(chưa rõ)'}</b>")
+    lines.append(
+        f"📍 Khu vực: <b>{client_html(req.get('district') or '(chưa rõ)')}</b>")
     lines.append(f"{urg_e} Độ gấp: <b>{urg_l}</b>")
     return "\n".join(lines)
 
@@ -594,8 +623,9 @@ async def _finish_add_client(update_or_msg, ctx, uid, addc, urgency, pn):
         urgency=urgency)
     ctx.user_data.pop("adding_client", None)
     urg_e = CLIENT_URGENCY_EMOJI.get(urgency, "🟡")
-    text = (f"Em đã lưu khách <b>{addc.get('name')}</b> {urg_e} ✓\n"
-            f"💰 {_client_req_summary(db.get_client(cid))}")
+    text = (f"Em đã lưu khách <b>{client_html(addc.get('name'))}</b> "
+            f"{urg_e} ✓\n"
+            f"💰 {client_html(_client_req_summary(db.get_client(cid)))}")
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("🔍 Tìm tin phù hợp",
                               callback_data=f"client:match:{cid}")],
@@ -690,7 +720,7 @@ async def client_paste_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE
         c = db.get_client(cid)
         ctx.user_data["client_extra_req"] = {"client_id": cid}
         await q.edit_message_text(
-            f"Đã lưu khách <b>{c.get('name') or 'mới'}</b> ✓\n\n"
+            f"Đã lưu khách <b>{client_html(c.get('name') or 'mới')}</b> ✓\n\n"
             f"Khách có yêu cầu đặc biệt gì thêm không ạ?\n"
             f"(vd: “cần view biển”, “không chung chủ”, "
             f"“có chỗ để ô tô”)",
@@ -716,8 +746,8 @@ async def client_extrareq_skip_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE
         await q.edit_message_text("Phiên này đã hết hạn, làm lại nhé 😊",
                                   reply_markup=MENU_KB)
         return
-    c = db.get_client(cid)
-    if not c or c["broker_id"] != uid:
+    c = await require_owned_client(q, ctx, uid, cid, "client_extra_req")
+    if not c:
         return
     await _show_match_results(q, ctx, uid, cid, c, pn, limit=8)
 
@@ -731,9 +761,9 @@ async def _handle_extra_req(update, ctx, er, text):
     uid = update.effective_user.id
     pn = get_pronoun(uid)
     cid = er.get("client_id")
-    c = db.get_client(cid)
-    if not c or c["broker_id"] != uid:
-        ctx.user_data.pop("client_extra_req", None)
+    c = await require_owned_client(update.message, ctx, uid, cid,
+                                   "client_extra_req")
+    if not c:
         return
     req = listing_parser.parse_query(text)
     hls = listing_parser.parse_highlights(text)
@@ -755,10 +785,10 @@ async def _handle_extra_req(update, ctx, er, text):
     new_raw = ((c.get("requirements_raw") or "") + "\n+ " + text.strip()
                ).strip()
     updates["requirements_raw"] = new_raw
-    db.update_client(cid, **updates)
+    db.update_client(cid, broker_id=uid, **updates)
     extra_keywords = list(hls) if hls else [text.strip()]
     ctx.user_data.pop("client_extra_req", None)
-    c = db.get_client(cid)
+    c = db.get_client(cid, broker_id=uid)
 
     async def _deliver(t, kb):
         await update.message.reply_text(t, parse_mode="HTML",
@@ -911,16 +941,16 @@ def _client_detail_text(c, pn):
     st_e = CLIENT_STATUS_EMOJI.get(c.get("status") or "new", "🆕")
     st_l = CLIENT_STATUS_LABEL.get(c.get("status") or "new", "mới")
     lines = [
-        f"👤 <b>{c.get('name') or '(chưa có tên)'}</b> {urg_e}",
-        f"📱 SĐT: {c.get('phone') or 'chưa có'}",
-        f"💰 Nhu cầu: {_client_req_summary(c)}",
+        f"👤 <b>{client_html(c.get('name') or '(chưa có tên)')}</b> {urg_e}",
+        f"📱 SĐT: {client_html(c.get('phone') or 'chưa có')}",
+        f"💰 Nhu cầu: {client_html(_client_req_summary(c))}",
     ]
     if c.get("requirements_raw"):
-        lines.append(f"   <i>“{c['requirements_raw']}”</i>")
+        lines.append(f"   <i>“{client_html(c['requirements_raw'])}”</i>")
     lines.append(f"⏰ Mức gấp: {urg_e} {urg_l}")
     lines.append(f"📌 Trạng thái: {st_e} {st_l}")
     if c.get("notes"):
-        lines.append(f"📝 Ghi chú:\n{c['notes']}")
+        lines.append(f"📝 Ghi chú:\n{client_html(c['notes'])}")
     n_viewed = len(c.get("viewed_listings") or [])
     if n_viewed:
         lines.append(f"🏠 Đã gửi/xem: {n_viewed} tin")
@@ -963,10 +993,8 @@ async def show_client_detail(update: Update, ctx: ContextTypes.DEFAULT_TYPE,
         client_id, rest = parse_client_cb(q.data, "client")
         if len(rest) >= 3:
             page, s, u_ = int(rest[0]), rest[1], rest[2]
-    c = db.get_client(client_id)
-    if not c or c["broker_id"] != uid:
-        await q.edit_message_text("Khách này không còn nữa.",
-                                  reply_markup=MENU_KB)
+    c = await require_owned_client(q, ctx, uid, client_id)
+    if not c:
         return
     await q.edit_message_text(_client_detail_text(c, pn), parse_mode="HTML",
                               reply_markup=_client_detail_kb(c, page, s, u_))
@@ -977,13 +1005,14 @@ async def show_client_detail(update: Update, ctx: ContextTypes.DEFAULT_TYPE,
 async def client_note_prompt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
+    uid = q.from_user.id
     client_id, _ = parse_client_cb(q.data, "client:note")
-    c = db.get_client(client_id)
+    c = await require_owned_client(q, ctx, uid, client_id, "adding_note")
     if not c:
         return
     ctx.user_data["adding_note"] = {"client_id": client_id}
     await q.edit_message_text(
-        f"Ghi chú cho <b>{c.get('name')}</b>:\n"
+        f"Ghi chú cho <b>{client_html(c.get('name'))}</b>:\n"
         "(vd: khách thích view biển, không thích tầng thấp)",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([[
@@ -995,9 +1024,12 @@ async def _handle_add_note(update, ctx, addn, text):
     uid = update.effective_user.id
     pn = get_pronoun(uid)
     t = text.strip()
+    c = await require_owned_client(update.message, ctx, uid,
+                                   addn.get("client_id"), "adding_note")
+    if not c:
+        return
     if t.lower() in ("hủy", "huy", "cancel"):
         ctx.user_data.pop("adding_note", None)
-        c = db.get_client(addn["client_id"])
         await update.message.reply_text(
             _client_detail_text(c, pn), parse_mode="HTML",
             reply_markup=_client_detail_kb(c, 0, "a", "a"))
@@ -1005,9 +1037,9 @@ async def _handle_add_note(update, ctx, addn, text):
     if not t:
         await update.message.reply_text("Ghi gì đó giúp em nhé?")
         return
-    db.add_note(addn["client_id"], t)
+    db.add_note(addn["client_id"], t, broker_id=uid)
     ctx.user_data.pop("adding_note", None)
-    c = db.get_client(addn["client_id"])
+    c = db.get_client(addn["client_id"], broker_id=uid)
     await update.message.reply_text(
         f"Đã lưu ghi chú ✓\n\n{_client_detail_text(c, pn)}",
         parse_mode="HTML",
@@ -1019,8 +1051,9 @@ async def _handle_add_note(update, ctx, addn, text):
 async def client_status_picker(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
+    uid = q.from_user.id
     client_id, _ = parse_client_cb(q.data, "client:status")
-    c = db.get_client(client_id)
+    c = await require_owned_client(q, ctx, uid, client_id)
     if not c:
         return
     kb = []
@@ -1052,12 +1085,12 @@ async def client_set_status(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     pn = get_pronoun(uid)
     client_id, rest = parse_client_cb(q.data, "client:setstatus")
     new_status = rest[0] if rest else "new"
-    c = db.get_client(client_id)
-    if not c or c["broker_id"] != uid:
+    c = await require_owned_client(q, ctx, uid, client_id)
+    if not c:
         return
-    db.update_client(client_id, status=new_status)
-    db.touch_contact(client_id)
-    c = db.get_client(client_id)
+    db.update_client(client_id, broker_id=uid, status=new_status)
+    db.touch_contact(client_id, broker_id=uid)
+    c = db.get_client(client_id, broker_id=uid)
     st_e = CLIENT_STATUS_EMOJI.get(new_status, "•")
     st_l = CLIENT_STATUS_LABEL.get(new_status, new_status)
     await q.edit_message_text(
@@ -1080,8 +1113,9 @@ async def client_set_status(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def client_edit_picker(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
+    uid = q.from_user.id
     client_id, _ = parse_client_cb(q.data, "client:edit")
-    c = db.get_client(client_id)
+    c = await require_owned_client(q, ctx, uid, client_id, "editing_client")
     if not c:
         return
     kb = [[InlineKeyboardButton(label,
@@ -1096,9 +1130,10 @@ async def client_edit_picker(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def client_edit_field(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
+    uid = q.from_user.id
     client_id, rest = parse_client_cb(q.data, "client:editfield")
     field = rest[0] if rest else ""
-    c = db.get_client(client_id)
+    c = await require_owned_client(q, ctx, uid, client_id, "editing_client")
     if not c:
         return
     if field == "urgency":
@@ -1114,8 +1149,9 @@ async def client_edit_field(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                                   reply_markup=InlineKeyboardMarkup(kb))
         return
     prompts = {
-        "name": f"Tên hiện tại: {c.get('name') or 'chưa có'}. Tên mới là gì?",
-        "phone": (f"SĐT hiện tại: {c.get('phone') or 'chưa có'}. "
+        "name": (f"Tên hiện tại: {client_html(c.get('name') or 'chưa có')}. "
+                 "Tên mới là gì?"),
+        "phone": (f"SĐT hiện tại: {client_html(c.get('phone') or 'chưa có')}. "
                   "SĐT mới là gì? (gõ “xóa” để bỏ)"),
         "requirements": ("Nhu cầu hiện tại: "
                          f"{_client_req_summary(c)}. Nhập nhu cầu mới "
@@ -1136,11 +1172,11 @@ async def client_set_urgency(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     pn = get_pronoun(uid)
     client_id, rest = parse_client_cb(q.data, "client:seturg")
     urg = rest[0] if rest else "normal"
-    c = db.get_client(client_id)
-    if not c or c["broker_id"] != uid:
+    c = await require_owned_client(q, ctx, uid, client_id)
+    if not c:
         return
-    db.update_client(client_id, urgency=urg)
-    c = db.get_client(client_id)
+    db.update_client(client_id, broker_id=uid, urgency=urg)
+    c = db.get_client(client_id, broker_id=uid)
     await q.edit_message_text(
         f"Đã đổi mức gấp ✓\n\n{_client_detail_text(c, pn)}",
         parse_mode="HTML",
@@ -1152,9 +1188,12 @@ async def _handle_edit_client(update, ctx, ced, text):
     pn = get_pronoun(uid)
     client_id, field = ced["client_id"], ced["field"]
     t = text.strip()
+    c = await require_owned_client(update.message, ctx, uid, client_id,
+                                   "editing_client")
+    if not c:
+        return
     if t.lower() in ("hủy", "huy", "cancel"):
         ctx.user_data.pop("editing_client", None)
-        c = db.get_client(client_id)
         await update.message.reply_text(
             _client_detail_text(c, pn), parse_mode="HTML",
             reply_markup=_client_detail_kb(c, 0, "a", "a"))
@@ -1163,22 +1202,23 @@ async def _handle_edit_client(update, ctx, ced, text):
         if not t:
             await update.message.reply_text("Tên khách là gì ạ?")
             return
-        db.update_client(client_id, name=t)
+        db.update_client(client_id, broker_id=uid, name=t)
     elif field == "phone":
         if t.lower() in ("xóa", "xoa", "delete", ""):
-            db.update_client(client_id, phone="")
+            db.update_client(client_id, broker_id=uid, phone="")
         else:
             phones = normalize_phone(t)
             if not phones:
                 await update.message.reply_text(
                     "SĐT này chưa đúng định dạng, kiểm tra lại giúp em nhé?")
                 return
-            db.update_client(client_id, phone=phones[0])
+            db.update_client(client_id, broker_id=uid, phone=phones[0])
     elif field == "requirements":
         req = listing_parser.parse_query(t)
-        db.update_client(client_id, requirements_raw=t, requirements=req)
+        db.update_client(client_id, broker_id=uid, requirements_raw=t,
+                         requirements=req)
     ctx.user_data.pop("editing_client", None)
-    c = db.get_client(client_id)
+    c = db.get_client(client_id, broker_id=uid)
     await update.message.reply_text(
         f"Cập nhật xong ✓\n\n{_client_detail_text(c, pn)}",
         parse_mode="HTML",
@@ -1210,8 +1250,8 @@ def _manual_picker_content(uid, client_id, c, pn):
         listings = [l for l in db.list_broker_listings(uid, limit=10)
                     if l.get("status") not in ("deleted", "draft")]
     lines = [
-        f"Chọn tin để gửi cho <b>{c.get('name')}</b> "
-        f"({_client_req_summary(c)}):",
+        f"Chọn tin để gửi cho <b>{client_html(c.get('name'))}</b> "
+        f"({client_html(_client_req_summary(c))}):",
         "",
         "<i>💎 Gói Pro tự động gợi ý tin phù hợp —"
         " /premium để nâng cấp</i>",
@@ -1241,7 +1281,8 @@ def _nomatch_content(uid, client_id, c, pn):
         callback_data=f"client:{client_id}:0:a:a")])
     text = (
         f"Em chưa tìm thấy tin nào của {pn} phù hợp với "
-        f"<b>{c.get('name')}</b> ({_client_req_summary(c)})."
+        f"<b>{client_html(c.get('name'))}</b> "
+        f"({client_html(_client_req_summary(c))})."
     )
     if config.BROKER_GROUP_ID:
         text += (
@@ -1371,13 +1412,13 @@ def _match_hits_content(uid, client_id, c, pn, limit, extra_keywords):
     kb.append([InlineKeyboardButton(
         "⬅️ Menu", callback_data="menu:back")])
     lines = [f"Em tìm được <b>{len(matches)}</b> tin phù hợp "
-             f"với <b>{c.get('name')}</b>:"]
+             f"với <b>{client_html(c.get('name'))}</b>:"]
     if extra_keywords:
-        lines.append(f"🎯 Ưu tiên: {', '.join(extra_keywords)}")
+        lines.append(f"🎯 Ưu tiên: {client_html(', '.join(extra_keywords))}")
     for i, l in enumerate(matches, start=1):
         lines.append("")
         star = " ⭐" if is_high_completeness(l) else ""
-        lines.append(f"{i}. {listing_line(l)}{star}")
+        lines.append(f"{i}. {client_html(listing_line(l))}{star}")
     lines.append("")
     lines.append("Chọn tin để gửi cho khách nhé 👇")
     warnings = _enrichment_warnings(uid, c, extra_keywords)
@@ -1388,7 +1429,7 @@ def _match_hits_content(uid, client_id, c, pn, limit, extra_keywords):
         for label, missing, total in warnings:
             lines.append("")
             lines.append(
-                f'⚠️ "{label}" — {missing}/{total} tin của anh '
+                f'⚠️ "{client_html(label)}" — {missing}/{total} tin của anh '
                 f"chưa có thông tin này.")
         lines.append("Lần sau khi nhập tin, anh nhớ điền thêm nhé!")
         lines.append("")
@@ -1489,9 +1530,9 @@ async def _render_enrich_current(q, ctx, uid):
     existing = (l.get("parsed") or {}).get("highlights") or []
     missing = _enrich_missing(l)
     lines = [f"📝 Cập nhật tin <b>{pos + 1}/{total}</b>:", "",
-             f"🏠 {listing_line(l)}"]
+             f"🏠 {client_html(listing_line(l))}"]
     if existing:
-        lines.append(f"Đã có: ✅ {', '.join(existing)}")
+        lines.append(f"Đã có: ✅ {client_html(', '.join(existing))}")
     else:
         lines.append("Đã có: <i>(chưa có điểm nổi bật nào)</i>")
     lines.append("Còn thiếu — chọn thêm nhé:")
@@ -1557,10 +1598,11 @@ async def enrich_later_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     pn = get_pronoun(uid)
     ectx = ctx.user_data.pop("enrich_ctx", None) or {}
     cid = ectx.get("client_id")
-    c = db.get_client(cid) if cid else None
-    if not c or c["broker_id"] != uid:
-        await q.edit_message_text("Ok, khi nào cần thì bảo em nhé 😊",
-                                  reply_markup=MENU_KB)
+    c = await require_owned_client(q, ctx, uid, cid) if cid else None
+    if not c:
+        if not cid:
+            await q.edit_message_text(CLIENT_MISSING_TEXT,
+                                      reply_markup=MENU_KB)
         return
     await _show_match_results(q, ctx, uid, cid, c, pn,
                               limit=ectx.get("limit", 8),
@@ -1610,7 +1652,13 @@ async def _enrich_advance(q, ctx, uid, save):
                      if o not in hls]
             if added:
                 p["highlights"] = hls + added
-                db.update_listing(lid, parsed=p)
+                try:
+                    db.update_listing(lid, parsed=p)
+                except db.FieldError as exc:
+                    from feat_intake import bot_field_error_message
+                    await q.edit_message_text(
+                        bot_field_error_message(exc, p.get(exc.field)))
+                    return
                 en["updated"] = en.get("updated", 0) + 1
     en["pos"] += 1
     en["pending"] = []
@@ -1644,8 +1692,8 @@ async def client_match(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     uid = q.from_user.id
     pn = get_pronoun(uid)
     client_id, _ = parse_client_cb(q.data, "client:match")
-    c = db.get_client(client_id)
-    if not c or c["broker_id"] != uid:
+    c = await require_owned_client(q, ctx, uid, client_id)
+    if not c:
         return
     await maybe_send_hint(q.message)
     await _show_match_results(q, ctx, uid, client_id, c, pn, limit=5)
@@ -1659,11 +1707,13 @@ async def client_send_listing(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     pn = get_pronoun(uid)
     client_id, rest = parse_client_cb(q.data, "client:send")
     listing_id = ":".join(rest)  # tg:<hex> may itself contain colons
-    c = db.get_client(client_id)
+    c = await require_owned_client(q, ctx, uid, client_id)
     l = db.get_listing(listing_id)
-    if not c or not l or c["broker_id"] != uid:
+    if not c:
         return
-    db.link_listing(client_id, listing_id)
+    if not l:
+        return
+    db.link_listing(client_id, listing_id, broker_id=uid)
     p = l["parsed"]
     broker = db.get_broker(uid) or {}
     contact = broker.get("phone") or p.get("primary_phone") or ""
@@ -1671,12 +1721,13 @@ async def client_send_listing(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     br_s = "Studio" if br == 0.0 else (f"{int(br)}PN" if br else "")
     addr_bits = [b for b in (p.get("building_name"), p.get("street"),
                              p.get("district")) if b]
-    msg = (f"🏠 Em gợi ý cho {c.get('name')} căn này:\n\n"
-           f"{br_s} {', '.join(addr_bits)}, {fmt_price(p.get('price_vnd'))}/tháng\n")
+    msg = (f"🏠 Em gợi ý cho {client_html(c.get('name'))} căn này:\n\n"
+           f"{client_html(br_s)} {client_html(', '.join(addr_bits))}, "
+           f"{fmt_price(p.get('price_vnd'))}/tháng\n")
     if p.get("area_m2"):
         msg += f"📐 {p['area_m2']:g}m²\n"
     if contact:
-        msg += f"📱 Liên hệ: {contact}\n"
+        msg += f"📱 Liên hệ: {client_html(contact)}\n"
     msg += (f"\n{pn.capitalize()} xem thử có hợp không ạ? "
             f"Em gửi thêm ảnh nếu cần nhé 😊")
     await q.edit_message_text(
@@ -1693,12 +1744,14 @@ async def client_send_listing(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def client_delete_prompt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
+    uid = q.from_user.id
     client_id, _ = parse_client_cb(q.data, "client:delete")
-    c = db.get_client(client_id)
+    c = await require_owned_client(q, ctx, uid, client_id)
     if not c:
         return
     await q.edit_message_text(
-        f"Xóa khách <b>{c.get('name')}</b>? Hành động này không thể hoàn tác.",
+        f"Xóa khách <b>{client_html(c.get('name'))}</b>? "
+        "Hành động này không thể hoàn tác.",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton(
@@ -1715,9 +1768,13 @@ async def client_delete_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await q.answer()
     uid = q.from_user.id
     client_id, _ = parse_client_cb(q.data, "client:delconfirm")
-    c = db.get_client(client_id)
-    if c and c["broker_id"] == uid:
-        db.delete_client(client_id)
+    c = await require_owned_client(q, ctx, uid, client_id)
+    if not c:
+        return
+    deleted = db.delete_client(client_id, broker_id=uid)
+    if not deleted:
+        await q.edit_message_text(CLIENT_MISSING_TEXT, reply_markup=MENU_KB)
+        return
     await q.edit_message_text("Em đã xóa khách rồi ạ 🗑",
                               reply_markup=InlineKeyboardMarkup([[
                                   InlineKeyboardButton(

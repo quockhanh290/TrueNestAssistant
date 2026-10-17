@@ -57,23 +57,28 @@ def _typed_requirements(r):
     return r
 
 
-def touch_contact(client_id, path=None):
+def touch_contact(client_id, path=None, broker_id=None):
     """Mark now as the last time the broker contacted this client."""
     with closing(connect(path)) as conn:
-        cur = conn.execute(
-            "UPDATE clients SET last_contact_at = ?, updated_at = ? WHERE id = ?",
-            (_now(), _now(), client_id),
-        )
+        sql = "UPDATE clients SET last_contact_at = ?, updated_at = ? WHERE id = ?"
+        vals = [_now(), _now(), client_id]
+        if broker_id is not None:
+            sql += " AND broker_id = ?"
+            vals.append(broker_id)
+        cur = conn.execute(sql, vals)
         conn.commit()
         conn.close()
         return cur.rowcount > 0
 
 
-def get_client(client_id, path=None):
+def get_client(client_id, path=None, broker_id=None):
     with closing(connect(path)) as conn:
-        row = conn.execute(
-            "SELECT * FROM clients WHERE id = ?", (client_id,)
-        ).fetchone()
+        sql = "SELECT * FROM clients WHERE id = ?"
+        vals = [client_id]
+        if broker_id is not None:
+            sql += " AND broker_id = ?"
+            vals.append(broker_id)
+        row = conn.execute(sql, vals).fetchone()
         conn.close()
         if not row:
             return None
@@ -178,7 +183,7 @@ def idle_new_clients(broker_id, days=2, limit=20, path=None):
         return out
 
 
-def update_client(client_id, path=None, **fields):
+def update_client(client_id, path=None, broker_id=None, **fields):
     """Update client fields. requirements=parse_query dict refreshes the
     requirement columns + requirements_raw."""
     allowed = {"name", "phone", "budget_min", "budget_max", "bedrooms",
@@ -213,20 +218,29 @@ def update_client(client_id, path=None, **fields):
     sets.append("updated_at = ?")
     vals.append(_now())
     vals.append(client_id)
+    where = "id = ?"
+    if broker_id is not None:
+        where += " AND broker_id = ?"
+        vals.append(broker_id)
     with closing(connect(path)) as conn:
         cur = conn.execute(
-            f"UPDATE clients SET {', '.join(sets)} WHERE id = ?", vals
+            f"UPDATE clients SET {', '.join(sets)} WHERE {where}", vals
         )
         conn.commit()
         conn.close()
         return cur.rowcount > 0
 
 
-def add_note(client_id, note, path=None):
+def add_note(client_id, note, path=None, broker_id=None):
     """Append a timestamped note (append-only)."""
     with closing(connect(path)) as conn:
+        where = "id = ?"
+        vals = [client_id]
+        if broker_id is not None:
+            where += " AND broker_id = ?"
+            vals.append(broker_id)
         row = conn.execute(
-            "SELECT notes FROM clients WHERE id = ?", (client_id,)
+            f"SELECT notes FROM clients WHERE {where}", vals
         ).fetchone()
         if not row:
             conn.close()
@@ -235,21 +249,28 @@ def add_note(client_id, note, path=None):
         ts = _vn_fmt(_now(), "%d/%m %H:%M")
         entry = f"[{ts}] {note.strip()}"
         notes = (row["notes"] + "\n" + entry).strip() if row["notes"] else entry
+        update_vals = [notes, _now(), _now(), client_id]
+        if broker_id is not None:
+            update_vals.append(broker_id)
         conn.execute(
             "UPDATE clients SET notes = ?, updated_at = ?, last_contact_at = ?"
-            " WHERE id = ?",
-            (notes, _now(), _now(), client_id),
+            f" WHERE {where}", update_vals,
         )
         conn.commit()
         conn.close()
         return True
 
 
-def link_listing(client_id, listing_id, path=None):
+def link_listing(client_id, listing_id, path=None, broker_id=None):
     """Record that a client viewed / was sent a listing."""
     with closing(connect(path)) as conn:
+        where = "id = ?"
+        vals = [client_id]
+        if broker_id is not None:
+            where += " AND broker_id = ?"
+            vals.append(broker_id)
         row = conn.execute(
-            "SELECT viewed_listings FROM clients WHERE id = ?", (client_id,)
+            f"SELECT viewed_listings FROM clients WHERE {where}", vals
         ).fetchone()
         if not row:
             conn.close()
@@ -257,21 +278,29 @@ def link_listing(client_id, listing_id, path=None):
         seen = json.loads(row["viewed_listings"])
         if listing_id not in seen:
             seen.append(listing_id)
+        update_vals = [json.dumps(seen, ensure_ascii=False), _now(), _now(),
+                       client_id]
+        if broker_id is not None:
+            update_vals.append(broker_id)
         conn.execute(
             "UPDATE clients SET viewed_listings = ?, updated_at = ?,"
-            " last_contact_at = ? WHERE id = ?",
-            (json.dumps(seen, ensure_ascii=False), _now(), _now(), client_id),
+            f" last_contact_at = ? WHERE {where}", update_vals,
         )
         conn.commit()
         conn.close()
         return True
 
 
-def record_sent_listings(client_id, listing_ids, path=None):
+def record_sent_listings(client_id, listing_ids, path=None, broker_id=None):
     """Append listings to the client's sent_listings with sent_at timestamp."""
     with closing(connect(path)) as conn:
+        where = "id = ?"
+        vals = [client_id]
+        if broker_id is not None:
+            where += " AND broker_id = ?"
+            vals.append(broker_id)
         row = conn.execute(
-            "SELECT sent_listings FROM clients WHERE id = ?", (client_id,)
+            f"SELECT sent_listings FROM clients WHERE {where}", vals
         ).fetchone()
         if not row:
             conn.close()
@@ -286,38 +315,47 @@ def record_sent_listings(client_id, listing_ids, path=None):
             if lid not in have:
                 sent.append({"id": lid, "sent_at": now})
                 have.add(lid)
+        update_vals = [json.dumps(sent, ensure_ascii=False), now, now,
+                       client_id]
+        if broker_id is not None:
+            update_vals.append(broker_id)
         conn.execute(
             "UPDATE clients SET sent_listings = ?, updated_at = ?,"
-            " last_contact_at = ? WHERE id = ?",
-            (json.dumps(sent, ensure_ascii=False), now, now, client_id),
+            f" last_contact_at = ? WHERE {where}", update_vals,
         )
         conn.commit()
         conn.close()
         return True
 
 
-def record_client_choice(client_id, listing_id, path=None):
+def record_client_choice(client_id, listing_id, path=None, broker_id=None):
     """Record which sent listing the client chose."""
     with closing(connect(path)) as conn:
         now = _now()
+        where = "id = ?"
+        vals = [json.dumps({"id": listing_id, "chosen_at": now},
+                           ensure_ascii=False), now, now, client_id]
+        if broker_id is not None:
+            where += " AND broker_id = ?"
+            vals.append(broker_id)
         cur = conn.execute(
             "UPDATE clients SET client_choice = ?, updated_at = ?,"
-            " last_contact_at = ? WHERE id = ?",
-            (json.dumps({"id": listing_id, "chosen_at": now},
-                        ensure_ascii=False), now, now, client_id),
+            f" last_contact_at = ? WHERE {where}", vals,
         )
         conn.commit()
         conn.close()
         return cur.rowcount > 0
 
 
-def clear_client_choice(client_id, path=None):
+def clear_client_choice(client_id, path=None, broker_id=None):
     """Clear the recorded choice (e.g. client changed their mind)."""
     with closing(connect(path)) as conn:
-        cur = conn.execute(
-            "UPDATE clients SET client_choice = '', updated_at = ? WHERE id = ?",
-            (_now(), client_id),
-        )
+        sql = "UPDATE clients SET client_choice = '', updated_at = ? WHERE id = ?"
+        vals = [_now(), client_id]
+        if broker_id is not None:
+            sql += " AND broker_id = ?"
+            vals.append(broker_id)
+        cur = conn.execute(sql, vals)
         conn.commit()
         conn.close()
         return cur.rowcount > 0
@@ -354,9 +392,14 @@ def clients_awaiting_choice(broker_id, days=2, limit=20, path=None):
         return out
 
 
-def delete_client(client_id, path=None):
+def delete_client(client_id, path=None, broker_id=None):
     with closing(connect(path)) as conn:
-        cur = conn.execute("DELETE FROM clients WHERE id = ?", (client_id,))
+        sql = "DELETE FROM clients WHERE id = ?"
+        vals = [client_id]
+        if broker_id is not None:
+            sql += " AND broker_id = ?"
+            vals.append(broker_id)
+        cur = conn.execute(sql, vals)
         conn.commit()
         conn.close()
         return cur.rowcount > 0

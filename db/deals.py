@@ -33,12 +33,34 @@ def deals_closed_between(broker_id, start_ts, end_ts, path=None):
 
 def create_deal(broker_id, client_id=None, client_name="", listing_id=None,
                 commission_vnd=None, closed_at=None, notes="", path=None):
-    deal_id = "deal:" + uuid.uuid4().hex[:12]
     now = _now()
     # "15tr5" goes through the same money reader as the bot's commission step
     commission_vnd = to_number(commission_vnd, "commission_vnd", money=True)
     closed_at = to_epoch(closed_at, "closed_at")
     with closing(connect(path)) as conn:
+        # Serialize the ownership/dedup check with the insert.  This protects
+        # against both forged callers and two rapid commission submissions.
+        conn.execute("BEGIN IMMEDIATE")
+        if client_id:
+            owned = conn.execute(
+                "SELECT 1 FROM clients WHERE id = ? AND broker_id = ?",
+                (client_id, broker_id),
+            ).fetchone()
+            if not owned:
+                conn.rollback()
+                conn.close()
+                return None
+        if client_id and listing_id:
+            duplicate = conn.execute(
+                "SELECT 1 FROM deals WHERE broker_id = ? AND client_id = ?"
+                " AND listing_id = ? LIMIT 1",
+                (broker_id, client_id, listing_id),
+            ).fetchone()
+            if duplicate:
+                conn.rollback()
+                conn.close()
+                return None
+        deal_id = "deal:" + uuid.uuid4().hex[:12]
         conn.execute(
             "INSERT INTO deals (id, broker_id, client_id, client_name, listing_id,"
             " commission_vnd, closed_at, notes, created_at, updated_at)"

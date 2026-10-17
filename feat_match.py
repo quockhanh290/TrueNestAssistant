@@ -32,7 +32,8 @@ from utils import (
 log = logging.getLogger("linh")
 
 from feat_clients import (parse_client_cb, _client_req_summary,
-                          CLIENT_URGENCY_EMOJI, CLIENT_URGENCY_LABEL)
+                          CLIENT_URGENCY_EMOJI, CLIENT_URGENCY_LABEL,
+                          client_html, require_owned_client)
 
 # ---- Phase 1: inventory verification + match scoring ----
 
@@ -62,7 +63,7 @@ def _parsed_float(lst, key):
 def _client_float(c, key):
     try:
         v = c.get(key)
-        return float(v) if v else None
+        return float(v) if v is not None else None
     except (TypeError, ValueError):
         return None
 
@@ -361,7 +362,7 @@ def _responses_text_kb(r, resps):
     agree to connect via the relay.
     """
     c = db.get_client(r["client_id"])
-    client_name = (c.get("name") if c else None) or "khách"
+    client_name = client_html((c.get("name") if c else None) or "khách")
     lines = [f"🎉 Có {len(resps)} môi giới phản hồi cho khách"
              f" <b>{client_name}</b>:"]
     kb = []
@@ -375,7 +376,8 @@ def _responses_text_kb(r, resps):
                 continue
             sc = scores.get(lid)
             score_txt = f" — khớp {sc}%" if sc is not None else ""
-            lines.append(f"  • {_listing_brief(lst)}{score_txt}")
+            lines.append(
+                f"  • {client_html(_listing_brief(lst))}{score_txt}")
         kb.append([InlineKeyboardButton(
             f"💬 Nhắn tin (Môi giới {i})",
             callback_data=f"mresp:msg:{r['id']}:{rp['responder_broker_id']}")])
@@ -413,8 +415,8 @@ async def match_broadcast_send(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     uid = q.from_user.id
     pn = get_pronoun(uid)
     client_id, _ = parse_client_cb(q.data, "client:broadcast")
-    c = db.get_client(client_id)
-    if not c or c["broker_id"] != uid:
+    c = await require_owned_client(q, ctx, uid, client_id)
+    if not c:
         return
     if not config.BROKER_GROUP_ID:
         await q.edit_message_text(
@@ -464,7 +466,8 @@ async def match_broadcast_send(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         log.warning("proactive notify after broadcast failed: %s", e)
     await q.edit_message_text(
-        f"Em đã đăng nhu cầu của <b>{c.get('name')}</b> lên nhóm rồi nhé ✓\n"
+        f"Em đã đăng nhu cầu của <b>{client_html(c.get('name'))}</b> "
+        f"lên nhóm rồi nhé ✓\n"
         f"Có anh em nào reply là em báo {pn} ngay.",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([
@@ -487,8 +490,8 @@ async def match_requests_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await _all_requests_overview(q, uid, pn)
         return
     client_id, _ = parse_client_cb(q.data, "client:reqs")
-    c = db.get_client(client_id)
-    if not c or c["broker_id"] != uid:
+    c = await require_owned_client(q, ctx, uid, client_id)
+    if not c:
         return
     reqs = [r for r in db.list_broker_requests(uid)
             if r["client_id"] == client_id and r["status"] in ("open", "matched")]
@@ -678,7 +681,7 @@ async def _notify_new_response(ctx, r, n):
         await _send_full_summary(ctx, r)
         return
     c = db.get_client(r["client_id"])
-    client_name = (c.get("name") if c else None) or "khách"
+    client_name = client_html((c.get("name") if c else None) or "khách")
     try:
         await ctx.bot.send_message(
             chat_id=r["broker_id"],
@@ -1084,7 +1087,7 @@ async def match_responses_view(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     db.mark_responses_seen(r["id"])
     resps = db.list_responses(r["id"])
     c = db.get_client(r["client_id"])
-    client_name = (c.get("name") if c else None) or "khách"
+    client_name = client_html((c.get("name") if c else None) or "khách")
     if not resps:
         await q.edit_message_text(
             f"Chưa có ai phản hồi cho khách <b>{client_name}</b>."

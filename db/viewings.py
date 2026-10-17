@@ -25,6 +25,14 @@ def create_viewing(broker_id, client_id=None, client_name="", listing_id=None,
     if listing_id and listing_id not in ids:
         ids.insert(0, listing_id)
     with closing(connect(path)) as conn:
+        if client_id:
+            owned = conn.execute(
+                "SELECT 1 FROM clients WHERE id = ? AND broker_id = ?",
+                (client_id, broker_id),
+            ).fetchone()
+            if not owned:
+                conn.close()
+                return None
         conn.execute(
             "INSERT INTO viewings (id, broker_id, client_id, client_name,"
             " listing_id, listing_ids, scheduled_at, status, notes, feedback,"
@@ -163,17 +171,21 @@ def unfeedbacked_viewings(broker_id, min_hours=24, max_hours=72, path=None):
         return [_parse_viewing_row(r) for r in rows]
 
 
-def client_viewings(client_id, path=None):
+def client_viewings(client_id, path=None, broker_id=None):
     """All viewings for a client that actually have listings attached,
     newest first. Used for the follow-up reminder display."""
     with closing(connect(path)) as conn:
-        rows = conn.execute(
+        sql = (
             "SELECT * FROM viewings WHERE client_id = ?"
             " AND (listing_ids IS NOT NULL AND listing_ids != '[]'"
             " OR listing_id IS NOT NULL)"
-            " ORDER BY scheduled_at DESC",
-            (client_id,),
-        ).fetchall()
+        )
+        vals = [client_id]
+        if broker_id is not None:
+            sql += " AND broker_id = ?"
+            vals.append(broker_id)
+        sql += " ORDER BY scheduled_at DESC"
+        rows = conn.execute(sql, vals).fetchall()
         conn.close()
         return [_parse_viewing_row(r) for r in rows]
 

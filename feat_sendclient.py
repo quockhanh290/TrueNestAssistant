@@ -28,6 +28,7 @@ from feat_write import (
     PTYPE_VI, PTYPE_EN, PTYPE_KO, PTYPE_ZH, PTYPE_RU,
     FURN_VI, FURN_EN, FURN_KO, FURN_ZH, FURN_RU,
 )
+from feat_clients import client_html, require_owned_client
 
 log = logging.getLogger("linh")
 
@@ -187,10 +188,8 @@ async def s2c_start(update, ctx):
     uid = q.from_user.id
     pn = get_pronoun(uid)
     act, client_id = _parse_s2c_cb(q.data)
-    c = db.get_client(client_id)
-    if not c or c["broker_id"] != uid:
-        await q.edit_message_text("Khách này không còn nữa.",
-                                  reply_markup=MENU_KB)
+    c = await require_owned_client(q, ctx, uid, client_id, "send2client")
+    if not c:
         return
     listings, auto = _candidates(uid, client_id)
     if not listings:
@@ -207,7 +206,7 @@ async def s2c_start(update, ctx):
 
 async def _render_picker(q, ctx, uid, c, listings, auto):
     sel = set((ctx.user_data.get("send2client") or {}).get("selected", []))
-    cname = c.get("name") or "(chưa có tên)"
+    cname = client_html(c.get("name") or "(chưa có tên)")
     lines = [f"Chọn tin gửi cho <b>{cname}</b> "
              f"(đã chọn {len(sel)}/{MAX_PICK}):"]
     if auto:
@@ -238,6 +237,10 @@ async def s2c_toggle(update, ctx):
         await q.edit_message_text("Phiên chọn tin hết hạn, anh làm lại nhé.",
                                   reply_markup=MENU_KB)
         return
+    c = await require_owned_client(q, ctx, uid, s2c.get("client_id"),
+                                   "send2client")
+    if not c:
+        return
     sel = s2c.get("selected", [])
     if listing_id in sel:
         sel.remove(listing_id)
@@ -248,7 +251,6 @@ async def s2c_toggle(update, ctx):
         return
     s2c["selected"] = sel
     ctx.user_data["send2client"] = s2c
-    c = db.get_client(s2c["client_id"])
     listings = [db.get_listing(lid) for lid in s2c.get("cands", [])]
     listings = [l for l in listings if l]
     await _render_picker(q, ctx, uid, c, listings, True)
@@ -403,10 +405,9 @@ async def s2c_done(update, ctx):
     if not s2c or not s2c.get("selected"):
         await q.answer("Anh tích ít nhất 1 căn nhé!", show_alert=True)
         return
-    c = db.get_client(s2c["client_id"])
+    c = await require_owned_client(q, ctx, uid, s2c["client_id"],
+                                   "send2client")
     if not c:
-        await q.edit_message_text("Khách này không còn nữa.",
-                                  reply_markup=MENU_KB)
         return
     kb = []
     row = []
@@ -422,7 +423,8 @@ async def s2c_done(update, ctx):
         "⬅️ Chọn lại tin",
         callback_data=f"send2client:start:{c['id']}")])
     await q.edit_message_text(
-        f"Chọn ngôn ngữ tin nhắn gửi cho <b>{c.get('name') or 'khách'}</b> "
+        f"Chọn ngôn ngữ tin nhắn gửi cho "
+        f"<b>{client_html(c.get('name') or 'khách')}</b> "
         f"({len(s2c['selected'])} căn):",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(kb))
@@ -442,10 +444,9 @@ async def s2c_lang(update, ctx):
         await q.edit_message_text("Phiên gửi tin hết hạn, anh làm lại nhé.",
                                   reply_markup=MENU_KB)
         return
-    c = db.get_client(s2c["client_id"])
+    c = await require_owned_client(q, ctx, uid, s2c["client_id"],
+                                   "send2client")
     if not c:
-        await q.edit_message_text("Khách này không còn nữa.",
-                                  reply_markup=MENU_KB)
         return
     listings = [db.get_listing(lid) for lid in s2c["selected"]]
     listings = [l for l in listings if l]
@@ -459,7 +460,8 @@ async def s2c_lang(update, ctx):
     ctx.user_data["send2client"] = s2c
     lang_label = dict(S2C_LANGS).get(lang, lang)
     await q.edit_message_text(
-        msg + f"\n\n<i>👆 Tin nhắn đã soạn xong ({lang_label})</i>",
+        client_html(msg)
+        + f"\n\n<i>👆 Tin nhắn đã soạn xong ({lang_label})</i>",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("📋 Copy tin nhắn",
@@ -483,6 +485,11 @@ async def s2c_copy(update, ctx):
         await q.edit_message_text("Tin nhắn hết hạn, anh làm lại nhé.",
                                   reply_markup=MENU_KB)
         return
+    uid = q.from_user.id
+    c = await require_owned_client(q, ctx, uid, (s2c or {}).get("client_id"),
+                                   "send2client")
+    if not c:
+        return
     # plain text (no HTML) — easy to copy or forward to Zalo/Messenger
     await ctx.bot.send_message(q.message.chat_id, msg)
 
@@ -492,27 +499,23 @@ async def s2c_sent(update, ctx):
     q = update.callback_query
     await q.answer()
     uid = q.from_user.id
-    pn = get_pronoun(uid)
     s2c = ctx.user_data.pop("send2client", None)
     if not s2c or not s2c.get("selected"):
         await q.edit_message_text("Phiên gửi tin hết hạn, anh làm lại nhé.",
                                   reply_markup=MENU_KB)
         return
-    c = db.get_client(s2c["client_id"])
-    if not c or c["broker_id"] != uid:
-        await q.edit_message_text("Khách này không còn nữa.",
-                                  reply_markup=MENU_KB)
+    c = await require_owned_client(q, ctx, uid, s2c["client_id"])
+    if not c:
         return
-    db.record_sent_listings(s2c["client_id"], s2c["selected"])
+    db.record_sent_listings(s2c["client_id"], s2c["selected"], broker_id=uid)
     for lid in s2c["selected"]:
-        db.link_listing(s2c["client_id"], lid)
-    db.update_client(s2c["client_id"], status="sent")
-    db.touch_contact(s2c["client_id"])
+        db.link_listing(s2c["client_id"], lid, broker_id=uid)
+    db.update_client(s2c["client_id"], broker_id=uid, status="sent")
+    db.touch_contact(s2c["client_id"], broker_id=uid)
     n = len(s2c["selected"])
-    cname = c.get("name") or "khách"
+    cname = client_html(c.get("name") or "khách")
     await q.edit_message_text(
-        f"Đã lưu: gửi {n} tin cho <b>{cname}</b> ✓\n\n"
-        f"2 ngày nữa em sẽ nhắc {pn} hỏi lại khách ưng căn nào nhé ⏰",
+        f"Đã lưu: gửi {n} tin cho <b>{cname}</b> ✓",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton(
@@ -530,10 +533,8 @@ async def s2c_followup(update, ctx):
     await q.answer()
     uid = q.from_user.id
     act, client_id = _parse_s2c_cb(q.data)
-    c = db.get_client(client_id)
-    if not c or c["broker_id"] != uid:
-        await q.edit_message_text("Khách này không còn nữa.",
-                                  reply_markup=MENU_KB)
+    c = await require_owned_client(q, ctx, uid, client_id, "send2client")
+    if not c:
         return
     sent = c.get("sent_listings") or []
     listings = []
@@ -549,7 +550,7 @@ async def s2c_followup(update, ctx):
                     "⬅️ Quay lại",
                     callback_data=f"client:{client_id}:0:a:a")]]))
         return
-    cname = c.get("name") or "khách"
+    cname = client_html(c.get("name") or "khách")
     kb = []
     for l in listings:
         brief = listing_line(l).splitlines()[0]
@@ -576,10 +577,13 @@ async def s2c_nochoice(update, ctx):
     if not s2c:
         await q.edit_message_text("Phiên hết hạn.", reply_markup=MENU_KB)
         return
-    c = db.get_client(s2c["client_id"])
+    c = await require_owned_client(q, ctx, uid, s2c["client_id"])
+    if not c:
+        return
     db.add_note(s2c["client_id"],
-                "Khách không ưng căn nào đã gửi — cần tìm thêm")
-    db.touch_contact(s2c["client_id"])
+                "Khách không ưng căn nào đã gửi — cần tìm thêm",
+                broker_id=uid)
+    db.touch_contact(s2c["client_id"], broker_id=uid)
     await q.edit_message_text(
         f"Em đã ghi chú lại ✓ {pn.capitalize()} tìm thêm căn khác"
         f" gửi cho khách nhé!",
@@ -601,20 +605,26 @@ async def s2c_chose(update, ctx):
     act, listing_id = _parse_s2c_cb(q.data)
     s2c = ctx.user_data.get("send2client") or {}
     client_id = s2c.get("client_id")
-    c = db.get_client(client_id) if client_id else None
+    c = await require_owned_client(q, ctx, uid, client_id, "send2client") \
+        if client_id else None
+    if not c:
+        if not client_id:
+            await q.edit_message_text("Thông tin hết hạn, anh làm lại nhé.",
+                                      reply_markup=MENU_KB)
+        return
     l = db.get_listing(listing_id)
-    if not c or not l or c["broker_id"] != uid:
+    if not l:
         await q.edit_message_text("Thông tin hết hạn, anh làm lại nhé.",
                                   reply_markup=MENU_KB)
         return
-    db.record_client_choice(client_id, listing_id)
-    db.link_listing(client_id, listing_id)
-    db.update_client(client_id, status="pending_viewing")
+    db.record_client_choice(client_id, listing_id, broker_id=uid)
+    db.link_listing(client_id, listing_id, broker_id=uid)
+    db.update_client(client_id, broker_id=uid, status="pending_viewing")
     s2c["awaiting_dt"] = listing_id
     ctx.user_data["send2client"] = s2c
     brief = listing_line(l).splitlines()[0]
     await q.edit_message_text(
-        f"Khách chốt căn này ạ? 🏠 {brief}\n\n"
+        f"Khách chốt căn này ạ? 🏠 {client_html(brief)}\n\n"
         f"Chốt đi xem ngày giờ nào ạ?\n"
         f"<i>(vd: \"mai 9h sáng\" / \"thứ 7 2h chiều\" / \"15/11 14:00\")</i>",
         parse_mode="HTML",
@@ -626,7 +636,6 @@ async def s2c_chose(update, ctx):
 async def handle_s2c_datetime(update, ctx, s2c, text):
     """Free-text viewing datetime after the client chose a listing."""
     uid = update.effective_user.id
-    pn = get_pronoun(uid)
     t = text.strip()
     if t.lower() in ("hủy", "huy", "cancel"):
         ctx.user_data.pop("send2client", None)
@@ -635,9 +644,16 @@ async def handle_s2c_datetime(update, ctx, s2c, text):
         return True
     listing_id = s2c.get("awaiting_dt")
     client_id = s2c.get("client_id")
-    c = db.get_client(client_id) if client_id else None
+    c = await require_owned_client(update.message, ctx, uid, client_id,
+                                   "send2client") if client_id else None
+    if not c:
+        if not client_id:
+            ctx.user_data.pop("send2client", None)
+            await update.message.reply_text("Phiên hết hạn, anh làm lại nhé.",
+                                            reply_markup=MENU_KB)
+        return True
     l = db.get_listing(listing_id) if listing_id else None
-    if not c or not l:
+    if not l:
         ctx.user_data.pop("send2client", None)
         await update.message.reply_text("Phiên hết hạn, anh làm lại nhé.",
                                         reply_markup=MENU_KB)
@@ -657,15 +673,14 @@ async def handle_s2c_datetime(update, ctx, s2c, text):
                             client_name=c.get("name") or "",
                             listing_ids=[listing_id],
                             scheduled_at=ts)
-    db.update_client(client_id, status="scheduled")
-    db.touch_contact(client_id)
+    db.update_client(client_id, broker_id=uid, status="scheduled")
+    db.touch_contact(client_id, broker_id=uid)
     cname = c.get("name") or "khách"
     brief = listing_line(l).splitlines()[0]
     await update.message.reply_text(
         f"Đã đặt lịch xem ✓\n\n"
         f"👤 {cname}\n"
         f"🏠 {brief}\n"
-        f"🕙 {fmt_sched(ts)}\n\n"
-        f"Em sẽ nhắc {pn} trước 1 tiếng nhé ⏰",
+        f"🕙 {fmt_sched(ts)}",
         reply_markup=MENU_KB)
     return True

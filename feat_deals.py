@@ -12,6 +12,7 @@ from telegram.ext import ContextTypes
 
 import config
 import db
+from feat_clients import client_html, require_owned_client
 from db import money, vntime
 import parser as listing_parser
 from normalize import normalize_phone
@@ -63,9 +64,10 @@ def _deal_line(d):
             br = p.get("bedrooms")
             br_s = ("studio" if br == 0.0
                     else (f"{int(br)}PN" if br else "?PN"))
-            loc = p.get("building_name") or p.get("district") or "?"
+            loc = client_html(
+                p.get("building_name") or p.get("district") or "?")
             lst = f"🏠 {br_s} {loc} - "
-    cname = d.get("client_name") or "?"
+    cname = client_html(d.get("client_name") or "?")
     return (f"• {dt} - {lst}👤 {cname} - "
             f"{fmt_price(d.get('commission_vnd'))}")
 
@@ -189,10 +191,12 @@ async def deal_pick(update, ctx):
     await q.answer()
     uid = q.from_user.id
     client_id, listing_id = _parse_deal_pick(q.data)
-    c = db.get_client(client_id) if client_id else None
+    c = await require_owned_client(q, ctx, uid, client_id) \
+        if client_id else None
     l = db.get_listing(listing_id) if listing_id else None
-    if (not c or c["broker_id"] != uid or not l
-            or l["broker_id"] != uid):
+    if not c:
+        return
+    if not l or l["broker_id"] != uid:
         await q.edit_message_text("Thông tin deal không còn hợp lệ.",
                                   reply_markup=MENU_KB)
         return
@@ -205,10 +209,8 @@ async def deal_pick_client(update, ctx):
     await q.answer()
     uid = q.from_user.id
     client_id = q.data[len("deal:mc:"):]
-    c = db.get_client(client_id)
-    if not c or c["broker_id"] != uid:
-        await q.edit_message_text("Khách này không còn nữa.",
-                                  reply_markup=MENU_KB)
+    c = await require_owned_client(q, ctx, uid, client_id, "deal_new")
+    if not c:
         return
     # Pre-fill: if this client already has a chosen listing, skip the pick.
     l = _get_client_choice_listing(c)
@@ -222,7 +224,7 @@ async def deal_pick_client(update, ctx):
         callback_data=f"deal:ml:{l['id']}")] for l in listings]
     kb.append([InlineKeyboardButton("❌ Hủy", callback_data="cms:cur")])
     await q.edit_message_text(
-        f"Deal cho <b>{c.get('name')}</b> — chọn tin:",
+        f"Deal cho <b>{client_html(c.get('name'))}</b> — chọn tin:",
         parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
 
 
@@ -233,10 +235,15 @@ async def deal_pick_listing(update, ctx):
     uid = q.from_user.id
     dn = ctx.user_data.pop("deal_new", None)
     listing_id = q.data[len("deal:ml:"):]
-    c = db.get_client(dn["client_id"]) if dn else None
+    c = await require_owned_client(q, ctx, uid, dn.get("client_id"),
+                                   "deal_new") if dn else None
     l = db.get_listing(listing_id)
-    if (not c or c["broker_id"] != uid or not l
-            or l["broker_id"] != uid):
+    if not c:
+        if not dn:
+            await q.edit_message_text("Thông tin deal không còn hợp lệ.",
+                                      reply_markup=MENU_KB)
+        return
+    if not l or l["broker_id"] != uid:
         await q.edit_message_text("Thông tin deal không còn hợp lệ.",
                                   reply_markup=MENU_KB)
         return
@@ -282,6 +289,11 @@ async def _handle_add_deal(update, ctx, ad, text):
     pasted listing is not booked as a commission because it mentions 8tr."""
     uid = update.effective_user.id
     t = text.strip().lower()
+    client_id = ad.get("client_id")
+    c = await require_owned_client(update.message, ctx, uid, client_id,
+                                   "adding_deal") if client_id else None
+    if client_id and not c:
+        return True
     if t in ("bỏ qua", "bo qua", "skip", "hủy", "huy", "cancel"):
         ctx.user_data.pop("adding_deal", None)
         await update.message.reply_text("Ok, em không lưu deal này ạ.",
@@ -310,9 +322,15 @@ async def _handle_add_deal(update, ctx, ad, text):
                              client_name=ad.get("client_name") or "",
                              listing_id=ad.get("listing_id"),
                              commission_vnd=val)
-    c = db.get_client(ad["client_id"]) if ad.get("client_id") else None
+    if not deal_id:
+        ctx.user_data.pop("adding_deal", None)
+        await update.message.reply_text(
+            "Deal này đã được lưu trước đó rồi ạ.", reply_markup=MENU_KB)
+        return True
+    c = db.get_client(ad["client_id"], broker_id=uid) \
+        if ad.get("client_id") else None
     if c and c["status"] != "rented":
-        db.update_client(ad["client_id"], status="rented")
+        db.update_client(ad["client_id"], broker_id=uid, status="rented")
     ctx.user_data.pop("adding_deal", None)
     await update.message.reply_text(
         f"Đã lưu deal ✓ Hoa hồng {fmt_price(val)} 🎉",
@@ -378,8 +396,8 @@ async def prompt_commission_for_client(uid, client_id, ctx, new_status=None):
     Otherwise fall back to the manual pick flow.
     """
     pn = get_pronoun(uid)
-    c = db.get_client(client_id)
-    if not c or c.get("broker_id") != uid:
+    c = db.get_client(client_id, broker_id=uid)
+    if not c:
         return
     st_label = {"contracted": "kí HĐ", "rented": "hoàn thành"}.get(
         new_status or c.get("status"), "chốt deal")
@@ -400,7 +418,7 @@ async def prompt_commission_for_client(uid, client_id, ctx, new_status=None):
         await ctx.bot.send_message(
             uid,
             f"🎉 Chúc mừng {pn}!\n"
-            f"Khách <b>{cname}</b> đã {st_label} căn "
+            f"Khách <b>{client_html(cname)}</b> đã {st_label} căn "
             f"<b>{_listing_short(l)}</b>!\n\n"
             f"Hoa hồng deal này bao nhiêu ạ?\n"
             f"(Gõ số tiền, vd: 7500000)",
@@ -416,7 +434,8 @@ async def prompt_commission_for_client(uid, client_id, ctx, new_status=None):
         ])
         await ctx.bot.send_message(
             uid,
-            f"🎉 Chúc mừng {pn}! Khách <b>{cname}</b> đã {st_label}!\n\n"
+            f"🎉 Chúc mừng {pn}! Khách <b>{client_html(cname)}</b> "
+            f"đã {st_label}!\n\n"
             f"Em chưa biết căn nào, {pn} chọn giúp em nhé:",
             parse_mode="HTML",
             reply_markup=kb)
@@ -432,4 +451,3 @@ async def deal_skip_auto(update, ctx):
 
 
 # ---------------------------------------------------------------- router
-
