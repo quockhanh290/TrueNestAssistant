@@ -8,6 +8,8 @@ import time
 
 import db
 import utils
+from db.validate import choice
+from utils import CLIENT_STATUS_LABEL
 
 
 # ---------------------------------------------------------------- referral
@@ -29,18 +31,6 @@ def get_referral_api(broker_id):
 
 # ---------------------------------------------------------------- clients
 
-CLIENT_STATUS_VI = {
-    "new": "Mới",
-    "contacted": "Đã liên hệ",
-    "searching": "Đang tìm",
-    "sent": "Đã gửi tin",
-    "viewed": "Đã xem",
-    "negotiating": "Đang đàm phán",
-    "closed": "Đã chốt",
-    "cancelled": "Hủy",
-}
-
-
 def _client_summary(c):
     """Compact dict for list views."""
     req = []
@@ -58,7 +48,7 @@ def _client_summary(c):
         "name": c.get("name") or "—",
         "phone": c.get("phone") or "",
         "status": c.get("status"),
-        "status_vi": CLIENT_STATUS_VI.get(c.get("status"), c.get("status")),
+        "status_vi": CLIENT_STATUS_LABEL.get(c.get("status"), c.get("status")),
         "urgency": c.get("urgency"),
         "req_summary": " · ".join(req) or (c.get("requirements_raw") or "—"),
         "notes": c.get("notes") or "",
@@ -68,6 +58,8 @@ def _client_summary(c):
 
 def list_clients_api(broker_id, status=None):
     """GET /api/clients — broker's clients, urgency-first."""
+    if status is not None:
+        choice(status, "status", db.CLIENT_STATUSES)
     clients = db.list_clients(broker_id, status=status, limit=100)
     return {"clients": [_client_summary(c) for c in clients]}, 200
 
@@ -136,6 +128,7 @@ def create_client_api(broker_id, data):
         requirements_raw=(data.get("requirements_raw") or "").strip(),
         requirements=req,
         urgency=data.get("urgency") or "normal",
+        status=data.get("status", "new"),
     )
     return {"id": cid}, 200
 

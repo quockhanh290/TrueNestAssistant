@@ -149,7 +149,8 @@ def update_listing(listing_id, path=None, **fields):
 def set_listing_status(listing_id, new_status, changed_by="broker", path=None):
     """Raises FieldError for a status outside LISTING_STATUSES (the webapp
     stored "bogus" before, and the listing vanished from every filter).
-    A status change is not a confirmation: confirmed_at is left alone."""
+    Publishing from draft, pending_info or rented confirms availability;
+    other status changes leave confirmed_at alone."""
     choice(new_status, "status", LISTING_STATUSES)
     conn = connect(path)
     row = conn.execute(
@@ -163,10 +164,18 @@ def set_listing_status(listing_id, new_status, changed_by="broker", path=None):
         conn.close()
         return True
     now = _now()
-    conn.execute(
-        "UPDATE tg_listings SET status = ?, updated_at = ? WHERE id = ?",
-        (new_status, now, listing_id),
-    )
+    if new_status == "submitted" and old_status in ("draft", "pending_info",
+                                                     "rented"):
+        conn.execute(
+            "UPDATE tg_listings SET status = ?, updated_at = ?,"
+            " confirmed_at = ? WHERE id = ?",
+            (new_status, now, now, listing_id),
+        )
+    else:
+        conn.execute(
+            "UPDATE tg_listings SET status = ?, updated_at = ? WHERE id = ?",
+            (new_status, now, listing_id),
+        )
     conn.execute(
         "INSERT INTO tg_events (listing_id, old_status, new_status, changed_by, created_at)"
         " VALUES (?, ?, ?, ?, ?)",

@@ -16,11 +16,14 @@ CLIENT_STATUSES = ("new", "sent", "pending_viewing", "scheduled", "viewed",
 
 
 def create_client(broker_id, name="", phone="", requirements_raw="",
-                  requirements=None, urgency="normal", path=None):
+                  requirements=None, urgency="normal", path=None,
+                  status="new"):
     """Create a client. requirements is a parse_query-style filter dict.
     urgency: 'urgent' | 'normal' | 'low'."""
     if urgency not in ("urgent", "normal", "low"):
         urgency = "normal"
+    from .validate import choice
+    choice(status, "status", CLIENT_STATUSES)
     client_id = "cli:" + uuid.uuid4().hex[:12]
     now = _now()
     r = _typed_requirements(requirements or {})
@@ -30,11 +33,11 @@ def create_client(broker_id, name="", phone="", requirements_raw="",
         " budget_max, bedrooms, district, property_type, requirements_raw,"
         " status, urgency, notes, viewed_listings, created_at, updated_at,"
         " last_contact_at)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, '', '[]', ?, ?, ?)",
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '[]', ?, ?, ?)",
         (client_id, broker_id, name, phone,
          r.get("min_price"), r.get("max_price"), r.get("bedrooms"),
          r.get("district"), r.get("property_type"), requirements_raw,
-         urgency, now, now, now),
+         status, urgency, now, now, now),
     )
     conn.commit()
     conn.close()
@@ -191,6 +194,9 @@ def update_client(client_id, path=None, **fields):
     if "urgency" in fields and fields["urgency"] not in ("urgent", "normal",
                                                          "low"):
         fields["urgency"] = "normal"
+    if "status" in fields:
+        from .validate import choice
+        choice(fields["status"], "status", CLIENT_STATUSES)
     for k in ("budget_min", "budget_max"):
         if k in fields:
             fields[k] = to_number(fields[k], k, money=True)
