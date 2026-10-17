@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#071420">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Đề xuất</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script>
+if (window.Telegram?.WebApp) {
+  try { document.body.classList.add('in-telegram'); } catch(e) {
+    document.addEventListener('DOMContentLoaded', function() {
+      document.body.classList.add('in-telegram');
+    });
+  }
+  const tg = window.Telegram.WebApp;
+  tg.ready(); tg.expand();
+  tg.setHeaderColor('#071420');
+  tg.setBackgroundColor('#071420');
+  // Fullscreen (Bot API 8.0+) - hide Telegram header buttons
+  function tryFullscreen() {
+    try {
+      if (tg.requestFullscreen && !tg.isFullscreen) tg.requestFullscreen();
+      // Also try to set header/bg to match (hides visual separation)
+      if (tg.setHeaderColor) tg.setHeaderColor('#071420');
+      if (tg.setBackgroundColor) tg.setBackgroundColor('#071420');
+    } catch(e) {}
+  }
+  tryFullscreen();
+  document.addEventListener('pointerdown', tryFullscreen, { once: true });
+  // Disable vertical swipes closing the app
+  if (tg.disableVerticalSwipes) { try { tg.disableVerticalSwipes(); } catch(e) {} }
+}
+</script>
+<style>
+body{margin:0;background:#071420;-webkit-user-select:none;user-select:none}
+button{font-family:inherit;cursor:pointer}
+input::placeholder{color:#7f90a1}
+.noscroll{scrollbar-width:none}
+.noscroll::-webkit-scrollbar{display:none}
+#cards{padding-bottom:96px}#cards:empty::after{content:'Đang tải...';display:block;text-align:center;color:#7f90a1;padding:48px 16px;font:400 14px/20px 'Be Vietnam Pro',sans-serif}
+</style>
+
+<style>
+/* Telegram + iOS safe areas */
+.main-wrap { padding-top: env(safe-area-inset-top); }
+</style>
+
+<style>
+.sticky-header { position: sticky; top: 0; z-index: 50; background: #071420; }
+</style>
+
+<style>
+/* Hide design back/close buttons when in Telegram Mini App */
+body.in-telegram .design-nav-btn { display: none !important; }
+</style>
+</head><body>
+<div style="width:100%;max-width:420px;margin:0 auto;min-height:100vh;background:#071420">
+<header style="height:52px;display:flex;align-items:center;justify-content:center;background:#071420;border-bottom:1px solid #243241">
+<h1 style="margin:0;font:600 16px/24px Be Vietnam Pro;color:#d7e4f4">Đề xuất cho bạn</h1>
+</header>
+<div style="padding:12px 16px">
+<div id="prog" style="text-align:center;color:#93a3b3;font:500 13px/18px Be Vietnam Pro;margin-bottom:12px"></div>
+<div id="card" style="padding-bottom:32px"></div>
+</div>
+</div>
+<script>
+(function(){
+var tg=window.Telegram?window.Telegram.WebApp:null;
+var uid=(tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user)?tg.initDataUnsafe.user.id:"";
+function apiUrl(p){var u=p+"?";if(uid)u+="tg_user_id="+uid+"&";return u;}
+function esc(s){s=String(s||"");return s.split("&").join("&amp;").split("<").join("&lt;").split(">").join("&gt;");}
+var items=[], idx=0, viewed=0, shortlist=[];
+function load(){
+  fetch(apiUrl('/api/proposals')).then(function(r){return r.json();}).then(function(d){
+    items=d.proposals||[];
+    if(!items.length){document.getElementById('card').innerHTML='<div style="text-align:center;color:#7f90a1;padding:48px">Chưa có đề xuất. Hệ thống đang tìm broker phù hợp...</div>';return;}
+    show();
+  });
+}
+function show(){
+  if(idx>=items.length){
+    // Het 15 can
+    var c=document.getElementById('card');
+    if(viewed>=30){
+      c.innerHTML='<div style="text-align:center;padding:32px"><p style="color:#d7e4f4">Có vẻ bạn gặp khó khăn trong việc quyết định.</p>'
+      +'<button onclick="revise()" style="background:#2aabee;border:0;border-radius:10px;padding:12px 24px;color:#03273b;margin:8px">Sửa yêu cầu</button>'
+      +'<button onclick="toWishlist()" style="background:#1b2d3d;border:1px solid #243241;border-radius:10px;padding:12px 24px;color:#d7e4f4;margin:8px">Lưu wishlist</button></div>';
+    } else {
+      c.innerHTML='<div style="text-align:center;padding:32px"><p style="color:#d7e4f4">Bạn đã xem hết '+viewed+' căn.</p>'
+      +'<button onclick="idx=0;show()" style="background:#1b2d3d;border:1px solid #2aabee;border-radius:10px;padding:12px 24px;color:#89ceff;margin:8px">Xem lại</button>'
+      +'<button onclick="loadMore()" style="background:#2aabee;border:0;border-radius:10px;padding:12px 24px;color:#03273b;margin:8px">Xem 15 căn mới</button>'
+      +'<button onclick="done()" style="background:none;border:0;color:#93a3b3;margin:8px">Xong</button></div>';
+    }
+    return;
+  }
+  var p=items[idx];
+  document.getElementById('prog').textContent='Căn '+(viewed+1)+' / 15';
+  document.getElementById('card').innerHTML=
+    '<div style="border-radius:14px;background:#14212d;border:1px solid #243241;padding:16px">'
+    +'<h2 style="margin:0 0 8px;color:#d7e4f4">'+esc(p.title)+'</h2>'
+    +'<div style="font:700 22px Space Grotesk;color:#89ceff;margin-bottom:8px">'+esc(p.price)+'</div>'
+    +'<p style="color:#93a3b3">'+esc(p.specs||'')+'</p>'
+    +(p.vs_avg?'<p style="color:#7bdc75">💰 '+esc(p.vs_avg)+'</p>':'')
+    +'<p style="color:#93a3b3">Môi giới: '+'★'.repeat(p.stars||4)+' (uy tín '+esc(p.broker_score||'')+')</p>'
+    +'<div style="display:flex;gap:8px;margin-top:12px">'
+    +'<button onclick="act(1)" style="flex:1;background:#2aabee;border:0;border-radius:10px;padding:12px;color:#03273b;font-weight:600">⭐ Shortlist</button>'
+    +'<button onclick="act(0)" style="flex:1;background:#1b2d3d;border:1px solid #243241;border-radius:10px;padding:12px;color:#93a3b3">Bỏ qua</button>'
+    +'</div>'
+    +'<button onclick="concierge()" style="width:100%;margin-top:8px;background:none;border:0;color:#fabc4c">🎩 Concierge (250K)</button>'
+    +'</div>';
+}
+function act(save){
+  if(save) shortlist.push(items[idx].id);
+  idx++; viewed++; show();
+}
+function loadMore(){ idx=0; load(); }
+function done(){ location.href='brokers.html?shortlist='+shortlist.join(','); }
+function revise(){ location.href='intake.html?revise=1'; }
+function toWishlist(){ location.href='wishlist.html'; }
+function concierge(){ alert('Concierge: 250K/tin'); }
+load();
+})();
+</script>
+</body>
+</html>
