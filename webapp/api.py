@@ -74,6 +74,8 @@ def listing_summary(row):
         "created_at": row.get("created_at"),
         "quality_score": score,
         "ai_scored": True,
+        "amenities": p.get("amenities") or [],
+        "highlights": p.get("highlights") or [],
     }
 
 
