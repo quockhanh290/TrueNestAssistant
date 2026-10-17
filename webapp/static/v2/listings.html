@@ -3,38 +3,24 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#071420">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Quản lý căn</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script>
 if (window.Telegram?.WebApp) {
-  try { document.body.classList.add('in-telegram'); } catch(e) {
-    document.addEventListener('DOMContentLoaded', function() {
-      document.body.classList.add('in-telegram');
-    });
-  }
   const tg = window.Telegram.WebApp;
   tg.ready(); tg.expand();
   tg.setHeaderColor('#071420');
   tg.setBackgroundColor('#071420');
-  // Fullscreen (Bot API 8.0+) - hide Telegram header buttons
+  // Fullscreen (Bot API 8.0+)
   function tryFullscreen() {
-    try {
-      if (tg.requestFullscreen && !tg.isFullscreen) tg.requestFullscreen();
-      // Also try to set header/bg to match (hides visual separation)
-      if (tg.setHeaderColor) tg.setHeaderColor('#071420');
-      if (tg.setBackgroundColor) tg.setBackgroundColor('#071420');
-    } catch(e) {}
+    if (tg.requestFullscreen && !tg.isFullscreen) tg.requestFullscreen();
   }
   tryFullscreen();
   document.addEventListener('pointerdown', tryFullscreen, { once: true });
-  // Disable vertical swipes closing the app
-  if (tg.disableVerticalSwipes) { try { tg.disableVerticalSwipes(); } catch(e) {} }
 }
 </script>
 <style>
-body{margin:0;background:#071420;-webkit-user-select:none;user-select:none}
+body{margin:0;background:#071420}
 button{font-family:inherit;cursor:pointer}
 input::placeholder{color:#7f90a1}
 .noscroll{scrollbar-width:none}
@@ -50,16 +36,6 @@ input::placeholder{color:#7f90a1}
 <style>
 .sticky-header { position: sticky; top: 0; z-index: 50; background: #071420; }
 </style>
-
-<style>
-/* Hide design back/close buttons when in Telegram Mini App */
-body.in-telegram .design-nav-btn { display: none !important; }
-</style>
-
-<style>
-/* Hide hardcoded filter chips (not functional yet) */
-.chips-row { display: none !important; }
-</style>
 </head>
 <body>
 <div class="main-wrap" style="width:100%;max-width:420px;margin:0 auto;min-height:100vh;background:#071420"><div class="sticky-header">
@@ -67,7 +43,7 @@ body.in-telegram .design-nav-btn { display: none !important; }
 <helmet>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap">
 <style>
-body{margin:0;background:#071420;-webkit-user-select:none;user-select:none}
+body{margin:0;background:#071420}
 button{font-family:inherit;cursor:pointer}
 input::placeholder{color:#7f90a1}
 .noscroll{scrollbar-width:none}
@@ -77,13 +53,13 @@ input::placeholder{color:#7f90a1}
 <div style="width: 390px; height: 1204px; box-sizing: border-box; position: relative; display: flex; flex-direction: column; background: #071420; color: #d7e4f4; font-family: 'Be Vietnam Pro', sans-serif; overflow: hidden">
 
 <header style="flex: none; height: 52px; padding: 0 8px; display: flex; align-items: center; justify-content: space-between; background: #14212d; border-bottom: 1px solid #243241">
-<button type="button" aria-label="Quay lại" class="design-nav-btn" style="flex: none; width: 44px; height: 44px; padding: 0; display: flex; align-items: center; justify-content: center; background: none; border: 0; color: #d7e4f4"><span style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 9999px; background: rgba(41,54,67,0.8)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"></path><path d="M19 12H5"></path></svg></span></button>
+<button type="button" aria-label="Quay lại" style="flex: none; width: 44px; height: 44px; padding: 0; display: flex; align-items: center; justify-content: center; background: none; border: 0; color: #d7e4f4"><span style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 9999px; background: rgba(41,54,67,0.8)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"></path><path d="M19 12H5"></path></svg></span></button>
 <div style="flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 8px">
 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#89ceff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"></path><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"></path><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"></path><path d="M10 6h4"></path><path d="M10 10h4"></path><path d="M10 14h4"></path><path d="M10 18h4"></path></svg>
 <h1 style="margin: 0; font: 600 16px/24px 'Be Vietnam Pro', sans-serif; color: #d7e4f4; white-space: nowrap">Quản lý căn</h1>
-<span style="flex: none; padding: 2px 9px; border-radius: 9999px; background: rgba(137,206,255,0.12); color: #89ceff; font: 600 12px/16px 'Be Vietnam Pro', sans-serif; font-variant-numeric: tabular-nums"><span id="listing-count">12 căn</span></span>
+<span style="flex: none; padding: 2px 9px; border-radius: 9999px; background: rgba(137,206,255,0.12); color: #89ceff; font: 600 12px/16px 'Be Vietnam Pro', sans-serif; font-variant-numeric: tabular-nums">12 căn</span>
 </div>
-<button type="button" aria-label="Đóng" class="design-nav-btn" style="flex: none; width: 44px; height: 44px; padding: 0; display: flex; align-items: center; justify-content: center; background: none; border: 0; color: #d7e4f4"><span style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 9999px; background: rgba(41,54,67,0.8)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></span></button>
+<button type="button" aria-label="Đóng" style="flex: none; width: 44px; height: 44px; padding: 0; display: flex; align-items: center; justify-content: center; background: none; border: 0; color: #d7e4f4"><span style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 9999px; background: rgba(41,54,67,0.8)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></span></button>
 </header>
 
 <div style="flex: 1; min-height: 0; padding: 12px 16px 0; display: flex; flex-direction: column; gap: 12px">
@@ -116,7 +92,7 @@ input::placeholder{color:#7f90a1}
 
 <button type="button" aria-label="Thêm căn mới" style="position: fixed; right: max(16px, calc(50% - 194px)); bottom: 80px; z-index: 99; width: 56px; height: 56px; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 9999px; background: #2aabee; border: 0; color: #03273b"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg></button>
 
-<nav aria-label="Điều hướng chính" style="position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 420px; height: 64px; padding-bottom: env(safe-area-inset-bottom, 0px); display: flex; background: #101d28; border-top: 1px solid #243241; z-index: 100">
+<nav aria-label="Điều hướng chính" style="position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 420px; height: 64px; display: flex; background: #101d28; border-top: 1px solid #243241; z-index: 100">
 <button type="button" aria-current="page" style="flex: 1; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; background: none; border: 0; color: #89ceff; font: 600 11px/14px 'Be Vietnam Pro', sans-serif"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"></path><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"></path><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"></path><path d="M10 6h4"></path><path d="M10 10h4"></path><path d="M10 14h4"></path><path d="M10 18h4"></path></svg>Căn hộ</button>
 <button type="button" style="flex: 1; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; background: none; border: 0; color: #93a3b3; font: 500 11px/14px 'Be Vietnam Pro', sans-serif"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>Khách</button>
 <button type="button" style="flex: 1; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; background: none; border: 0; color: #93a3b3; font: 500 11px/14px 'Be Vietnam Pro', sans-serif"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"></rect><line x1="16" x2="16" y1="2" y2="6"></line><line x1="8" x2="8" y1="2" y2="6"></line><line x1="3" x2="21" y1="10" y2="10"></line></svg>Lịch xem</button>
@@ -210,30 +186,19 @@ input::placeholder{color:#7f90a1}
     '</div>' +
     (highlights.length ? '<div style="padding:0 12px 10px;display:flex;align-items:center;gap:8px;overflow:hidden"><span style="color:#b6c2cf;font:400 12px/18px \'Be Vietnam Pro\',sans-serif;white-space:nowrap">' + highlights.map(esc).join('</span><span style="color:#4d6073"> · </span><span style="color:#b6c2cf;font:400 12px/18px \'Be Vietnam Pro\',sans-serif;white-space:nowrap">') + '</span>' +
           (hlExtra > 0 ? '<span style="flex:none;padding:3px 8px;border-radius:6px;background:rgba(137,206,255,0.12);color:#89ceff;font:600 11px/16px \'JetBrains Mono\',monospace;white-space:nowrap">+' + hlExtra + '</span>' : '') + '</div>' : '') +
-    // Card footer (from design)
-    '<div style="min-height:44px;padding-left:12px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid #243241">' +
-      '<div style="min-width:0;display:flex;align-items:center;gap:6px;font:400 13px/18px \'Be Vietnam Pro\',sans-serif;white-space:nowrap;overflow:hidden">' +
-        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7bdc75" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"></rect><line x1="16" x2="16" y1="2" y2="6"></line><line x1="8" x2="8" y1="2" y2="6"></line><line x1="3" x2="21" y1="10" y2="10"></line></svg>' +
-        '<span style="color:#7bdc75;font-weight:600">Trống ngay</span>' +
-      '</div>' +
-      '<div style="display:flex;flex:none">' +
-        '<button type="button" aria-label="Gọi" onclick="event.stopPropagation()" style="width:44px;height:44px;padding:0;display:flex;align-items:center;justify-content:center;background:none;border:0;color:#89ceff"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"></path></svg></button>' +
-        '<button type="button" aria-label="Chia sẻ" onclick="event.stopPropagation()" style="width:44px;height:44px;padding:0;display:flex;align-items:center;justify-content:center;background:none;border:0;color:#93a3b3"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" x2="12" y1="2" y2="15"></line></svg></button>' +
-      '</div>' +
-    '</div>' +
     '</article>';
   }
   
   async function load() {
       // Hide hardcoded filter chips
-      document.querySelectorAll('button').forEach(b => {
-        if (b.textContent.includes('Xoá tất cả')) {
-          const parent = b.closest('div');
-          if (parent && parent.parentElement) {
-            parent.parentElement.style.display = 'none';
+      setTimeout(() => {
+        document.querySelectorAll('button').forEach(b => {
+          if (b.textContent.includes('Xoá tất cả')) {
+            let p = b.parentElement;
+            if (p && p.parentElement) p.parentElement.style.display = 'none';
           }
-        }
-      });
+        });
+      }, 100);
     const dbg = document.getElementById('debug');
     const url = apiUrl('/api/listings');
     if (dbg) dbg.textContent = 'API: ' + url;
@@ -248,7 +213,6 @@ input::placeholder{color:#7f90a1}
         return;
       }
       box.innerHTML = items.map(cardHtml).join('');
-      // Update header count
       const cnt = document.getElementById('listing-count');
       if (cnt) cnt.textContent = items.length + ' căn';
     } catch(e) {
