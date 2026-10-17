@@ -1,0 +1,159 @@
+/* TrueNest v2 - design tokens.
+ * Tầng 1 trong 3 tầng (tokens.css -> api.js -> giao diện). Không chứa selector của màn hình nào;
+ * đổi framework sau này vẫn giữ nguyên tệp này.
+ *
+ * Giá trị lấy từ mẫu UI/Main.dc.html (nền tối, khung 390px).
+ * Cách đọc tên: --c-* màu · --f-* chữ · --s-* khoảng cách · --r-* bo góc · --sh-* đổ bóng · --z-* lớp.
+ */
+
+:root {
+  color-scheme: dark;
+  /* GHI CHÚ: chưa có theme sáng. Các biến --c-text-2, --c-text-3, --c-placeholder, --st-* và --c-scrim
+   * chưa được ánh xạ sang theme sáng; khi làm theme sáng phải định nghĩa lại các biến này. */
+
+  /* ---- Màu gốc (primitive), đúng giá trị trong mẫu ---- */
+  --p-ink-900: #071420;   /* nền trang */
+  --p-ink-800: #101d28;   /* nền thanh điều hướng, thẻ đã thuê */
+  --p-ink-700: #14212d;   /* nền thẻ, ô nhập, thanh tiêu đề */
+  --p-ink-600: #1b2d3d;   /* nền khung ảnh */
+  --p-ink-650: #172635;   /* nền khung ảnh của thẻ đã thuê */
+  --p-ink-950: #0b1823;   /* nền huy hiệu điểm */
+  --p-line:    #243241;
+  --p-text-1:  #d7e4f4;
+  --p-text-2:  #c3cfdb;
+  --p-text-3:  #b6c2cf;
+  --p-text-4:  #a9b6c3;
+  --p-muted:   #93a3b3;
+  --p-dim:     #8596a7;
+  --p-faint:   #7f90a1;
+  --p-dot:     #4d6073;
+  --p-thumb-fg: #6f879c;
+  --p-sky-300: #c4e7ff;
+  --p-sky-400: #89ceff;   /* màu nhấn chính: giá, tab đang chọn */
+  --p-tg-blue: #2aabee;   /* nút chính (FAB, huy hiệu lọc) */
+  --p-on-tg:   #03273b;
+  --p-green:   #7bdc75;
+  --p-amber:   #fabc4c;
+  --p-red:     #ffb4ab;
+
+  /* ---- Màu ngữ nghĩa (semantic): giao diện chỉ dùng nhóm này ---- */
+  --c-bg:            var(--p-ink-900);
+  --c-surface:       var(--p-ink-700);
+  --c-surface-quiet: var(--p-ink-800);
+  --c-surface-thumb: var(--p-ink-600);
+  --c-surface-thumb-quiet: var(--p-ink-650);
+  --c-surface-badge: var(--p-ink-950);
+  --c-border:        var(--p-line);
+  --c-text:          var(--p-text-1);
+  --c-text-2:        var(--p-text-2);
+  --c-text-3:        var(--p-text-3);
+  --c-text-quiet:    var(--p-text-4);
+  --c-muted:         var(--p-muted);
+  --c-dim:           var(--p-dim);
+  --c-placeholder:   var(--p-faint);
+  --c-dot:           var(--p-dot);
+  --c-thumb-fg:      var(--p-thumb-fg);
+  --c-accent:        var(--p-sky-400);
+  --c-accent-text:   var(--p-sky-300);
+  --c-accent-soft:   rgba(137, 206, 255, 0.12);
+  --c-chip-bg:       rgba(42, 171, 238, 0.14);
+  --c-chip-border:   rgba(137, 206, 255, 0.30);
+  --c-primary:       var(--p-tg-blue);
+  --c-on-primary:    var(--p-on-tg);
+  --c-primary-ring:  rgba(42, 171, 238, 0.55);
+  --c-good:          var(--p-green);
+  --c-warn:          var(--p-amber);
+  --c-bad:           var(--p-red);
+  --c-icon-btn-bg:   rgba(41, 54, 67, 0.8);
+  --c-scrim:         rgba(3, 10, 16, 0.62);
+
+  /* Trạng thái căn: nền / viền / chữ (từ các huy hiệu trong mẫu) */
+  --st-open-bg:     #17302c;  --st-open-bd:     rgba(123, 220, 117, 0.5);  --st-open-fg:     var(--p-green);
+  --st-soon-bg:     #182c3d;  --st-soon-bd:     rgba(137, 206, 255, 0.5);  --st-soon-fg:     var(--p-sky-400);
+  --st-rented-bg:   #182532;  --st-rented-bd:   rgba(148, 163, 184, 0.5);  --st-rented-fg:   var(--p-text-4);
+  --st-attn-bg:     #292c26;  --st-attn-bd:     rgba(250, 188, 76, 0.5);   --st-attn-fg:     var(--p-amber);
+  --c-warn-soft:    rgba(250, 188, 76, 0.14);
+  --c-warn-line:    rgba(250, 188, 76, 0.34);
+  --c-warn-card:    rgba(250, 188, 76, 0.40);
+
+  /* ---- Chữ ---- */
+  --f-body: 'Be Vietnam Pro', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --f-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Consolas, monospace;
+  --f-num:  'Space Grotesk', 'Be Vietnam Pro', system-ui, sans-serif;
+
+  --t-title:   600 16px/24px var(--f-body);   /* tiêu đề màn hình */
+  --t-card:    600 14px/22px var(--f-body);   /* tên căn */
+  --t-price:   700 18px/22px var(--f-num);
+  --t-body:    400 13px/18px var(--f-body);
+  --t-input:   400 14px/20px var(--f-body);
+  --t-meta:    500 12px/16px var(--f-body);
+  --t-quiet:   400 12px/16px var(--f-body);
+  --t-chip:    500 13px/18px var(--f-body);
+  --t-badge:   600 10px/14px var(--f-body);
+  --t-score:   600 11px/14px var(--f-mono);
+  --t-count:   600 12px/16px var(--f-body);
+  --t-tab:     500 11px/14px var(--f-body);
+  --t-tab-on:  600 11px/14px var(--f-body);
+  --t-mono-sm: 600 11px/16px var(--f-mono);
+
+  /* ---- Khoảng cách / kích thước ---- */
+  --s-1: 4px;  --s-2: 8px;  --s-3: 12px;  --s-4: 16px;  --s-5: 24px;
+  --gutter: 16px;
+  --app-max: 420px;           /* bề rộng tối đa của cột nội dung (mẫu: 390px) */
+  --header-h: 52px;
+  --nav-h: 64px;
+  --tap: 44px;                /* vùng chạm tối thiểu */
+  --field-h: 46px;
+  --chip-h: 36px;
+  --thumb-w: 128px;
+  --thumb-min-h: 108px;
+  --fab: 56px;
+
+  /* ---- Bo góc ---- */
+  --r-card: 14px;
+  --r-field: 12px;
+  --r-thumb: 10px;
+  --r-tag: 6px;
+  --r-pill: 9999px;
+
+  /* ---- Đổ bóng: mẫu hầu như phẳng, chỉ nút nổi và hộp thoại có bóng ---- */
+  --sh-fab:   0 6px 18px rgba(3, 10, 16, 0.45);
+  --sh-sheet: 0 -10px 30px rgba(3, 10, 16, 0.5);
+
+  --z-sticky: 50; --z-fab: 99; --z-nav: 100; --z-sheet: 200; --z-toast: 300;
+
+  /* ---- Vùng an toàn ----
+   * Telegram (Bot API 8.0+) tự đặt --tg-safe-area-inset-* (tai thỏ/thanh hệ thống)
+   * và --tg-content-safe-area-inset-* (vùng nút của Telegram khi toàn màn hình).
+   * Trình duyệt thường dùng env(safe-area-inset-*). Lấy giá trị lớn hơn trong hai nguồn
+   * rồi cộng vùng nội dung của Telegram.
+   */
+  --safe-top:    calc(max(env(safe-area-inset-top, 0px),    var(--tg-safe-area-inset-top, 0px))    + var(--tg-content-safe-area-inset-top, 0px));
+  --safe-bottom: calc(max(env(safe-area-inset-bottom, 0px), var(--tg-safe-area-inset-bottom, 0px)) + var(--tg-content-safe-area-inset-bottom, 0px));
+  --safe-left:   max(env(safe-area-inset-left, 0px),  var(--tg-safe-area-inset-left, 0px));
+  --safe-right:  max(env(safe-area-inset-right, 0px), var(--tg-safe-area-inset-right, 0px));
+}
+
+/* ---- Lớp ánh xạ theme Telegram ----
+ * Mặc định giữ nền tối của thương hiệu (đúng mẫu). Bật [data-theme="telegram"] trên <html>
+ * để lấy màu từ theme người dùng đang dùng trong Telegram (--tg-theme-*). Mỗi biến có giá trị
+ * dự phòng là màu của mẫu, nên ngoài Telegram trang vẫn nguyên dạng.
+ */
+:root[data-theme="telegram"] {
+  --c-bg:            var(--tg-theme-bg-color, var(--p-ink-900));
+  --c-surface:       var(--tg-theme-secondary-bg-color, var(--p-ink-700));
+  --c-surface-quiet: var(--tg-theme-section-bg-color, var(--p-ink-800));
+  --c-text:          var(--tg-theme-text-color, var(--p-text-1));
+  --c-muted:         var(--tg-theme-hint-color, var(--p-muted));
+  --c-dim:           var(--tg-theme-subtitle-text-color, var(--p-dim));
+  --c-accent:        var(--tg-theme-link-color, var(--p-sky-400));
+  --c-primary:       var(--tg-theme-button-color, var(--p-tg-blue));
+  --c-on-primary:    var(--tg-theme-button-text-color, var(--p-on-tg));
+  --c-bad:           var(--tg-theme-destructive-text-color, var(--p-red));
+  --c-border:        var(--tg-theme-section-separator-color, var(--p-line));
+}
+
+:root { --motion: 160ms; }
+@media (prefers-reduced-motion: reduce) {
+  :root { --motion: 0s; }
+}

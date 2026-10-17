@@ -1,114 +1,136 @@
-// V2 Tabs: Clients, Viewings, Deals
-function switchTab(tab, el) {
-  const views = {
-    listings: document.querySelector('main > div.flex.flex-col.w-full.pb-6.relative:not(#view-clients):not(#view-viewings):not(#view-deals)'),
-    clients: document.getElementById('view-clients'),
-    viewings: document.getElementById('view-viewings'),
-    deals: document.getElementById('view-deals')
+/* TrueNest v2 - khung điều hướng + các tab Khách / Lịch xem / Hoa hồng.
+ * Dữ liệu lấy qua api.js (TrueNestAPI); tệp này chỉ dựng giao diện. Màn "Căn hộ" nằm ở listings.js.
+ * Trường dùng (webapp/api_clients_deals.py):
+ *   clients  -> id, name, phone, status, status_vi, urgency, req_summary, notes
+ *   viewings -> id, client_name, listing_ids, scheduled_at (epoch giây), status, notes
+ *   deals    -> month, month_total, closed[], negotiating[] (client_name, listing_id, commission_vnd, paid, closed_at, notes)
+ */
+(function () {
+  'use strict';
+  var UI = window.TrueNestUI, API = window.TrueNestAPI, I = UI.ICON, esc = UI.esc;
+  var doc = document;
+
+  var META = {
+    listings: { title: 'Quản lý căn', icon: I.building(18) },
+    clients: { title: 'Khách hàng', icon: I.users(18) },
+    viewings: { title: 'Lịch xem', icon: I.calendar(18) },
+    deals: { title: 'Hoa hồng', icon: I.wallet(18) }
   };
-  document.querySelectorAll('nav a').forEach(a => {
-    a.classList.remove('text-primary', 'font-semibold');
-    a.classList.add('text-on-surface-variant');
+  var reg = {}, counts = {}, current = '';
+
+  var titleEl = doc.getElementById('topbar-title'), iconEl = doc.getElementById('topbar-icon'), pillEl = doc.getElementById('topbar-count');
+  var fab = doc.getElementById('fab-add');
+
+  function paintCount() {
+    var t = counts[current] || '';
+    pillEl.textContent = t; pillEl.hidden = !t;
+  }
+
+  var App = window.TrueNestApp = {
+    register: function (name, v) { reg[name] = { load: v.load, loaded: false }; },
+    setCount: function (name, text) { counts[name] = text; if (name === current) paintCount(); },
+    invalidate: function (name) {
+      var v = reg[name]; if (!v) return;
+      v.loaded = false;
+      if (name === current && v.load) { v.loaded = true; v.load(); }
+    },
+    show: function (name) {
+      if (!reg[name]) return;
+      current = name;
+      doc.querySelectorAll('[data-view]').forEach(function (el) { el.hidden = el.getAttribute('data-view') !== name; });
+      doc.querySelectorAll('.nav button').forEach(function (b) {
+        if (b.getAttribute('data-nav') === name) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+      });
+      titleEl.textContent = META[name].title; iconEl.innerHTML = META[name].icon;
+      fab.hidden = name !== 'listings';
+      paintCount();
+      var v = reg[name];
+      if (!v.loaded) { v.loaded = true; v.load(); }
+      window.scrollTo(0, 0);
+    },
+    start: function (name) { App.show(name); }
+  };
+
+  doc.querySelector('.nav').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-nav]'); if (!b) return;
+    UI.haptic(); App.show(b.getAttribute('data-nav'));
   });
-  el.classList.remove('text-on-surface-variant');
-  el.classList.add('text-primary', 'font-semibold');
-  Object.entries(views).forEach(([k, v]) => {
-    if (!v) return;
-    if (k === tab) { v.classList.remove('hidden'); v.classList.add('flex'); }
-    else { v.classList.add('hidden'); v.classList.remove('flex'); }
-  });
-  if (tab === 'clients') loadClients();
-  if (tab === 'viewings') loadViewings();
-  if (tab === 'deals') loadDeals();
-  if (window.Telegram?.WebApp) window.Telegram.WebApp.HapticFeedback?.impactOccurred('light');
-}
-function escHtml(s) {
-  return String(s || '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-}
-function buildApiUrl(path) {
-  const tg = window.Telegram?.WebApp;
-  let url = path + '?';
-  if (tg?.initData) url += 'init_data=' + encodeURIComponent(tg.initData);
-  const uid = tg?.initDataUnsafe?.user?.id;
-  if (uid) url += '&tg_user_id=' + uid;
-  return url;
-}
-let clientsLoaded = false;
-async function loadClients() {
-  if (clientsLoaded) return;
-  const container = document.getElementById('clients-list');
-  try {
-    const res = await fetch(buildApiUrl('/api/clients'));
-    if (!res.ok) throw new Error('API ' + res.status);
-    const data = await res.json();
-    const clients = data.clients || [];
-    clientsLoaded = true;
-    if (!clients.length) {
-      container.innerHTML = '<p class="text-center text-outline py-8">Chưa có khách hàng nào.</p>';
-      return;
-    }
-    container.innerHTML = clients.map(cl => `
-      <div class="w-full bg-surface-container rounded-xl p-4 border border-surface-variant/40">
-        <div class="flex items-start justify-between mb-1">
-          <h3 class="font-semibold text-[15px]">${escHtml(cl.name)}</h3>
-          <span class="px-2 py-0.5 rounded-full text-[11px]">${escHtml(cl.status_vi || cl.status)}</span>
-        </div>
-        <p class="text-[13px] text-on-surface-variant mb-1">${escHtml(cl.req_summary)}</p>
-        ${cl.phone ? `<p class="text-[13px] text-primary">📞 ${escHtml(cl.phone)}</p>` : ''}
-      </div>`).join('');
-  } catch (e) {
-    container.innerHTML = '<p class="text-center text-error py-8">Không tải được.</p>';
+
+  /* ---------- tiện ích dùng chung cho 3 tab ---------- */
+  function box(name) { return doc.getElementById(name + '-list'); }
+  function loadingState(el) { el.innerHTML = '<div class="state" role="status">Đang tải…</div>'; }
+  function failState(el, e, retry) {
+    var msg = e && e.status === 401
+      ? (API.authMode() === 'none' ? 'Mở ứng dụng từ Telegram, hoặc thêm ?demo=1&broker_id=… vào địa chỉ khi thử trên máy.' : 'Phiên đăng nhập không hợp lệ. Hãy mở lại từ Telegram.')
+      : 'Không tải được' + (e && e.message ? ' (' + esc(e.message) + ')' : '') + '.';
+    el.innerHTML = '<div class="state state--error" role="alert">' + msg + '<br><button type="button">Thử lại</button></div>';
+    el.querySelector('button').addEventListener('click', retry);
   }
-}
-let viewingsLoaded = false;
-async function loadViewings() {
-  if (viewingsLoaded) return;
-  const container = document.getElementById('viewings-list');
-  try {
-    const res = await fetch(buildApiUrl('/api/viewings'));
-    if (!res.ok) throw new Error('API ' + res.status);
-    const data = await res.json();
-    const items = data.viewings || [];
-    viewingsLoaded = true;
-    if (!items.length) {
-      container.innerHTML = '<p class="text-center text-outline py-8">Chưa có lịch xem nào.</p>';
-      return;
-    }
-    container.innerHTML = items.map(v => `
-      <div class="w-full bg-surface-container rounded-xl p-4 border border-surface-variant/40">
-        <h3 class="font-semibold text-[15px]">${escHtml(v.client_name || 'Khách')}</h3>
-        <p class="text-[13px] text-on-surface-variant">${(v.listing_ids || []).length} căn · ${escHtml(v.scheduled_at || '')}</p>
-      </div>`).join('');
-  } catch (e) {
-    container.innerHTML = '<p class="text-center text-error py-8">Không tải được.</p>';
+  function empty(el, text) { el.innerHTML = '<div class="state">' + esc(text) + '</div>'; }
+
+  /* ---------- Khách ---------- */
+  var URGENCY = { urgent: ['Gấp', 'pill--bad'], low: ['Thấp', ''] };
+  function loadClients() {
+    var el = box('clients'); loadingState(el);
+    API.clients().then(function (data) {
+      var list = data.clients || [];
+      App.setCount('clients', list.length + ' khách');
+      if (!list.length) return empty(el, 'Chưa có khách hàng nào.');
+      el.innerHTML = list.map(function (c) {
+        var u = URGENCY[c.urgency];
+        var h = '<article class="card row-card"><div class="row-card__top"><h2 class="row-card__name">' + esc(c.name) + '</h2><span class="pill">' + esc(c.status_vi || c.status) + '</span></div>';
+        if (c.req_summary && c.req_summary !== '—') h += '<p class="row-card__sub">' + esc(c.req_summary) + '</p>';
+        if (c.notes) h += '<p class="row-card__sub">' + esc(c.notes) + '</p>';
+        h += '<div class="row-card__meta">';
+        h += c.phone ? '<a class="row-card__call" href="tel:' + esc(String(c.phone).replace(/[^\d+]/g, '')) + '">' + I.phone(16) + esc(c.phone) + '</a>' : '<span></span>';
+        if (u) h += '<span class="pill ' + u[1] + '">' + u[0] + '</span>';
+        return h + '</div></article>';
+      }).join('');
+    }, function (e) { failState(el, e, loadClients); });
   }
-}
-let dealsLoaded = false;
-async function loadDeals() {
-  if (dealsLoaded) return;
-  const container = document.getElementById('deals-list');
-  const summaryEl = document.getElementById('deals-summary');
-  try {
-    const res = await fetch(buildApiUrl('/api/deals'));
-    if (!res.ok) throw new Error('API ' + res.status);
-    const data = await res.json();
-    dealsLoaded = true;
-    const total = (data.summary || {}).total_commission || 0;
-    summaryEl.innerHTML = `<div class="w-full bg-primary-container/15 border border-primary-container/30 rounded-xl p-4"><p class="text-[12px] text-on-surface-variant">Tổng hoa hồng tháng này</p><p class="text-2xl font-bold text-primary-container">${(total/1000000).toFixed(1)}tr</p></div>`;
-    const deals = data.deals || data.closed || [];
-    if (!deals.length) {
-      container.innerHTML = '<p class="text-center text-outline py-8">Chưa có deal nào.</p>';
-      return;
-    }
-    container.innerHTML = deals.map(d => `
-      <div class="w-full bg-surface-container rounded-xl p-4 border border-surface-variant/40">
-        <div class="flex items-start justify-between">
-          <h3 class="font-semibold text-[15px]">${escHtml(d.listing_id || d.id || '')}</h3>
-          <span class="text-[13px] font-semibold text-secondary">${((d.commission_vnd||0)/1000000).toFixed(1)}tr</span>
-        </div>
-        <p class="text-[12px] text-outline mt-1">${d.paid ? '✅ Đã thanh toán' : '⏳ Chưa thanh toán'}</p>
-      </div>`).join('');
-  } catch (e) {
-    container.innerHTML = '<p class="text-center text-error py-8">Không tải được.</p>';
+
+  /* ---------- Lịch xem ---------- */
+  var VIEW_ST = { scheduled: ['Đã hẹn', ''], done: ['Đã xem', 'pill--good'], cancelled: ['Đã huỷ', 'pill--bad'] };
+  function loadViewings() {
+    var el = box('viewings'); loadingState(el);
+    API.viewings().then(function (data) {
+      var list = data.viewings || [];
+      App.setCount('viewings', list.length + ' lịch');
+      if (!list.length) return empty(el, 'Chưa có lịch xem sắp tới.');
+      el.innerHTML = list.map(function (v) {
+        var st = VIEW_ST[v.status] || [v.status || '', ''];
+        var n = (v.listing_ids || []).length;
+        var h = '<article class="card row-card"><div class="row-card__top"><h2 class="row-card__name">' + esc(v.client_name || 'Khách') + '</h2><span class="pill ' + st[1] + '">' + esc(st[0]) + '</span></div>';
+        h += '<p class="row-card__sub">' + I.calendar(13, ' style="vertical-align:-2px;margin-right:4px"') + esc(UI.fmtDateTime(v.scheduled_at)) + (n ? ' · ' + n + ' căn' : '') + '</p>';
+        if (v.notes) h += '<p class="row-card__sub">' + esc(v.notes) + '</p>';
+        return h + '</article>';
+      }).join('');
+    }, function (e) { failState(el, e, loadViewings); });
   }
-}
+
+  /* ---------- Hoa hồng ---------- */
+  function dealCard(d) {
+    var sub = [UI.fmtDate(d.closed_at), d.notes].filter(Boolean).join(' · ');
+    return '<article class="card row-card"><div class="row-card__top"><h2 class="row-card__name">' + esc(d.client_name || 'Giao dịch') + '</h2>' +
+      '<span class="pill ' + (d.paid ? 'pill--good' : 'pill--warn') + '">' + UI.fmtMoney(d.commission_vnd) + '</span></div>' +
+      (sub ? '<p class="row-card__sub">' + esc(sub) + '</p>' : '') + '</article>';
+  }
+  function loadDeals() {
+    var el = box('deals'); loadingState(el);
+    API.deals().then(function (data) {
+      var closed = data.closed || [], pending = data.negotiating || [];
+      var m = String(data.month || '').split('-');
+      var label = m.length === 2 ? 'Hoa hồng đã nhận tháng ' + m[1] + '/' + m[0] : 'Hoa hồng đã nhận tháng này';
+      App.setCount('deals', UI.fmtMoney(data.month_total));
+      var h = '<div class="card sum-card"><p class="sum-card__label">' + esc(label) + '</p><p class="sum-card__value">' + UI.fmtMoney(data.month_total) + '</p></div>';
+      if (!closed.length && !pending.length) h += '<div class="state">Chưa có giao dịch nào trong tháng.</div>';
+      if (closed.length) h += '<h3 class="section-label">Đã thanh toán (' + closed.length + ')</h3>' + closed.map(dealCard).join('');
+      if (pending.length) h += '<h3 class="section-label">Chưa thanh toán (' + pending.length + ')</h3>' + pending.map(dealCard).join('');
+      el.innerHTML = h;
+    }, function (e) { failState(el, e, loadDeals); });
+  }
+
+  App.register('clients', { load: loadClients });
+  App.register('viewings', { load: loadViewings });
+  App.register('deals', { load: loadDeals });
+})();
