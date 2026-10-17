@@ -80,7 +80,12 @@ async def _handle_refresh_discount(update, ctx, rd, text):
         await update.message.reply_text(
             "Em chưa hiểu giá, anh nhập lại giúp em nhé? (vd: 11tr)")
         return
-    db.update_listing_field(rd["listing_id"], "price_vnd", val)
+    try:
+        db.update_listing_field(rd["listing_id"], "price_vnd", val)
+    except db.FieldError as exc:
+        from feat_intake import bot_field_error_message
+        await update.message.reply_text(bot_field_error_message(exc, val))
+        return
     ctx.user_data.pop("refresh_discount", None)
     await update.message.reply_text(
         f"Em cập nhật giá mới {fmt_price(val)}/tháng rồi nhé ✓",

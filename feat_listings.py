@@ -937,7 +937,16 @@ async def _finish_edit(update_or_q, ctx, listing_id, field, value, page, filt,
     When the listing is being pre-save confirmed (ctx.user_data["confirming"]),
     re-render the full confirmation summary instead of the detail view.
     """
-    db.update_listing_field(listing_id, field, value, changed_by="broker")
+    try:
+        db.update_listing_field(listing_id, field, value, changed_by="broker")
+    except db.FieldError as exc:
+        from feat_intake import bot_field_error_message
+        message = bot_field_error_message(exc, value)
+        if via_callback:
+            await update_or_q.edit_message_text(message)
+        else:
+            await update_or_q.message.reply_text(message)
+        return
     ctx.user_data.pop("editing", None)
     l = db.get_listing(listing_id)
     if not l:

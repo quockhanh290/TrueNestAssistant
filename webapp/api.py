@@ -100,8 +100,18 @@ def listing_detail(row):
         "phone": p.get("primary_phone"),
         "deposit_months": p.get("deposit_months"),
         "available_from": p.get("available_from"),
+        "min_lease_months": p.get("min_lease_months"),
+        "electricity_price": p.get("electricity_price"),
+        "water_price": p.get("water_price"),
+        "ward": p.get("ward"),
         "property_type": p.get("property_type"),
         "floor_number": p.get("floor_number"),
+        "unit_number": p.get("unit_number"),
+        "management_fee": p.get("management_fee"),
+        "balcony_direction": p.get("balcony_direction"),
+        "view": p.get("view"),
+        "alley_info": p.get("alley_info"),
+        "house_floors": p.get("house_floors"),
         "post_langs": db.get_saved_post_langs(row["id"]),
         "missing_fields": row.get("missing_fields") or [],
         "quality_score": score,
@@ -206,9 +216,13 @@ def get_listing(broker_id, listing_id):
 
 # Fields the webapp is allowed to edit, mapped to update_listing_field keys.
 EDITABLE_FIELDS = {
-    "price_vnd", "bedrooms", "bathrooms", "area_m2", "district",
-    "street", "building_name", "furnished", "pet_friendly",
-    "deposit", "description",
+    "price_vnd", "bedrooms", "bathrooms", "area_m2", "district", "ward",
+    "street", "building_name", "unit_number", "floor_number",
+    "management_fee", "balcony_direction", "view", "alley_info",
+    "house_floors", "property_type", "furnishing", "furnished",
+    "pet_friendly", "primary_phone", "deposit_months", "deposit",
+    "available_from", "min_lease_months", "electricity_price",
+    "water_price", "description",
 }
 
 
@@ -223,8 +237,7 @@ def update_listing(broker_id, listing_id, fields):
     from db.listings import _check_parsed_value
     checked = {}
     for name, value in (fields or {}).items():
-        if name in EDITABLE_FIELDS and name not in (
-                "description", "district", "street", "building_name"):
+        if name in EDITABLE_FIELDS and name != "description":
             checked[name] = _check_parsed_value(name, value)
     updated = []
     for name, value in (fields or {}).items():
@@ -234,7 +247,7 @@ def update_listing(broker_id, listing_id, fields):
         if name == "description":
             ok = db.update_listing_field(listing_id, "description", value,
                                          changed_by="webapp")
-        elif name in ("district", "street", "building_name"):
+        elif name in ("district", "ward", "street", "building_name"):
             ok = db.update_listing_field(
                 listing_id, "location", {name: value}, changed_by="webapp")
         else:

@@ -10,6 +10,8 @@ SQLite triggers (core._migrate_type_triggers) are the second wall: they
 catch writes that bypass this module (scripts, DB Browser).
 """
 import math
+import datetime as _dt
+import re
 
 # epoch seconds between 2000-01-01 and 2100-01-01: a millisecond timestamp
 # or a bare small number is a bug, not a time
@@ -116,4 +118,128 @@ def to_id_list(value, field):
 def choice(value, field, allowed):
     if value not in allowed:
         raise FieldError(field, "not_allowed")
+    return value
+
+
+def listing_value(field, value, *, property_types, furnishing_values,
+                  balcony_directions):
+    """Validate and normalize one canonical listing value.
+
+    ``None``/empty string clears an optional field.  All failures use the
+    reason codes approved by listing-quality v5.
+    """
+    if value is None or value == "":
+        return None
+
+    def number(reason="out_of_range", money=False):
+        try:
+            return to_number(value, field, money=money)
+        except FieldError:
+            raise FieldError(field, reason) from None
+
+    if field == "price_vnd":
+        amount = number(money=True)
+        if 0 <= amount < 1_000:
+            raise FieldError(field, "price_maybe_millions")
+        if not 1_000_000 <= amount <= 200_000_000:
+            raise FieldError(field, "out_of_range")
+        return amount
+
+    if field in ("bedrooms", "bathrooms"):
+        amount = number("not_an_integer")
+        if not amount.is_integer():
+            raise FieldError(field, "not_an_integer")
+        if not 0 <= amount <= 10:
+            raise FieldError(field, "out_of_range")
+        return amount
+
+    if field == "area_m2":
+        amount = number()
+        if not 10 <= amount <= 2_000:
+            raise FieldError(field, "out_of_range")
+        return amount
+
+    integer_ranges = {
+        "floor_number": (0, 80),
+        "house_floors": (1, 10),
+        "min_lease_months": (1, 60),
+    }
+    if field in integer_ranges:
+        amount = number()
+        low, high = integer_ranges[field]
+        if not amount.is_integer() or not low <= amount <= high:
+            raise FieldError(field, "out_of_range")
+        return amount
+
+    if field == "deposit_months":
+        raw = value
+        if isinstance(raw, str):
+            match = re.fullmatch(
+                r"\s*(\d+(?:[.,]\d+)?)\s*(?:tháng|thang|th)\s*", raw,
+                flags=re.IGNORECASE)
+            if match:
+                raw = match.group(1)
+        try:
+            amount = to_number(raw, field)
+        except FieldError:
+            raise FieldError(field, "out_of_range") from None
+        if not 0 <= amount <= 12:
+            raise FieldError(field, "out_of_range")
+        return amount
+
+    if field == "management_fee":
+        amount = number(money=True)
+        if not 0 <= amount <= 20_000_000:
+            raise FieldError(field, "out_of_range")
+        return amount
+
+    if field == "primary_phone":
+        from normalize import normalize_phone
+        phones = normalize_phone(str(value))
+        if not phones:
+            raise FieldError(field, "bad_phone")
+        return phones[0]
+
+    allowed_values = {
+        "property_type": property_types,
+        "furnishing": furnishing_values,
+        "balcony_direction": balcony_directions,
+    }
+    if field in allowed_values:
+        if not isinstance(value, str):
+            raise FieldError(field, "not_allowed")
+        normalized = value.strip().lower()
+        if normalized not in allowed_values[field]:
+            raise FieldError(field, "not_allowed")
+        return normalized
+
+    if field == "available_from":
+        if not isinstance(value, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+            raise FieldError(field, "bad_date")
+        try:
+            day = _dt.date.fromisoformat(value)
+        except ValueError:
+            raise FieldError(field, "bad_date") from None
+        today = _dt.date.today()
+        try:
+            earliest = today.replace(year=today.year - 1)
+        except ValueError:  # 29 February -> 28 February in prior year
+            earliest = today.replace(year=today.year - 1, day=28)
+        if day < earliest:
+            raise FieldError(field, "bad_date")
+        return value
+
+    if field in ("electricity_price", "water_price"):
+        if isinstance(value, str) and value.strip().lower() == "giá nhà nước":
+            return "giá nhà nước"
+        try:
+            amount = to_number(value, field)
+        except FieldError as exc:
+            reason = "out_of_range" if exc.reason == "out_of_range" else "not_allowed"
+            raise FieldError(field, reason) from None
+        maximum = 10_000 if field == "electricity_price" else 200_000
+        if not 0 <= amount <= maximum:
+            raise FieldError(field, "out_of_range")
+        return amount
+
     return value

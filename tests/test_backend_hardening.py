@@ -395,7 +395,7 @@ class TestEntryPointsLogUnderPythonw(unittest.TestCase):
             db.init_db()
             db.get_or_create_broker(A, "a", "A")
             lid = db.create_listing(A, status="submitted",
-                                    parsed={"price_vnd": 1})
+                                    parsed={"price_vnd": 12000000})
         c = sqlite3.connect(dbp)
         # the 17/10 case: a script wrote text into a time column, bypassing
         # the db layer and (here) the trigger

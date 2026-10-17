@@ -34,6 +34,59 @@ from utils import (
 
 log = logging.getLogger("linh")
 
+_BOT_FIELD_LABELS = {
+    "price_vnd": "Giá thuê", "bedrooms": "Số phòng ngủ",
+    "bathrooms": "Số phòng tắm", "area_m2": "Diện tích",
+    "floor_number": "Số tầng", "house_floors": "Số tầng của nhà",
+    "min_lease_months": "Thời hạn thuê tối thiểu",
+    "deposit_months": "Tiền cọc", "management_fee": "Phí quản lý",
+    "primary_phone": "Số điện thoại", "property_type": "Loại hình",
+    "furnishing": "Nội thất", "balcony_direction": "Hướng ban công",
+    "available_from": "Ngày trống", "electricity_price": "Giá điện",
+    "water_price": "Giá nước", "district": "Quận/khu vực",
+    "ward": "Phường/xã", "street": "Đường", "building_name": "Tên tòa nhà",
+    "location": "Địa chỉ", "highlights": "Điểm nổi bật",
+}
+
+
+def bot_field_error_message(error, value=None):
+    """Vietnamese retry prompt for a DB listing ``FieldError``."""
+    label = _BOT_FIELD_LABELS.get(error.field, error.field)
+    if error.reason == "price_maybe_millions":
+        try:
+            amount = f"{float(value):g}"
+        except (TypeError, ValueError):
+            amount = str(value or "số đó")
+        return (f"{label} chưa rõ: ý anh là {amount} triệu/tháng phải không? "
+                "Anh nhập lại giúp em, VD: 8tr nhé.")
+    return f"{label} chưa hợp lệ. Anh kiểm tra và nhập lại giúp em nhé."
+
+
+def _dropped_field_messages(dropped, values):
+    messages = []
+    from db.listings import _check_parsed_value
+    for field in dropped:
+        value = (values or {}).get(field)
+        try:
+            _check_parsed_value(field, value)
+        except db.FieldError as exc:
+            messages.append(bot_field_error_message(exc, value))
+        else:
+            messages.append(
+                f"{_BOT_FIELD_LABELS.get(field, field)} chưa hợp lệ. "
+                "Anh nhập lại giúp em nhé.")
+    return messages
+
+
+def _try_bot_field_update(listing_id, field, value):
+    """Strict single-field write converted to a broker-facing retry prompt."""
+    try:
+        db.update_listing_field(listing_id, field, value,
+                                changed_by="broker")
+    except db.FieldError as exc:
+        return bot_field_error_message(exc, value)
+    return None
+
 async def on_new_listing_prompt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """User tapped 📝 Gửi tin mới — ask whether they have a listing ready
     or want guided step-by-step help."""
@@ -249,10 +302,12 @@ async def _process_buffer(uid, buf, ctx, field_overrides=None,
 
     # create as DRAFT — the broker must confirm the full summary first
     chash = content_hash_for_listing(buf["texts"], photos)
-    listing_id = db.create_listing(
+    source_fields = dict(result["fields"])
+    listing_id, dropped = db.create_listing(
         uid, raw_text=raw, photo_file_ids=photos,
         parsed=result["fields"], missing_fields=result["missing"],
         status="draft", content_hash=chash,
+        lenient=True,
     )
     pn = get_pronoun(uid)
     phone_note = f" (SĐT của {pn})" if phone_autofilled else ""
@@ -260,6 +315,8 @@ async def _process_buffer(uid, buf, ctx, field_overrides=None,
     confirming_data = {"listing_id": listing_id,
                        "phone_note": phone_note,
                        "forward_source": fwd_source,
+                       "field_errors": _dropped_field_messages(
+                           dropped, source_fields),
                        "awaiting_highlights": True,
                        "reply_to_message_id": reply_to_message_id}
     if ctx.user_data.get("confirming"):
@@ -270,15 +327,20 @@ async def _process_buffer(uid, buf, ctx, field_overrides=None,
         send_kw = {}
         if reply_to_message_id:
             send_kw["reply_to_message_id"] = reply_to_message_id
+        retry = "\n".join(confirming_data["field_errors"])
+        prefix = (retry + "\n\n" if retry else "")
         await ctx.bot.send_message(
             chat_id,
-            "Em đã lưu nháp tin này rồi 📝"
+            prefix + "Em đã lưu nháp tin này rồi 📝"
             " Anh xác nhận tin trước xong, em hiện tin này tiếp nhé!",
             **send_kw)
         return
     ctx.user_data["confirming"] = confirming_data
     l = db.get_listing(listing_id)
     text, kb = _confirm_summary(l, pn, phone_note, fwd_source, hl_stage=True)
+    if dropped:
+        retry = "\n".join(_dropped_field_messages(dropped, source_fields))
+        text = retry + "\n\nEm vẫn lưu các thông tin hợp lệ vào nháp rồi.\n\n" + text
     send_kw = {"reply_markup": kb}
     if reply_to_message_id:
         send_kw["reply_to_message_id"] = reply_to_message_id
@@ -305,6 +367,9 @@ async def _promote_next_confirming(ctx, chat_id, uid):
             l, pn, nxt.get("phone_note", ""),
             nxt.get("forward_source", ""),
             hl_stage=nxt.get("awaiting_highlights", False))
+        if nxt.get("field_errors"):
+            text = ("\n".join(nxt["field_errors"]) +
+                    "\n\nEm vẫn lưu các thông tin hợp lệ vào nháp rồi.\n\n" + text)
         await ctx.bot.send_message(chat_id, text, reply_markup=kb)
         return True
     ctx.user_data.pop("confirming_queue", None)
@@ -520,6 +585,11 @@ async def _finalize_after_confirm(update_or_q, ctx, uid, listing_id, chat_id,
         await _say("Tin này không còn nữa.", MENU_KB)
         return
     p = l["parsed"]
+    # Keep non-critical parser fields that the lenient DB write rejected.
+    # They were already named and re-asked in the confirmation message;
+    # confirming the draft must not silently erase that audit/reminder state.
+    retained = [m for m in l.get("missing_fields", [])
+                if m not in config.CRITICAL_FIELDS]
     missing = []
     if not p.get("price_vnd"):
         missing.append("price_vnd")
@@ -529,13 +599,15 @@ async def _finalize_after_confirm(update_or_q, ctx, uid, listing_id, chat_id,
         missing.append("photos")
     missing = [m for m in missing
                if m in config.CRITICAL_FIELDS][:config.MAX_MISSING_QUESTIONS]
+    stored_missing = list(dict.fromkeys(retained + missing))
     if missing:
         db.set_listing_status(listing_id, "pending_info", changed_by="bot")
-        db.update_listing(listing_id, missing_fields=missing)
+        db.update_listing(listing_id, missing_fields=stored_missing)
         await _say(f"Ok {pn}, em lưu nháp rồi nhé. Còn thiếu chút thông tin:")
         await _ask_missing(chat_id, uid, listing_id, missing[0], ctx,
                            remaining=missing[1:])
     else:
+        db.update_listing(listing_id, missing_fields=stored_missing)
         await _try_final_submit(update_or_q, ctx, uid, listing_id, chat_id,
                                 pn, via_callback,
                                 reply_to_message_id=reply_to)
@@ -947,12 +1019,17 @@ async def _handle_hl_stage_text(update, ctx, confirming, l, pn, text):
               if k not in ("photo_count", "description", "highlights")
               and v is not None}
     if fields:
+        errors = []
         for k, v in fields.items():
-            db.update_listing_field(listing_id, k, v, changed_by="broker")
+            error = _try_bot_field_update(listing_id, k, v)
+            if error:
+                errors.append(error)
         old_raw = l.get("raw_text") or ""
         db.update_listing(listing_id, raw_text=(old_raw + "\n" + txt).strip())
         t, kb = await _reshow()
-        await update.message.reply_text("Em cập nhật rồi nhé ✓\n\n" + t,
+        prefix = (("\n".join(errors) + "\n\n") if errors else
+                  "Em cập nhật rồi nhé ✓\n\n")
+        await update.message.reply_text(prefix + t,
                                         reply_markup=kb)
         return
 
@@ -972,8 +1049,10 @@ async def _handle_hl_stage_text(update, ctx, confirming, l, pn, text):
             seen_lower.add(p.lower())
             added += 1
     if added:
-        db.update_listing_field(listing_id, "highlights", cur,
-                                changed_by="broker")
+        error = _try_bot_field_update(listing_id, "highlights", cur)
+        if error:
+            await update.message.reply_text(error)
+            return
     t, kb = await _reshow()
     await update.message.reply_text(
         f"Đã thêm {added} điểm nổi bật ✨\n\n" + t, reply_markup=kb)
@@ -1013,6 +1092,7 @@ async def _handle_confirm_correction(update, ctx, confirming, text):
             f"Em chưa hiểu chỗ này lắm, {pn} ghi rõ hơn giúp em nhé? "
             "(VD: giá 13tr, 2PN)")
         return
+    errors = []
     for k, v in fields.items():
         if k == "highlights":
             # merge with existing highlights instead of overwriting
@@ -1022,15 +1102,19 @@ async def _handle_confirm_correction(update, ctx, confirming, text):
                 if h.lower() not in seen:
                     cur.append(h)
                     seen.add(h.lower())
-            db.update_listing_field(listing_id, k, cur, changed_by="broker")
+            error = _try_bot_field_update(listing_id, k, cur)
         else:
-            db.update_listing_field(listing_id, k, v, changed_by="broker")
+            error = _try_bot_field_update(listing_id, k, v)
+        if error:
+            errors.append(error)
     old_raw = l.get("raw_text") or ""
     db.update_listing(listing_id, raw_text=(old_raw + "\n" + text).strip())
     l = db.get_listing(listing_id)
     t, kb = _confirm_summary(l, pn, confirming.get("phone_note", ""), confirming.get("forward_source", ""))
     await natural_delay(update)
-    await update.message.reply_text("Em cập nhật rồi nhé ✓\n\n" + t,
+    prefix = (("\n".join(errors) + "\n\n") if errors else
+              "Em cập nhật rồi nhé ✓\n\n")
+    await update.message.reply_text(prefix + t,
                                     reply_markup=kb)
 
 
@@ -1048,6 +1132,7 @@ async def _handle_confirm_photo(update, ctx, confirming, file_id, caption):
     if caption:
         raw = (raw + "\n" + caption).strip()
         res = listing_parser.parse_listing(caption)
+        errors = []
         for k, v in res["fields"].items():
             if k not in ("photo_count", "description") and v is not None:
                 if k == "highlights":
@@ -1057,11 +1142,13 @@ async def _handle_confirm_photo(update, ctx, confirming, file_id, caption):
                         if h.lower() not in seen:
                             cur.append(h)
                             seen.add(h.lower())
-                    db.update_listing_field(listing_id, k, cur,
-                                            changed_by="broker")
+                    error = _try_bot_field_update(listing_id, k, cur)
                 else:
-                    db.update_listing_field(listing_id, k, v,
-                                            changed_by="broker")
+                    error = _try_bot_field_update(listing_id, k, v)
+                if error:
+                    errors.append(error)
+    else:
+        errors = []
     db.update_listing(listing_id, photo_file_ids=photos, raw_text=raw)
     l = db.get_listing(listing_id)
     pn = get_pronoun(uid)
@@ -1070,8 +1157,9 @@ async def _handle_confirm_photo(update, ctx, confirming, file_id, caption):
                              hl_stage=confirming.get("awaiting_highlights",
                                                     False))
     await natural_delay(update)
+    prefix = "\n".join(errors) + "\n\n" if errors else ""
     await update.message.reply_text(
-        f"Đã thêm ảnh ✓ (tổng {len(photos)} ảnh)\n\n" + t,
+        prefix + f"Đã thêm ảnh ✓ (tổng {len(photos)} ảnh)\n\n" + t,
         reply_markup=kb)
 
 
@@ -1176,7 +1264,10 @@ async def _handle_photo_answer(update, ctx, awaiting, file_id, caption):
         still.append("photos")
     still = [s for s in still if s in remaining][:config.MAX_MISSING_QUESTIONS]
 
-    db.update_listing(listing_id, missing_fields=still)
+    retained = [m for m in listing.get("missing_fields", [])
+                if m not in config.CRITICAL_FIELDS]
+    db.update_listing(
+        listing_id, missing_fields=list(dict.fromkeys(retained + still)))
     await natural_delay(update)
     if still:
         await _ask_missing(chat_id, uid, listing_id, still[0], ctx,
@@ -1394,12 +1485,12 @@ async def _handle_answer(update, ctx, awaiting, text):
         return
 
     parsed = listing["parsed"]
+    success_message = None
     if field == "price_vnd":
         price, _ = listing_parser.parse_price(text)
         if price:
             parsed["price_vnd"] = price
-            await natural_delay(update)
-            await update.message.reply_text(f"Ok, đã nhận giá {fmt_price(price)}/tháng ✓")
+            success_message = f"Ok, đã nhận giá {fmt_price(price)}/tháng ✓"
         else:
             await update.message.reply_text(
                 "Em chưa hiểu giá này lắm, anh ghi lại giúp em VD: 12tr ạ?")
@@ -1412,8 +1503,7 @@ async def _handle_answer(update, ctx, awaiting, text):
             db.update_broker(uid, phone=phone)
             if not (db.get_broker(uid) or {}).get("zalo"):
                 db.update_broker(uid, zalo=phone)
-            await natural_delay(update)
-            await update.message.reply_text("Đã lưu SĐT ✓")
+            success_message = "Đã lưu SĐT ✓"
         else:
             await update.message.reply_text(
                 "Số này em chưa nhận ra, anh ghi lại 10 số giúp em nhé?")
@@ -1430,7 +1520,18 @@ async def _handle_answer(update, ctx, awaiting, text):
         still.append("photos")
     still = [s for s in still if s in remaining][:config.MAX_MISSING_QUESTIONS]
 
-    db.update_listing(listing_id, parsed=parsed, missing_fields=still)
+    retained = [m for m in listing.get("missing_fields", [])
+                if m not in config.CRITICAL_FIELDS]
+    dropped = db.update_listing(
+        listing_id, parsed=parsed,
+        missing_fields=list(dict.fromkeys(retained + still)), lenient=True)
+    if dropped:
+        await update.message.reply_text(
+            "\n".join(_dropped_field_messages(dropped, parsed)))
+        return  # keep awaiting this answer
+    if success_message:
+        await natural_delay(update)
+        await update.message.reply_text(success_message)
     if still:
         await _ask_missing(chat_id, uid, listing_id, still[0], ctx,
                            remaining=still[1:])
@@ -1844,6 +1945,31 @@ async def guided_set(update, ctx):
         except (IndexError, ValueError):
             return  # stale button
     else:
+        # Callback data is user-controlled. Validate every guided value that
+        # maps directly to a listing field before accepting it into state.
+        validation = {
+            "bedrooms": ("bedrooms", value),
+            "bathrooms": ("bathrooms", value),
+            "ptype": ("property_type", {
+                "lux_apt": "apartment", "mini_apt": "apartment",
+                "serviced": "apartment", "penthouse": "apartment",
+                "house": "house", "street_house": "house",
+                "shophouse": "house", "villa": "villa",
+            }.get(value, value)),
+            "furnishing": ("furnishing", value),
+            "lease_min": ("min_lease_months", value),
+            "deposit": ("deposit_months", value),
+        }.get(step)
+        if validation:
+            from db.listings import _check_parsed_value
+            field, candidate = validation
+            try:
+                _check_parsed_value(field, candidate)
+            except db.FieldError as exc:
+                await q.edit_message_text(
+                    bot_field_error_message(exc, candidate),
+                    reply_markup=_guided_back_kb())
+                return
         answers[step] = value
     _guided_advance(gd)
     if GUIDED_STEPS[gd["step"]] == "photos":

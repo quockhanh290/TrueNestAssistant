@@ -7,7 +7,7 @@ import config
 from .refresh import log_refresh_claim
 import uuid
 
-from .validate import to_bool, to_number, choice
+from .validate import FieldError, to_bool, choice, listing_value
 
 
 # Every status a listing row may hold. "active" is a filter alias in
@@ -60,8 +60,21 @@ def check_listing_limit(broker_id, path=None):
 
 def create_listing(broker_id, raw_text="", photo_file_ids=None,
                    parsed=None, missing_fields=None, status="draft",
-                   content_hash=None, path=None):
+                   content_hash=None, path=None, lenient=False):
+    """Create a listing.
+
+    ``lenient`` is an explicit bot-only escape hatch for parser output: bad
+    parsed fields are omitted, appended to ``missing_fields``, and returned
+    with the new id.  The default stays strict for the webapp and all other
+    callers.
+    """
     choice(status, "status", LISTING_STATUSES)
+    if lenient:
+        parsed, dropped = _check_parsed_fields(parsed or {}, lenient=True)
+        missing_fields = _merge_missing_fields(missing_fields, dropped)
+    else:
+        parsed = _check_parsed_fields(parsed or {})
+        dropped = []
     listing_id = "tg:" + uuid.uuid4().hex[:12]
     now = _now()
     with closing(connect(path)) as conn:
@@ -94,7 +107,7 @@ def create_listing(broker_id, raw_text="", photo_file_ids=None,
             )
         conn.commit()
         conn.close()
-        return listing_id
+        return (listing_id, dropped) if lenient else listing_id
 
 
 def get_listing(listing_id, path=None):
@@ -115,7 +128,13 @@ def get_listing(listing_id, path=None):
         return d
 
 
-def update_listing(listing_id, path=None, **fields):
+def update_listing(listing_id, path=None, lenient=False, **fields):
+    """Update listing columns, optionally dropping bad parser fields.
+
+    ``lenient=True`` is reserved for bot bulk/parser writes and returns the
+    names it dropped.  Strict callers retain the existing ``FieldError``
+    contract.
+    """
     allowed = {"raw_text", "photo_file_ids", "photo_urls", "photo_hashes",
                "photo_phashes",
                "parsed", "missing_fields",
@@ -126,6 +145,19 @@ def update_listing(listing_id, path=None, **fields):
                    "parsed", "missing_fields"}
     if "status" in fields:
         choice(fields["status"], "status", LISTING_STATUSES)
+    dropped = []
+    if "parsed" in fields:
+        if lenient:
+            fields["parsed"], dropped = _check_parsed_fields(
+                fields["parsed"] or {}, lenient=True)
+            base_missing = fields.get("missing_fields")
+            if base_missing is None:
+                existing = get_listing(listing_id, path=path)
+                base_missing = ((existing or {}).get("missing_fields") or [])
+            fields["missing_fields"] = _merge_missing_fields(
+                base_missing, dropped)
+        else:
+            fields["parsed"] = _check_parsed_fields(fields["parsed"] or {})
     sets, vals = [], []
     for k, v in fields.items():
         if k not in allowed:
@@ -135,7 +167,7 @@ def update_listing(listing_id, path=None, **fields):
         sets.append(f"{k} = ?")
         vals.append(v)
     if not sets:
-        return
+        return dropped if lenient else None
     sets.append("updated_at = ?")
     vals.append(_now())
     vals.append(listing_id)
@@ -145,6 +177,7 @@ def update_listing(listing_id, path=None, **fields):
         )
         conn.commit()
         conn.close()
+    return dropped if lenient else None
 
 
 def set_listing_status(listing_id, new_status, changed_by="broker", path=None):
@@ -266,7 +299,7 @@ def update_listing_field(listing_id, field, value, changed_by="broker", path=Non
             if _filled(value) and "description" in missing:
                 missing.remove("description")
         elif field == "location" and isinstance(value, dict):
-            for k in ("district", "street", "building_name"):
+            for k in ("district", "ward", "street", "building_name"):
                 if k in value:
                     _log_field_edit(conn, listing_id, k, parsed.get(k),
                                     value[k], changed_by, now)
@@ -308,34 +341,55 @@ def update_listing_field(listing_id, field, value, changed_by="broker", path=Non
         return True
 
 
-# parsed keys that hold money: text goes through db.money ("12tr")
-_MONEY_FIELDS = {"price_vnd"}
-
-
 def _check_parsed_value(field, value):
-    """Type of one `parsed` field from the master schema: numbers become
-    float ("12tr" for money), booleans accept "false"/"0" as False.
-    None clears a field. Strings/arrays/other keys pass unchanged.
-    Raises FieldError (webapp -> 400) for a value that cannot be read."""
-    if field in ("description", "location") or value is None:
+    """Validate and normalize one value before it enters parsed JSON."""
+    if field == "description" or value is None:
         return value
     import schema as master_schema   # root module; lazy keeps db importable
+    if field == "location":
+        if not isinstance(value, dict):
+            return value
+        return {key: _check_parsed_value(key, item)
+                for key, item in value.items()}
     key = master_schema.FIELD_ALIASES.get(field, field)
     kind = master_schema.MASTER_SCHEMA.get(key, (None,))[0]
-    if kind == "number":
-        if key == "deposit_months" and isinstance(value, str):
-            import re
-            match = re.fullmatch(
-                r"\s*(\d+(?:[.,]\d+)?)\s*(?:th\u00e1ng|th)\s*",
-                value,
-                flags=re.IGNORECASE,
-            )
-            if match:
-                value = match.group(1)
-        return to_number(value, field, money=key in _MONEY_FIELDS)
     if kind == "boolean":
-        return to_bool(value, field)
-    return value
+        return to_bool(value, key)
+    return listing_value(
+        key, value,
+        property_types=master_schema.PROPERTY_TYPES,
+        furnishing_values=master_schema.FURNISHING_VALUES,
+        balcony_directions=master_schema.BALCONY_DIRECTIONS,
+    )
+
+
+def _check_parsed_fields(parsed, *, lenient=False):
+    """Validate a parsed payload, optionally returning omitted bad fields."""
+    if not isinstance(parsed, dict):
+        raise FieldError("parsed", "not_an_object")
+    import schema as master_schema
+    checked = {}
+    dropped = []
+    for field, value in parsed.items():
+        canonical = master_schema.FIELD_ALIASES.get(field, field)
+        try:
+            checked[canonical] = _check_parsed_value(canonical, value)
+        except FieldError as exc:
+            if not lenient:
+                raise
+            dropped.append(exc.field or canonical)
+    if lenient:
+        return checked, list(dict.fromkeys(dropped))
+    return checked
+
+
+def _merge_missing_fields(missing_fields, dropped):
+    """Append dropped field names without changing the caller's ordering."""
+    merged = list(missing_fields or [])
+    for field in dropped:
+        if field not in merged:
+            merged.append(field)
+    return merged
 
 
 def _log_field_edit(conn, listing_id, field, old, new, changed_by, now):
