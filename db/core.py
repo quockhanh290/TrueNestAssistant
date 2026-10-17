@@ -1,4 +1,5 @@
 """DB core: connection, schema, migrations, metrics."""
+from contextlib import closing
 import json
 import sqlite3
 import time
@@ -271,35 +272,35 @@ def connect(path=None):
 
 
 def init_db(path=None):
-    conn = connect(path)
-    conn.executescript(SCHEMA)
-    _migrate_brokers(conn)
-    _migrate_clients(conn)
-    _migrate_viewings(conn)
-    _migrate_match_requests(conn)
-    _migrate_match_responses(conn)
-    _migrate_listings_duplicate_of(conn)
-    _migrate_updated_at(conn)
-    _migrate_deals_paid(conn)
-    _migrate_listings_content_hash(conn)
-    _migrate_listings_saved_post(conn)
-    _migrate_listings_photo_urls(conn)
-    _migrate_listings_photo_hashes(conn)
-    _migrate_listings_photo_phashes(conn)
-    _migrate_trial_usage(conn)
-    _migrate_share_pages(conn)
-    _migrate_outbox(conn)
-    _migrate_match_notifications(conn)
-    _migrate_broker_notify_prefs(conn)
-    _migrate_refresh_reputation(conn)
-    _migrate_refresh_log(conn)
-    _migrate_listing_reports(conn)
-    _migrate_referrals(conn)
-    _migrate_listings_confirmed_at(conn)
-    # last: needs every column above to exist
-    _migrate_type_triggers(conn)
-    conn.commit()
-    conn.close()
+    with closing(connect(path)) as conn:
+        conn.executescript(SCHEMA)
+        _migrate_brokers(conn)
+        _migrate_clients(conn)
+        _migrate_viewings(conn)
+        _migrate_match_requests(conn)
+        _migrate_match_responses(conn)
+        _migrate_listings_duplicate_of(conn)
+        _migrate_updated_at(conn)
+        _migrate_deals_paid(conn)
+        _migrate_listings_content_hash(conn)
+        _migrate_listings_saved_post(conn)
+        _migrate_listings_photo_urls(conn)
+        _migrate_listings_photo_hashes(conn)
+        _migrate_listings_photo_phashes(conn)
+        _migrate_trial_usage(conn)
+        _migrate_share_pages(conn)
+        _migrate_outbox(conn)
+        _migrate_match_notifications(conn)
+        _migrate_broker_notify_prefs(conn)
+        _migrate_refresh_reputation(conn)
+        _migrate_refresh_log(conn)
+        _migrate_listing_reports(conn)
+        _migrate_referrals(conn)
+        _migrate_listings_confirmed_at(conn)
+        # last: needs every column above to exist
+        _migrate_type_triggers(conn)
+        conn.commit()
+        conn.close()
 
 
 def _migrate_updated_at(conn):
@@ -885,128 +886,128 @@ def get_metrics_summary(since, path=None):
     entry: {broker_id, name, deals, total, days_overdue}.
     """
     now = _now()
-    conn = connect(path)
+    with closing(connect(path)) as conn:
 
-    # ---- brokers ----
-    brokers_active = conn.execute(
-        """SELECT COUNT(DISTINCT b.user_id) c FROM brokers b
-           WHERE b.updated_at >= ?
-              OR EXISTS (SELECT 1 FROM tg_listings l
-                         WHERE l.broker_id = b.user_id AND l.created_at >= ?)
-              OR EXISTS (SELECT 1 FROM clients c
-                         WHERE c.broker_id = b.user_id AND c.updated_at >= ?)""",
-        (since, since, since),
-    ).fetchone()["c"]
-    brokers_new = conn.execute(
-        "SELECT COUNT(*) c FROM brokers WHERE created_at >= ?", (since,),
-    ).fetchone()["c"]
-    listings_total = conn.execute(
-        "SELECT COUNT(*) c FROM tg_listings WHERE status != 'deleted'",
-    ).fetchone()["c"]
+        # ---- brokers ----
+        brokers_active = conn.execute(
+            """SELECT COUNT(DISTINCT b.user_id) c FROM brokers b
+               WHERE b.updated_at >= ?
+                  OR EXISTS (SELECT 1 FROM tg_listings l
+                             WHERE l.broker_id = b.user_id AND l.created_at >= ?)
+                  OR EXISTS (SELECT 1 FROM clients c
+                             WHERE c.broker_id = b.user_id AND c.updated_at >= ?)""",
+            (since, since, since),
+        ).fetchone()["c"]
+        brokers_new = conn.execute(
+            "SELECT COUNT(*) c FROM brokers WHERE created_at >= ?", (since,),
+        ).fetchone()["c"]
+        listings_total = conn.execute(
+            "SELECT COUNT(*) c FROM tg_listings WHERE status != 'deleted'",
+        ).fetchone()["c"]
 
-    # ---- match ----
-    match_broadcast = conn.execute(
-        "SELECT COUNT(*) c FROM match_requests WHERE created_at >= ?",
-        (since,),
-    ).fetchone()["c"]
-    match_reserve = conn.execute(
-        "SELECT COUNT(*) c FROM match_responses WHERE created_at >= ?",
-        (since,),
-    ).fetchone()["c"]
-    match_submit = conn.execute(
-        """SELECT COUNT(*) c FROM match_responses
-           WHERE created_at >= ?
-             AND ((listing_id IS NOT NULL AND listing_id != '')
-                  OR (listing_ids NOT IN ('[]', '')))""",
-        (since,),
-    ).fetchone()["c"]
-    match_chosen = conn.execute(
-        """SELECT COUNT(*) c FROM match_responses
-           WHERE created_at >= ?
-             AND requester_consent = 1 AND responder_consent = 1""",
-        (since,),
-    ).fetchone()["c"]
+        # ---- match ----
+        match_broadcast = conn.execute(
+            "SELECT COUNT(*) c FROM match_requests WHERE created_at >= ?",
+            (since,),
+        ).fetchone()["c"]
+        match_reserve = conn.execute(
+            "SELECT COUNT(*) c FROM match_responses WHERE created_at >= ?",
+            (since,),
+        ).fetchone()["c"]
+        match_submit = conn.execute(
+            """SELECT COUNT(*) c FROM match_responses
+               WHERE created_at >= ?
+                 AND ((listing_id IS NOT NULL AND listing_id != '')
+                      OR (listing_ids NOT IN ('[]', '')))""",
+            (since,),
+        ).fetchone()["c"]
+        match_chosen = conn.execute(
+            """SELECT COUNT(*) c FROM match_responses
+               WHERE created_at >= ?
+                 AND requester_consent = 1 AND responder_consent = 1""",
+            (since,),
+        ).fetchone()["c"]
 
-    # ---- revenue (windowed) ----
-    rev = conn.execute(
-        """SELECT COUNT(*) n, COALESCE(SUM(commission_vnd), 0) total
-           FROM deals WHERE closed_at >= ? AND commission_vnd > 0""",
-        (since,),
-    ).fetchone()
+        # ---- revenue (windowed) ----
+        rev = conn.execute(
+            """SELECT COUNT(*) n, COALESCE(SUM(commission_vnd), 0) total
+               FROM deals WHERE closed_at >= ? AND commission_vnd > 0""",
+            (since,),
+        ).fetchone()
 
-    # ---- debt (công nợ): all-time unpaid deals, per broker ----
-    debt_rows = conn.execute(
-        """SELECT d.broker_id,
-                  COALESCE(NULLIF(b.display_name, ''), b.username, '') AS name,
-                  COUNT(*) AS n_deals,
-                  COALESCE(SUM(d.commission_vnd), 0) AS total,
-                  MIN(d.closed_at) AS oldest_closed
-           FROM deals d
-           LEFT JOIN brokers b ON b.user_id = d.broker_id
-           WHERE d.paid = 0 AND d.commission_vnd > 0
-           GROUP BY d.broker_id
-           ORDER BY total DESC""",
-    ).fetchall()
-    debts = []
-    for r in debt_rows:
-        days_overdue = int((now - (r["oldest_closed"] or now)) // 86400)
-        debts.append({
-            "broker_id": r["broker_id"],
-            "name": r["name"] or f"ID {r['broker_id']}",
-            "deals": r["n_deals"],
-            "total": r["total"],
-            "days_overdue": max(days_overdue, 0),
-        })
+        # ---- debt (công nợ): all-time unpaid deals, per broker ----
+        debt_rows = conn.execute(
+            """SELECT d.broker_id,
+                      COALESCE(NULLIF(b.display_name, ''), b.username, '') AS name,
+                      COUNT(*) AS n_deals,
+                      COALESCE(SUM(d.commission_vnd), 0) AS total,
+                      MIN(d.closed_at) AS oldest_closed
+               FROM deals d
+               LEFT JOIN brokers b ON b.user_id = d.broker_id
+               WHERE d.paid = 0 AND d.commission_vnd > 0
+               GROUP BY d.broker_id
+               ORDER BY total DESC""",
+        ).fetchall()
+        debts = []
+        for r in debt_rows:
+            days_overdue = int((now - (r["oldest_closed"] or now)) // 86400)
+            debts.append({
+                "broker_id": r["broker_id"],
+                "name": r["name"] or f"ID {r['broker_id']}",
+                "deals": r["n_deals"],
+                "total": r["total"],
+                "days_overdue": max(days_overdue, 0),
+            })
 
-    # ---- warnings: deals closed in last 30d needing confirmation ----
-    pending = conn.execute(
-        """SELECT d.broker_id,
-                  COALESCE(NULLIF(b.display_name, ''), b.username, '') AS name,
-                  d.client_name, d.closed_at
-           FROM deals d
-           LEFT JOIN brokers b ON b.user_id = d.broker_id
-           WHERE d.closed_at >= ?
-           ORDER BY d.closed_at DESC LIMIT 10""",
-        (now - 30 * 86400,),
-    ).fetchall()
-    pending_confirm = [
-        {"broker_id": r["broker_id"],
-         "broker_name": r["name"] or f"ID {r['broker_id']}",
-         "client_name": r["client_name"] or "—",
-         "days_ago": int((now - r["closed_at"]) // 86400)}
-        for r in pending
-    ]
-    # brokers with spam strikes / muted / banned
-    flagged = conn.execute(
-        """SELECT s.broker_id,
-                  COALESCE(NULLIF(b.display_name, ''), b.username, '') AS name,
-                  s.strikes, s.banned, s.muted_until
-           FROM spam_strikes s
-           LEFT JOIN brokers b ON b.user_id = s.broker_id
-           WHERE s.strikes > 0 OR s.banned = 1
-           ORDER BY s.banned DESC, s.strikes DESC LIMIT 10""",
-    ).fetchall()
-    flagged_brokers = [
-        {"broker_id": r["broker_id"],
-         "name": r["name"] or f"ID {r['broker_id']}",
-         "strikes": r["strikes"],
-         "banned": bool(r["banned"]),
-         "muted": r["muted_until"] > now}
-        for r in flagged
-    ]
-    conn.close()
+        # ---- warnings: deals closed in last 30d needing confirmation ----
+        pending = conn.execute(
+            """SELECT d.broker_id,
+                      COALESCE(NULLIF(b.display_name, ''), b.username, '') AS name,
+                      d.client_name, d.closed_at
+               FROM deals d
+               LEFT JOIN brokers b ON b.user_id = d.broker_id
+               WHERE d.closed_at >= ?
+               ORDER BY d.closed_at DESC LIMIT 10""",
+            (now - 30 * 86400,),
+        ).fetchall()
+        pending_confirm = [
+            {"broker_id": r["broker_id"],
+             "broker_name": r["name"] or f"ID {r['broker_id']}",
+             "client_name": r["client_name"] or "—",
+             "days_ago": int((now - r["closed_at"]) // 86400)}
+            for r in pending
+        ]
+        # brokers with spam strikes / muted / banned
+        flagged = conn.execute(
+            """SELECT s.broker_id,
+                      COALESCE(NULLIF(b.display_name, ''), b.username, '') AS name,
+                      s.strikes, s.banned, s.muted_until
+               FROM spam_strikes s
+               LEFT JOIN brokers b ON b.user_id = s.broker_id
+               WHERE s.strikes > 0 OR s.banned = 1
+               ORDER BY s.banned DESC, s.strikes DESC LIMIT 10""",
+        ).fetchall()
+        flagged_brokers = [
+            {"broker_id": r["broker_id"],
+             "name": r["name"] or f"ID {r['broker_id']}",
+             "strikes": r["strikes"],
+             "banned": bool(r["banned"]),
+             "muted": r["muted_until"] > now}
+            for r in flagged
+        ]
+        conn.close()
 
-    return {
-        "brokers_active": brokers_active,
-        "brokers_new": brokers_new,
-        "listings_total": listings_total,
-        "match_broadcast": match_broadcast,
-        "match_reserve": match_reserve,
-        "match_submit": match_submit,
-        "match_chosen": match_chosen,
-        "deals_count": rev["n"],
-        "commission_total": rev["total"],
-        "debts": debts,
-        "pending_confirm": pending_confirm,
-        "flagged_brokers": flagged_brokers,
-    }
+        return {
+            "brokers_active": brokers_active,
+            "brokers_new": brokers_new,
+            "listings_total": listings_total,
+            "match_broadcast": match_broadcast,
+            "match_reserve": match_reserve,
+            "match_submit": match_submit,
+            "match_chosen": match_chosen,
+            "deals_count": rev["n"],
+            "commission_total": rev["total"],
+            "debts": debts,
+            "pending_confirm": pending_confirm,
+            "flagged_brokers": flagged_brokers,
+        }

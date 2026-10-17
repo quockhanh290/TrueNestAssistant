@@ -1,4 +1,5 @@
 """Spam strikes / muting."""
+from contextlib import closing
 from .core import connect, _now
 import time
 
@@ -24,17 +25,17 @@ _SPAM_MESSAGES = {
 
 def get_spam_status(broker_id, path=None):
     """Return spam state: {strikes, muted_until, banned, last_strike_at}."""
-    conn = connect(path)
-    row = conn.execute(
-        "SELECT * FROM spam_strikes WHERE broker_id = ?", (broker_id,)
-    ).fetchone()
-    conn.close()
-    if not row:
-        return {"strikes": 0, "muted_until": 0, "banned": False,
-                "last_strike_at": None}
-    d = dict(row)
-    d["banned"] = bool(d["banned"])
-    return d
+    with closing(connect(path)) as conn:
+        row = conn.execute(
+            "SELECT * FROM spam_strikes WHERE broker_id = ?", (broker_id,)
+        ).fetchone()
+        conn.close()
+        if not row:
+            return {"strikes": 0, "muted_until": 0, "banned": False,
+                    "last_strike_at": None}
+        d = dict(row)
+        d["banned"] = bool(d["banned"])
+        return d
 
 
 def is_muted_or_banned(broker_id, path=None):
@@ -82,78 +83,78 @@ def record_spam_violation(broker_id, violation_type, path=None):
     Applies 30-day strike decay before incrementing.
     """
     now = _now()
-    conn = connect(path)
-    strikes = _apply_strike_decay(conn, broker_id, now)
-    new_strikes = strikes + 1
+    with closing(connect(path)) as conn:
+        strikes = _apply_strike_decay(conn, broker_id, now)
+        new_strikes = strikes + 1
 
-    row = conn.execute(
-        "SELECT broker_id FROM spam_strikes WHERE broker_id = ?",
-        (broker_id,),
-    ).fetchone()
-    if row:
-        conn.execute(
-            "UPDATE spam_strikes SET strikes = ?, last_strike_at = ?,"
-            " updated_at = ? WHERE broker_id = ?",
-            (new_strikes, now, now, broker_id),
-        )
-    else:
-        conn.execute(
-            "INSERT INTO spam_strikes (broker_id, strikes, last_strike_at,"
-            " muted_until, banned, created_at, updated_at)"
-            " VALUES (?, ?, ?, 0, 0, ?, ?)",
-            (broker_id, new_strikes, now, now, now),
-        )
-
-    if new_strikes == 1:
-        action = "warn"
-    elif new_strikes == 2:
-        action = "mute_1h"
-        conn.execute(
-            "UPDATE spam_strikes SET muted_until = ? WHERE broker_id = ?",
-            (now + 3600, broker_id),
-        )
-    elif new_strikes == 3:
-        action = "mute_24h"
-        conn.execute(
-            "UPDATE spam_strikes SET muted_until = ? WHERE broker_id = ?",
-            (now + 86400, broker_id),
-        )
-    else:
-        action = "ban"
-        conn.execute(
-            "UPDATE spam_strikes SET banned = 1, muted_until = 0"
-            " WHERE broker_id = ?",
+        row = conn.execute(
+            "SELECT broker_id FROM spam_strikes WHERE broker_id = ?",
             (broker_id,),
-        )
-    conn.commit()
-    conn.close()
-    # Log the violation event for audit
-    log_spam_event(broker_id, violation_type, path=path)
-    return action
+        ).fetchone()
+        if row:
+            conn.execute(
+                "UPDATE spam_strikes SET strikes = ?, last_strike_at = ?,"
+                " updated_at = ? WHERE broker_id = ?",
+                (new_strikes, now, now, broker_id),
+            )
+        else:
+            conn.execute(
+                "INSERT INTO spam_strikes (broker_id, strikes, last_strike_at,"
+                " muted_until, banned, created_at, updated_at)"
+                " VALUES (?, ?, ?, 0, 0, ?, ?)",
+                (broker_id, new_strikes, now, now, now),
+            )
+
+        if new_strikes == 1:
+            action = "warn"
+        elif new_strikes == 2:
+            action = "mute_1h"
+            conn.execute(
+                "UPDATE spam_strikes SET muted_until = ? WHERE broker_id = ?",
+                (now + 3600, broker_id),
+            )
+        elif new_strikes == 3:
+            action = "mute_24h"
+            conn.execute(
+                "UPDATE spam_strikes SET muted_until = ? WHERE broker_id = ?",
+                (now + 86400, broker_id),
+            )
+        else:
+            action = "ban"
+            conn.execute(
+                "UPDATE spam_strikes SET banned = 1, muted_until = 0"
+                " WHERE broker_id = ?",
+                (broker_id,),
+            )
+        conn.commit()
+        conn.close()
+        # Log the violation event for audit
+        log_spam_event(broker_id, violation_type, path=path)
+        return action
 
 
 def log_spam_event(broker_id, event_type, path=None):
     """Log a spam-related event (for 3x-in-1h counting)."""
-    conn = connect(path)
-    conn.execute(
-        "INSERT INTO spam_events (broker_id, event_type, created_at)"
-        " VALUES (?, ?, ?)",
-        (broker_id, event_type, _now()),
-    )
-    conn.commit()
-    conn.close()
+    with closing(connect(path)) as conn:
+        conn.execute(
+            "INSERT INTO spam_events (broker_id, event_type, created_at)"
+            " VALUES (?, ?, ?)",
+            (broker_id, event_type, _now()),
+        )
+        conn.commit()
+        conn.close()
 
 
 def count_recent_spam_events(broker_id, event_type, hours=1, path=None):
     """How many events of this type in the last N hours."""
-    conn = connect(path)
-    n = conn.execute(
-        "SELECT COUNT(*) c FROM spam_events"
-        " WHERE broker_id = ? AND event_type = ? AND created_at > ?",
-        (broker_id, event_type, _now() - hours * 3600),
-    ).fetchone()["c"]
-    conn.close()
-    return n
+    with closing(connect(path)) as conn:
+        n = conn.execute(
+            "SELECT COUNT(*) c FROM spam_events"
+            " WHERE broker_id = ? AND event_type = ? AND created_at > ?",
+            (broker_id, event_type, _now() - hours * 3600),
+        ).fetchone()["c"]
+        conn.close()
+        return n
 
 
 def maybe_strike_for_repeated_event(broker_id, event_type, threshold=3,
@@ -172,14 +173,14 @@ def maybe_strike_for_repeated_event(broker_id, event_type, threshold=3,
 
 def prune_old_spam_events(days=7, path=None):
     """Delete spam_events older than `days` — housekeeping."""
-    conn = connect(path)
-    cur = conn.execute(
-        "DELETE FROM spam_events WHERE created_at < ?",
-        (_now() - days * 86400,),
-    )
-    conn.commit()
-    conn.close()
-    return cur.rowcount
+    with closing(connect(path)) as conn:
+        cur = conn.execute(
+            "DELETE FROM spam_events WHERE created_at < ?",
+            (_now() - days * 86400,),
+        )
+        conn.commit()
+        conn.close()
+        return cur.rowcount
 
 
 def count_recent_identical_texts(broker_id, text, hours=1, path=None):
@@ -191,19 +192,19 @@ def count_recent_identical_texts(broker_id, text, hours=1, path=None):
     norm = re.sub(r"\s+", " ", (text or "").strip().lower())
     if len(norm) < 20:
         return 0  # too short to be meaningful
-    conn = connect(path)
-    rows = conn.execute(
-        "SELECT raw_text FROM tg_listings"
-        " WHERE broker_id = ? AND created_at > ?",
-        (broker_id, _now() - hours * 3600),
-    ).fetchall()
-    conn.close()
-    n = 0
-    for r in rows:
-        other = re.sub(r"\s+", " ", (r["raw_text"] or "").strip().lower())
-        if other == norm:
-            n += 1
-    return n
+    with closing(connect(path)) as conn:
+        rows = conn.execute(
+            "SELECT raw_text FROM tg_listings"
+            " WHERE broker_id = ? AND created_at > ?",
+            (broker_id, _now() - hours * 3600),
+        ).fetchall()
+        conn.close()
+        n = 0
+        for r in rows:
+            other = re.sub(r"\s+", " ", (r["raw_text"] or "").strip().lower())
+            if other == norm:
+                n += 1
+        return n
 
 
 def spam_violation_message(action, violation_type, detail=""):

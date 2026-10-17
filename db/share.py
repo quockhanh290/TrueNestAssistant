@@ -1,4 +1,5 @@
 """Share pages, bookings, listing reports."""
+from contextlib import closing
 import secrets
 import uuid
 
@@ -149,18 +150,18 @@ def create_listing_report(token, listing_id, broker_id, reason, path=None):
     """Store a client report. Returns report id, or None on bad reason."""
     if reason not in REPORT_REASONS:
         return None
-    conn = connect(path)
-    _migrate_listing_reports(conn)
-    cur = conn.execute(
-        "INSERT INTO listing_reports"
-        " (token, listing_id, broker_id, reason, created_at, reviewed)"
-        " VALUES (?, ?, ?, ?, ?, 0)",
-        (token, listing_id, broker_id, reason, _now()),
-    )
-    rid = cur.lastrowid
-    conn.commit()
-    conn.close()
-    return rid
+    with closing(connect(path)) as conn:
+        _migrate_listing_reports(conn)
+        cur = conn.execute(
+            "INSERT INTO listing_reports"
+            " (token, listing_id, broker_id, reason, created_at, reviewed)"
+            " VALUES (?, ?, ?, ?, ?, 0)",
+            (token, listing_id, broker_id, reason, _now()),
+        )
+        rid = cur.lastrowid
+        conn.commit()
+        conn.close()
+        return rid
 
 
 def reserve_report_penalty(token, listing_id, report_id, reason, path=None):
@@ -189,15 +190,15 @@ def reserve_report_penalty(token, listing_id, report_id, reason, path=None):
 
 def get_latest_refresh_claim(listing_id, path=None):
     """Most recent refresh claim for a listing, or None."""
-    conn = connect(path)
-    _migrate_refresh_log(conn)
-    row = conn.execute(
-        "SELECT * FROM listing_refresh_log"
-        " WHERE listing_id = ? ORDER BY created_at DESC LIMIT 1",
-        (listing_id,),
-    ).fetchone()
-    conn.close()
-    return dict(row) if row else None
+    with closing(connect(path)) as conn:
+        _migrate_refresh_log(conn)
+        row = conn.execute(
+            "SELECT * FROM listing_refresh_log"
+            " WHERE listing_id = ? ORDER BY created_at DESC LIMIT 1",
+            (listing_id,),
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
 
 
 def check_report_against_refresh(listing_id, path=None):
@@ -216,31 +217,31 @@ def check_report_against_refresh(listing_id, path=None):
 
 
 def mark_report_reviewed(report_id, path=None):
-    conn = connect(path)
-    _migrate_listing_reports(conn)
-    conn.execute(
-        "UPDATE listing_reports SET reviewed = 1 WHERE id = ?",
-        (report_id,),
-    )
-    conn.commit()
-    conn.close()
+    with closing(connect(path)) as conn:
+        _migrate_listing_reports(conn)
+        conn.execute(
+            "UPDATE listing_reports SET reviewed = 1 WHERE id = ?",
+            (report_id,),
+        )
+        conn.commit()
+        conn.close()
 
 
 def list_unreviewed_reports(limit=50, path=None):
     """For Khanh's admin view: unreviewed reports with listing/broker info."""
-    conn = connect(path)
-    _migrate_listing_reports(conn)
-    rows = conn.execute(
-        "SELECT r.*, l.broker_id AS listing_broker,"
-        " b.phone AS broker_phone"
-        " FROM listing_reports r"
-        " LEFT JOIN tg_listings l ON l.id = r.listing_id"
-        " LEFT JOIN brokers b ON b.user_id = r.broker_id"
-        " WHERE r.reviewed = 0 ORDER BY r.created_at DESC LIMIT ?",
-        (limit,),
-    ).fetchall()
-    conn.close()
-    return [dict(x) for x in rows]
+    with closing(connect(path)) as conn:
+        _migrate_listing_reports(conn)
+        rows = conn.execute(
+            "SELECT r.*, l.broker_id AS listing_broker,"
+            " b.phone AS broker_phone"
+            " FROM listing_reports r"
+            " LEFT JOIN tg_listings l ON l.id = r.listing_id"
+            " LEFT JOIN brokers b ON b.user_id = r.broker_id"
+            " WHERE r.reviewed = 0 ORDER BY r.created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        conn.close()
+        return [dict(x) for x in rows]
 
 
 # ------------------------------------------------- admin /baocao (17/10)
@@ -254,16 +255,16 @@ def mark_report_penalty_applied(report_id, result, path=None):
     """
     if not report_id or not result:
         return
-    conn = connect(path)
-    _migrate_listing_reports(conn)
-    conn.execute(
-        "UPDATE report_penalties SET applied_at = ?, broker_id = ?,"
-        " banned_until = ? WHERE report_id = ?",
-        (_now(), result.get("broker_id"), result.get("banned_until"),
-         report_id),
-    )
-    conn.commit()
-    conn.close()
+    with closing(connect(path)) as conn:
+        _migrate_listing_reports(conn)
+        conn.execute(
+            "UPDATE report_penalties SET applied_at = ?, broker_id = ?,"
+            " banned_until = ? WHERE report_id = ?",
+            (_now(), result.get("broker_id"), result.get("banned_until"),
+             report_id),
+        )
+        conn.commit()
+        conn.close()
 
 
 def _penalty_state(row):
@@ -285,31 +286,31 @@ def _penalty_state(row):
 def list_recent_reports(limit=20, path=None):
     """Newest share-page reports for the admin, with listing, broker and
     penalty state ("penalty": applied/revoked/reserved/None)."""
-    conn = connect(path)
-    _migrate_listing_reports(conn)
-    rows = conn.execute(
-        "SELECT r.*, l.parsed AS listing_parsed,"
-        " b.display_name AS broker_name, b.username AS broker_username,"
-        " p.token AS p_token, p.applied_at AS p_applied_at,"
-        " p.revoked_at AS p_revoked_at"
-        " FROM listing_reports r"
-        " LEFT JOIN tg_listings l ON l.id = r.listing_id"
-        " LEFT JOIN brokers b ON b.user_id = r.broker_id"
-        " LEFT JOIN report_penalties p ON p.report_id = r.id"
-        " ORDER BY r.created_at DESC, r.id DESC LIMIT ?",
-        (limit,),
-    ).fetchall()
-    conn.close()
-    out = []
-    for x in rows:
-        d = dict(x)
-        try:
-            d["listing_parsed"] = json.loads(d.get("listing_parsed") or "{}")
-        except (TypeError, ValueError):
-            d["listing_parsed"] = {}
-        d["penalty"] = _penalty_state(d)
-        out.append(d)
-    return out
+    with closing(connect(path)) as conn:
+        _migrate_listing_reports(conn)
+        rows = conn.execute(
+            "SELECT r.*, l.parsed AS listing_parsed,"
+            " b.display_name AS broker_name, b.username AS broker_username,"
+            " p.token AS p_token, p.applied_at AS p_applied_at,"
+            " p.revoked_at AS p_revoked_at"
+            " FROM listing_reports r"
+            " LEFT JOIN tg_listings l ON l.id = r.listing_id"
+            " LEFT JOIN brokers b ON b.user_id = r.broker_id"
+            " LEFT JOIN report_penalties p ON p.report_id = r.id"
+            " ORDER BY r.created_at DESC, r.id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        conn.close()
+        out = []
+        for x in rows:
+            d = dict(x)
+            try:
+                d["listing_parsed"] = json.loads(d.get("listing_parsed") or "{}")
+            except (TypeError, ValueError):
+                d["listing_parsed"] = {}
+            d["penalty"] = _penalty_state(d)
+            out.append(d)
+        return out
 
 
 def revoke_report_penalty(report_id, path=None):

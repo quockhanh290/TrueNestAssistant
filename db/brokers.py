@@ -1,4 +1,5 @@
 """Broker accounts, tiers, premium, checklist."""
+from contextlib import closing
 from .core import connect, _now
 import config
 import json
@@ -7,26 +8,26 @@ import uuid
 
 
 def get_or_create_broker(user_id, username=None, display_name=None, path=None):
-    conn = connect(path)
-    row = conn.execute(
-        "SELECT * FROM brokers WHERE user_id = ?", (user_id,)
-    ).fetchone()
-    if row:
+    with closing(connect(path)) as conn:
+        row = conn.execute(
+            "SELECT * FROM brokers WHERE user_id = ?", (user_id,)
+        ).fetchone()
+        if row:
+            conn.close()
+            return dict(row)
+        now = _now()
+        conn.execute(
+            "INSERT INTO brokers (user_id, username, display_name, status,"
+            " created_at, updated_at)"
+            " VALUES (?, ?, ?, 'new', ?, ?)",
+            (user_id, username, display_name, now, now),
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT * FROM brokers WHERE user_id = ?", (user_id,)
+        ).fetchone()
         conn.close()
         return dict(row)
-    now = _now()
-    conn.execute(
-        "INSERT INTO brokers (user_id, username, display_name, status,"
-        " created_at, updated_at)"
-        " VALUES (?, ?, ?, 'new', ?, ?)",
-        (user_id, username, display_name, now, now),
-    )
-    conn.commit()
-    row = conn.execute(
-        "SELECT * FROM brokers WHERE user_id = ?", (user_id,)
-    ).fetchone()
-    conn.close()
-    return dict(row)
 
 
 def update_broker(user_id, path=None, **fields):
@@ -44,19 +45,19 @@ def update_broker(user_id, path=None, **fields):
     sets += ", updated_at = ?"
     vals.append(_now())
     vals.append(user_id)
-    conn = connect(path)
-    conn.execute(f"UPDATE brokers SET {sets} WHERE user_id = ?", vals)
-    conn.commit()
-    conn.close()
+    with closing(connect(path)) as conn:
+        conn.execute(f"UPDATE brokers SET {sets} WHERE user_id = ?", vals)
+        conn.commit()
+        conn.close()
 
 
 def get_broker(user_id, path=None):
-    conn = connect(path)
-    row = conn.execute(
-        "SELECT * FROM brokers WHERE user_id = ?", (user_id,)
-    ).fetchone()
-    conn.close()
-    return dict(row) if row else None
+    with closing(connect(path)) as conn:
+        row = conn.execute(
+            "SELECT * FROM brokers WHERE user_id = ?", (user_id,)
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
 
 
 def get_seen_hints(broker_id, path=None):
@@ -97,11 +98,11 @@ def bump_match_stats(broker_id, path=None, requests_sent=0,
     sets.append("last_match_at = ?")
     vals.append(_now())
     vals.append(broker_id)
-    conn = connect(path)
-    conn.execute(f"UPDATE brokers SET {', '.join(sets)} WHERE user_id = ?",
-                 vals)
-    conn.commit()
-    conn.close()
+    with closing(connect(path)) as conn:
+        conn.execute(f"UPDATE brokers SET {', '.join(sets)} WHERE user_id = ?",
+                     vals)
+        conn.commit()
+        conn.close()
 
 
 def get_match_stats(broker_id, path=None):
@@ -242,36 +243,36 @@ def requires_enterprise_tier(broker_id, path=None):
 def create_premium_request(broker_id, tier_requested="pro", path=None):
     rid = f"pr:{uuid.uuid4().hex[:12]}"
     now = _now()
-    conn = connect(path)
-    conn.execute(
-        "INSERT INTO premium_requests (id, broker_id, tier_requested, status,"
-        " created_at, updated_at) VALUES (?, ?, ?, 'pending', ?, ?)",
-        (rid, broker_id, tier_requested, now, now),
-    )
-    conn.commit()
-    conn.close()
-    return rid
+    with closing(connect(path)) as conn:
+        conn.execute(
+            "INSERT INTO premium_requests (id, broker_id, tier_requested, status,"
+            " created_at, updated_at) VALUES (?, ?, ?, 'pending', ?, ?)",
+            (rid, broker_id, tier_requested, now, now),
+        )
+        conn.commit()
+        conn.close()
+        return rid
 
 
 def get_pending_premium_request(broker_id, path=None):
-    conn = connect(path)
-    row = conn.execute(
-        "SELECT * FROM premium_requests WHERE broker_id = ? AND status = 'pending'"
-        " ORDER BY created_at DESC LIMIT 1",
-        (broker_id,),
-    ).fetchone()
-    conn.close()
-    return dict(row) if row else None
+    with closing(connect(path)) as conn:
+        row = conn.execute(
+            "SELECT * FROM premium_requests WHERE broker_id = ? AND status = 'pending'"
+            " ORDER BY created_at DESC LIMIT 1",
+            (broker_id,),
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
 
 
 def list_pending_premium_requests(path=None):
-    conn = connect(path)
-    rows = conn.execute(
-        "SELECT * FROM premium_requests WHERE status = 'pending'"
-        " ORDER BY created_at ASC"
-    ).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+    with closing(connect(path)) as conn:
+        rows = conn.execute(
+            "SELECT * FROM premium_requests WHERE status = 'pending'"
+            " ORDER BY created_at ASC"
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
 
 
 def decide_premium_request(request_id, approve, tier=None, days=30,
@@ -285,37 +286,37 @@ def decide_premium_request(request_id, approve, tier=None, days=30,
     req["converted_days_left"] (Pro days left) and
     req["converted_credit_days"] (Max days they were worth).
     """
-    conn = connect(path)
-    row = conn.execute(
-        "SELECT * FROM premium_requests WHERE id = ?", (request_id,)
-    ).fetchone()
-    if not row:
+    with closing(connect(path)) as conn:
+        row = conn.execute(
+            "SELECT * FROM premium_requests WHERE id = ?", (request_id,)
+        ).fetchone()
+        if not row:
+            conn.close()
+            return None
+        req = dict(row)
+        if req["status"] != "pending":
+            conn.close()
+            return req
+        status = "approved" if approve else "rejected"
+        now = _now()
+        conn.execute(
+            "UPDATE premium_requests SET status = ?, decided_at = ?,"
+            " updated_at = ? WHERE id = ?",
+            (status, now, now, request_id),
+        )
+        conn.commit()
         conn.close()
-        return None
-    req = dict(row)
-    if req["status"] != "pending":
-        conn.close()
+        if approve:
+            granted = tier or req["tier_requested"]
+            req["granted_tier"] = granted
+            res = _set_tier(req["broker_id"], granted, days=days, stack=True,
+                            path=path)
+            req["expires_at"] = res["expires_at"]
+            req["converted_from_tier"] = res["converted_from_tier"]
+            req["converted_days_left"] = res["converted_days_left"]
+            req["converted_credit_days"] = res["converted_credit_days"]
+        req["status"] = status
         return req
-    status = "approved" if approve else "rejected"
-    now = _now()
-    conn.execute(
-        "UPDATE premium_requests SET status = ?, decided_at = ?,"
-        " updated_at = ? WHERE id = ?",
-        (status, now, now, request_id),
-    )
-    conn.commit()
-    conn.close()
-    if approve:
-        granted = tier or req["tier_requested"]
-        req["granted_tier"] = granted
-        res = _set_tier(req["broker_id"], granted, days=days, stack=True,
-                        path=path)
-        req["expires_at"] = res["expires_at"]
-        req["converted_from_tier"] = res["converted_from_tier"]
-        req["converted_days_left"] = res["converted_days_left"]
-        req["converted_credit_days"] = res["converted_credit_days"]
-    req["status"] = status
-    return req
 
 
 def get_broker_phone(broker_id, path=None):
@@ -331,68 +332,68 @@ def set_broker_phone(broker_id, phone, path=None):
 
 def list_brokers(path=None):
     """All brokers — for cron scripts that fan out per broker."""
-    conn = connect(path)
-    rows = conn.execute("SELECT * FROM brokers").fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+    with closing(connect(path)) as conn:
+        rows = conn.execute("SELECT * FROM brokers").fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
 
 
 def add_checklist_item(broker_id, kind, ref_id, label="", path=None):
     """Idempotent — same (broker, kind, ref) is only stored once."""
     item_id = "ck:" + uuid.uuid4().hex[:12]
     now = _now()
-    conn = connect(path)
-    conn.execute(
-        "INSERT OR IGNORE INTO pending_checklist"
-        " (id, broker_id, kind, ref_id, label, created_at, updated_at)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (item_id, broker_id, kind, ref_id, label, now, now),
-    )
-    conn.commit()
-    conn.close()
-    return item_id
+    with closing(connect(path)) as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO pending_checklist"
+            " (id, broker_id, kind, ref_id, label, created_at, updated_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (item_id, broker_id, kind, ref_id, label, now, now),
+        )
+        conn.commit()
+        conn.close()
+        return item_id
 
 
 def list_checklist(broker_id, path=None):
-    conn = connect(path)
-    rows = conn.execute(
-        "SELECT * FROM pending_checklist WHERE broker_id = ?"
-        " ORDER BY created_at ASC",
-        (broker_id,),
-    ).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+    with closing(connect(path)) as conn:
+        rows = conn.execute(
+            "SELECT * FROM pending_checklist WHERE broker_id = ?"
+            " ORDER BY created_at ASC",
+            (broker_id,),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
 
 
 def clear_checklist_item(broker_id, kind, ref_id, path=None):
-    conn = connect(path)
-    cur = conn.execute(
-        "DELETE FROM pending_checklist"
-        " WHERE broker_id = ? AND kind = ? AND ref_id = ?",
-        (broker_id, kind, ref_id),
-    )
-    conn.commit()
-    conn.close()
-    return cur.rowcount > 0
+    with closing(connect(path)) as conn:
+        cur = conn.execute(
+            "DELETE FROM pending_checklist"
+            " WHERE broker_id = ? AND kind = ? AND ref_id = ?",
+            (broker_id, kind, ref_id),
+        )
+        conn.commit()
+        conn.close()
+        return cur.rowcount > 0
 
 
 def clear_checklist(broker_id, path=None):
-    conn = connect(path)
-    cur = conn.execute(
-        "DELETE FROM pending_checklist WHERE broker_id = ?", (broker_id,)
-    )
-    conn.commit()
-    conn.close()
-    return cur.rowcount
+    with closing(connect(path)) as conn:
+        cur = conn.execute(
+            "DELETE FROM pending_checklist WHERE broker_id = ?", (broker_id,)
+        )
+        conn.commit()
+        conn.close()
+        return cur.rowcount
 
 
 def clear_old_checklist(days=2, path=None):
     """Purge checklist items older than `days` — stale nags."""
     cutoff = _now() - days * 86400
-    conn = connect(path)
-    cur = conn.execute(
-        "DELETE FROM pending_checklist WHERE created_at < ?", (cutoff,)
-    )
-    conn.commit()
-    conn.close()
-    return cur.rowcount
+    with closing(connect(path)) as conn:
+        cur = conn.execute(
+            "DELETE FROM pending_checklist WHERE created_at < ?", (cutoff,)
+        )
+        conn.commit()
+        conn.close()
+        return cur.rowcount

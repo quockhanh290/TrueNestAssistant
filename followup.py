@@ -10,6 +10,7 @@ NEVER "Có khách đang hỏi" (a client is asking) unless actually true.
 Run:  python3 followup.py [--db PATH]
 Prints candidates as JSON for bot.py to send later.
 """
+from contextlib import closing
 import argparse
 import json
 import sqlite3
@@ -42,12 +43,12 @@ FOLLOWUP_STATUSES = ("submitted", "pending_info")
 
 def ensure_followup_column(path=None):
     """Add last_followup_at to tg_listings if missing (idempotent)."""
-    conn = db.connect(path)
-    cols = [r[1] for r in conn.execute("PRAGMA table_info(tg_listings)")]
-    if "last_followup_at" not in cols:
-        conn.execute("ALTER TABLE tg_listings ADD COLUMN last_followup_at REAL")
-        conn.commit()
-    conn.close()
+    with closing(db.connect(path)) as conn:
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(tg_listings)")]
+        if "last_followup_at" not in cols:
+            conn.execute("ALTER TABLE tg_listings ADD COLUMN last_followup_at REAL")
+            conn.commit()
+        conn.close()
 
 
 def _unknown_required_fields(parsed):
@@ -73,34 +74,34 @@ def get_followup_candidates(path=None, days_min=FOLLOWUP_DAYS_MIN,
     newest = now - days_min * 86400
     cooldown_cutoff = now - FOLLOWUP_COOLDOWN_DAYS * 86400
 
-    conn = db.connect(path)
-    ph = ", ".join("?" for _ in FOLLOWUP_STATUSES)
-    rows = conn.execute(
-        f"SELECT l.*, b.user_id AS tg_user_id, b.display_name, b.username"
-        f" FROM tg_listings l JOIN brokers b ON b.user_id = l.broker_id"
-        f" WHERE l.status IN ({ph})"
-        f" AND l.updated_at >= ? AND l.updated_at < ?"
-        f" AND (l.last_followup_at IS NULL OR l.last_followup_at < ?)"
-        f" ORDER BY l.updated_at ASC",
-        (*FOLLOWUP_STATUSES, oldest, newest, cooldown_cutoff),
-    ).fetchall()
-    conn.close()
+    with closing(db.connect(path)) as conn:
+        ph = ", ".join("?" for _ in FOLLOWUP_STATUSES)
+        rows = conn.execute(
+            f"SELECT l.*, b.user_id AS tg_user_id, b.display_name, b.username"
+            f" FROM tg_listings l JOIN brokers b ON b.user_id = l.broker_id"
+            f" WHERE l.status IN ({ph})"
+            f" AND l.updated_at >= ? AND l.updated_at < ?"
+            f" AND (l.last_followup_at IS NULL OR l.last_followup_at < ?)"
+            f" ORDER BY l.updated_at ASC",
+            (*FOLLOWUP_STATUSES, oldest, newest, cooldown_cutoff),
+        ).fetchall()
+        conn.close()
 
-    candidates = []
-    for r in rows:
-        d = dict(r)
-        try:
-            parsed = json.loads(d["parsed"]) if isinstance(d["parsed"], str) else d["parsed"]
-        except (json.JSONDecodeError, TypeError):
-            parsed = {}
-        unknown = _unknown_required_fields(parsed)
-        if not unknown:
-            continue
-        d["parsed"] = parsed
-        d["target_field"] = unknown[0]  # highest priority only
-        d["unknown_fields"] = unknown
-        candidates.append(d)
-    return candidates
+        candidates = []
+        for r in rows:
+            d = dict(r)
+            try:
+                parsed = json.loads(d["parsed"]) if isinstance(d["parsed"], str) else d["parsed"]
+            except (json.JSONDecodeError, TypeError):
+                parsed = {}
+            unknown = _unknown_required_fields(parsed)
+            if not unknown:
+                continue
+            d["parsed"] = parsed
+            d["target_field"] = unknown[0]  # highest priority only
+            d["unknown_fields"] = unknown
+            candidates.append(d)
+        return candidates
 
 
 def _short_desc(parsed):
@@ -179,13 +180,13 @@ def build_followup_message(listing, field=None):
 def record_followup(listing_id, path=None):
     """Mark a listing as followed up now (enforces 1/week limit)."""
     ensure_followup_column(path)
-    conn = db.connect(path)
-    conn.execute(
-        "UPDATE tg_listings SET last_followup_at = ? WHERE id = ?",
-        (time.time(), listing_id),
-    )
-    conn.commit()
-    conn.close()
+    with closing(db.connect(path)) as conn:
+        conn.execute(
+            "UPDATE tg_listings SET last_followup_at = ? WHERE id = ?",
+            (time.time(), listing_id),
+        )
+        conn.commit()
+        conn.close()
 
 
 def main():
