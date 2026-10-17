@@ -1,0 +1,1 @@
+{"dependencies":{"zca-js":"^2.1.0"},"description":"TrueNest Zalo -> Telegram listing bridge (1:1 DM receiver)","engines":{"node":">=18"},"main":"bridge.js","name":"truenest-zalo-bridge","private":true,"scripts":{"pair":"node bridge.js --pair","start":"node bridge.js"},"version":"0.1.0"}
