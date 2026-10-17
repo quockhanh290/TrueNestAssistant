@@ -110,3 +110,101 @@ async def cmd_metrics(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         lines.append("• Không có broker vi phạm")
 
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+
+# ================================================== /baocao (17/10)
+# Admin view of share-page reports from clients, with a "Gỡ phạt" button
+# for each report whose automatic strike was applied.
+
+REPORTS_SHOWN = 20
+_UNPEN_PREFIX = "rpt:unpen:"
+
+
+def _is_admin(uid):
+    return bool(config.ADMIN_TELEGRAM_ID) and uid == config.ADMIN_TELEGRAM_ID
+
+
+def _short(s, n=40):
+    s = str(s or "")
+    return s if len(s) <= n else s[:n - 1] + "…"
+
+
+def _report_line(r):
+    """One report as an HTML line; every user-supplied value is escaped."""
+    from db import vntime
+    p = r.get("listing_parsed") or {}
+    title = (p.get("building_name") or p.get("district")
+             or r.get("listing_id") or "?")
+    who = (r.get("broker_name") or
+           (("@" + r["broker_username"]) if r.get("broker_username") else "")
+           or str(r.get("broker_id")))
+    reason = db.REPORT_REASON_VI.get(r.get("reason"), r.get("reason") or "?")
+    token = r.get("token") or ""
+    base = (getattr(config, "WEBAPP_URL", "") or "").rstrip("/")
+    link_txt = html.escape(f"/s/{token[:8]}…")
+    link = (f'<a href="{html.escape(base + "/s/" + token, quote=True)}">'
+            f"{link_txt}</a>") if base else link_txt
+    state = {
+        "applied": "⚠️ đã phạt",
+        "revoked": "↩️ đã gỡ phạt",
+        "reserved": "⏳ chờ áp phạt",
+    }.get(r.get("penalty"), "không phạt")
+    return (
+        f"#{int(r['id'])} · {vntime.fmt(r['created_at'], '%H:%M %d/%m')}\n"
+        f"🏠 {html.escape(_short(title))} · 👤 {html.escape(_short(who, 30))}"
+        f" (<code>{html.escape(str(r.get('broker_id')))}</code>)\n"
+        f"Lý do: {html.escape(reason)} · Link: {link} · {state}")
+
+
+def _baocao_message():
+    """(text, keyboard or None) for the newest reports."""
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    reports = db.list_recent_reports(REPORTS_SHOWN)
+    if not reports:
+        return "📭 Chưa có báo cáo nào từ trang chia sẻ.", None
+    lines = [f"🚩 <b>{len(reports)} báo cáo gần nhất</b> (giờ VN)\n"]
+    lines += [_report_line(r) for r in reports]
+    text = "\n\n".join(lines)
+    if len(text) > 4000:          # Telegram's limit is 4096
+        text = text[:3990].rsplit("\n\n", 1)[0] + "\n\n…"
+    kb = [[InlineKeyboardButton(f"↩️ Gỡ phạt #{int(r['id'])}",
+                                callback_data=f"{_UNPEN_PREFIX}{int(r['id'])}")]
+          for r in reports if r.get("penalty") == "applied"]
+    return text, (InlineKeyboardMarkup(kb) if kb else None)
+
+
+async def cmd_baocao(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Admin-only /baocao — newest share-page reports."""
+    if not _is_admin(update.effective_user.id):
+        await update.message.reply_text("Lệnh này chỉ dành cho admin ạ 😊")
+        return
+    text, kb = _baocao_message()
+    await update.message.reply_text(text, parse_mode="HTML",
+                                    reply_markup=kb,
+                                    disable_web_page_preview=True)
+
+
+async def baocao_unpen_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """rpt:unpen:<report_id> — admin takes back that report's strike."""
+    q = update.callback_query
+    if not _is_admin(q.from_user.id):
+        await q.answer("Không có quyền.", show_alert=True)
+        return
+    try:
+        rid = int((q.data or "")[len(_UNPEN_PREFIX):])
+    except ValueError:
+        await q.answer()
+        return
+    res = db.revoke_report_penalty(rid)
+    if not res:
+        await q.answer("Báo cáo này không còn lượt phạt để gỡ.",
+                       show_alert=True)
+        return
+    await q.answer("Đã gỡ phạt ✓")
+    tail = " Đã mở khoá đề xuất." if res["unlocked"] else ""
+    await ctx.bot.send_message(
+        q.from_user.id,
+        f"↩️ Đã gỡ phạt báo cáo #{rid} cho môi giới"
+        f" <code>{html.escape(str(res['broker_id']))}</code>:"
+        f" còn {int(res['false_count'])} lượt phạt.{tail}",
+        parse_mode="HTML")

@@ -736,20 +736,18 @@ class TestNoMissingNames(LinhFlowTest):
 
     async def test_every_accepted_commission_unit_is_readable(self):
         # the "is this an amount?" filter must not accept a unit that the
-        # price parser cannot turn into a number
+        # commission reader (db.money, since 17/10) cannot turn into money
         import feat_deals
-        import parser as listing_parser
+        from db import money
         self.assertGreater(len(feat_deals._AMOUNT_UNITS), 0)
         for unit in feat_deals._AMOUNT_UNITS:
-            # "đ" only marks a fully written amount; every other unit must
-            # turn a short "15<unit>" reply into a number by itself.
-            # (A dotted number is read even with junk after it, e.g.
-            # "7.500.000k", so it cannot be the sample for other units.)
-            samples = (("7.500.000đ",) if unit == "đ"
+            # currency words only mark a fully written amount; every other
+            # unit must turn a short "15<unit>" reply into a number by itself
+            samples = ((f"7500000{unit}", f"7.500.000 {unit}")
+                       if unit in money.CURRENCY_WORDS
                        else (f"15{unit}", f"15 {unit}"))
             with self.subTest(unit=unit):
-                self.assertTrue(
-                    any(listing_parser.parse_price(s)[0] for s in samples))
+                self.assertTrue(all(money.parse_money(s) for s in samples))
 
     async def test_setting_a_broker_back_to_free_runs(self):
         uid = self.broker(tier="pro")

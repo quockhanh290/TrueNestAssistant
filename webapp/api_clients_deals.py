@@ -258,10 +258,20 @@ def list_deals_api(broker_id, month=None):
 def create_deal_api(broker_id, data):
     """POST /api/deals — record a deal/commission."""
     data = data or {}
-    try:
-        amount = float(data.get("commission_amount") or 0)
-    except (TypeError, ValueError):
-        amount = 0
+    raw = data.get("commission_amount")
+    if raw in (None, "", 0):
+        amount = 0          # deal without an amount yet, as before
+    elif isinstance(raw, (int, float)) and not isinstance(raw, bool):
+        amount = float(raw)
+    else:
+        # typed text goes through the same reader as the bot's commission
+        # step: "15tr5" = 15,5 triệu; an ambiguous amount is refused, never
+        # stored as 0 or as a shortened number
+        from db import money
+        amount = money.parse_money(str(raw))
+        if not amount:
+            return {"error": "bad_amount",
+                    "error_vi": "Số tiền chưa rõ, vd: 15tr, 15tr5, 500k"}, 400
     did = db.create_deal(
         broker_id,
         client_id=data.get("client_id"),

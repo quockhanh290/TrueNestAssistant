@@ -861,6 +861,9 @@ async def process_outbox_notifications(ctx):
                         if result:
                             db.mark_report_reviewed(
                                 payload.get("report_id"))
+                            # admin /baocao: this strike can be taken back
+                            db.mark_report_penalty_applied(
+                                payload.get("report_id"), result)
                     except Exception as e2:
                         log.warning("false refresh penalize failed: %s", e2)
             elif n["ntype"] == "false_amenity_suspect":
@@ -876,6 +879,9 @@ async def process_outbox_notifications(ctx):
                         if result:
                             db.mark_report_reviewed(
                                 payload.get("report_id"))
+                            # admin /baocao: this strike can be taken back
+                            db.mark_report_penalty_applied(
+                                payload.get("report_id"), result)
                     except Exception as e2:
                         log.warning("false amenity penalize failed: %s", e2)
             elif n["ntype"] == "premium_request":

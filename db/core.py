@@ -741,6 +741,15 @@ def _migrate_listing_reports(conn):
             created_at REAL NOT NULL
         )"""
     )
+    # Penalty bookkeeping for the admin /baocao view (17/10): when the
+    # reserved strike was really applied (and the lock it set, if any),
+    # and when an admin took it back.
+    pcols = {r[1] for r in conn.execute("PRAGMA table_info(report_penalties)")}
+    for col, decl in (("broker_id", "INTEGER"), ("applied_at", "REAL"),
+                      ("banned_until", "REAL"), ("revoked_at", "REAL")):
+        if col not in pcols:
+            conn.execute(
+                f"ALTER TABLE report_penalties ADD COLUMN {col} {decl}")
 
 
 def _migrate_referrals(conn):

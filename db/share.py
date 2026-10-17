@@ -241,3 +241,139 @@ def list_unreviewed_reports(limit=50, path=None):
     ).fetchall()
     conn.close()
     return [dict(x) for x in rows]
+
+
+# ------------------------------------------------- admin /baocao (17/10)
+
+def mark_report_penalty_applied(report_id, result, path=None):
+    """Record that the strike reserved by `report_id` was really applied.
+
+    `result` is what refresh.flag_false_refresh returned (broker_id,
+    banned_until). Lets /baocao tell "penalised" from "reserved only" and
+    take back exactly this strike later.
+    """
+    if not report_id or not result:
+        return
+    conn = connect(path)
+    _migrate_listing_reports(conn)
+    conn.execute(
+        "UPDATE report_penalties SET applied_at = ?, broker_id = ?,"
+        " banned_until = ? WHERE report_id = ?",
+        (_now(), result.get("broker_id"), result.get("banned_until"),
+         report_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def _penalty_state(row):
+    """'applied' | 'revoked' | 'reserved' | None for a joined report row.
+
+    Rows from before 17/10 have no applied_at; there the pipeline marked
+    the report reviewed only after the strike was applied, so a reserved
+    + reviewed report counts as applied.
+    """
+    if row.get("p_token") is None:
+        return None
+    if row.get("p_revoked_at"):
+        return "revoked"
+    if row.get("p_applied_at") or row.get("reviewed"):
+        return "applied"
+    return "reserved"
+
+
+def list_recent_reports(limit=20, path=None):
+    """Newest share-page reports for the admin, with listing, broker and
+    penalty state ("penalty": applied/revoked/reserved/None)."""
+    conn = connect(path)
+    _migrate_listing_reports(conn)
+    rows = conn.execute(
+        "SELECT r.*, l.parsed AS listing_parsed,"
+        " b.display_name AS broker_name, b.username AS broker_username,"
+        " p.token AS p_token, p.applied_at AS p_applied_at,"
+        " p.revoked_at AS p_revoked_at"
+        " FROM listing_reports r"
+        " LEFT JOIN tg_listings l ON l.id = r.listing_id"
+        " LEFT JOIN brokers b ON b.user_id = r.broker_id"
+        " LEFT JOIN report_penalties p ON p.report_id = r.id"
+        " ORDER BY r.created_at DESC, r.id DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
+    conn.close()
+    out = []
+    for x in rows:
+        d = dict(x)
+        try:
+            d["listing_parsed"] = json.loads(d.get("listing_parsed") or "{}")
+        except (TypeError, ValueError):
+            d["listing_parsed"] = {}
+        d["penalty"] = _penalty_state(d)
+        out.append(d)
+    return out
+
+
+def revoke_report_penalty(report_id, path=None):
+    """Admin takes back the strike a share-page report caused.
+
+    Gives back exactly one false-report strike, once. If that brings the
+    broker under the ban threshold, the propose lock is lifted too (the
+    lock exists only because the count reached the threshold). A lock that
+    the remaining strikes still justify is kept.
+    Returns {"broker_id", "false_count", "unlocked"} or None when the
+    report caused no applied, still-standing penalty.
+    """
+    from .refresh import FALSE_REFRESH_BAN_COUNT
+    from .core import _migrate_refresh_reputation
+    conn = connect(path)
+    try:
+        _migrate_listing_reports(conn)
+        _migrate_refresh_reputation(conn)
+        row = conn.execute(
+            "SELECT p.*, r.reviewed AS reviewed, r.broker_id AS r_broker,"
+            " p.token AS p_token, p.applied_at AS p_applied_at,"
+            " p.revoked_at AS p_revoked_at"
+            " FROM report_penalties p"
+            " LEFT JOIN listing_reports r ON r.id = p.report_id"
+            " WHERE p.report_id = ?",
+            (report_id,),
+        ).fetchone()
+        if not row or _penalty_state(dict(row)) != "applied":
+            return None
+        broker_id = row["broker_id"] or row["r_broker"]
+        now = _now()
+        # claim the revoke first so a double tap cannot give back two
+        cur = conn.execute(
+            "UPDATE report_penalties SET revoked_at = ?"
+            " WHERE report_id = ? AND revoked_at IS NULL",
+            (now, report_id),
+        )
+        if cur.rowcount != 1:
+            conn.rollback()
+            return None
+        conn.execute(
+            "UPDATE brokers SET false_refresh_reports ="
+            " MAX(0, COALESCE(false_refresh_reports, 0) - 1)"
+            " WHERE user_id = ?",
+            (broker_id,),
+        )
+        b = conn.execute(
+            "SELECT false_refresh_reports, refresh_cooldown_until"
+            " FROM brokers WHERE user_id = ?",
+            (broker_id,),
+        ).fetchone()
+        count = (b["false_refresh_reports"] or 0) if b else 0
+        unlocked = False
+        if b and b["refresh_cooldown_until"] and \
+                b["refresh_cooldown_until"] > now and \
+                count < FALSE_REFRESH_BAN_COUNT:
+            conn.execute(
+                "UPDATE brokers SET refresh_cooldown_until = NULL"
+                " WHERE user_id = ?",
+                (broker_id,),
+            )
+            unlocked = True
+        conn.commit()
+        return {"broker_id": broker_id, "false_count": count,
+                "unlocked": unlocked}
+    finally:
+        conn.close()

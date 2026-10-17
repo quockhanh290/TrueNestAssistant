@@ -375,3 +375,30 @@ def delete_template(tpl_id, path=None):
     cur = conn.execute("DELETE FROM templates WHERE id = ?", (tpl_id,))
     conn.commit()
     conn.close()
+
+
+# statuses that mean the client no longer needs follow-up
+CLOSED_CLIENT_STATUSES = ("rented", "cancelled", "closed")
+
+
+def followup_clients(broker_id, quiet_days=5, limit=10, path=None):
+    """Open clients needing attention: urgency 'urgent', or not updated
+    for more than `quiet_days` days. Urgent first, then longest quiet."""
+    cutoff = _now() - quiet_days * 86400
+    ph = ", ".join("?" for _ in CLOSED_CLIENT_STATUSES)
+    conn = connect(path)
+    rows = conn.execute(
+        "SELECT * FROM clients WHERE broker_id = ?"
+        f" AND status NOT IN ({ph})"
+        " AND (urgency = 'urgent' OR updated_at < ?)"
+        " ORDER BY CASE urgency WHEN 'urgent' THEN 0 ELSE 1 END,"
+        " updated_at ASC LIMIT ?",
+        (broker_id, *CLOSED_CLIENT_STATUSES, cutoff, limit),
+    ).fetchall()
+    conn.close()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["viewed_listings"] = json.loads(d["viewed_listings"])
+        out.append(d)
+    return out

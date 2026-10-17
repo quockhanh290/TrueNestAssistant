@@ -19,7 +19,15 @@ from db import vntime
 from utils import MENU_KB, get_pronoun, natural_delay
 
 TIER_LABEL = {"free": "Free", "pro": "Pro 💎", "max": "Max 💎💎"}
-TIER_PRICE = {"pro": "99k/tháng", "max": "199k/tháng"}
+# Labels built from the one price table in db (also used to convert the
+# Pro days left on a paid Pro -> Max upgrade).
+TIER_PRICE_K = {t: f"{v // 1000}k" for t, v in db.TIER_PRICE_VND.items()}
+TIER_PRICE = {t: f"{k}/tháng" for t, k in TIER_PRICE_K.items()}
+
+
+def _days_vi(d):
+    """4.97 -> '5,0' (one decimal, Vietnamese comma)."""
+    return f"{d:.1f}".replace(".", ",")
 
 # Feature -> minimum tier required
 FEATURE_TIER = {
@@ -112,7 +120,7 @@ def _plans_text(uid, pn):
     if tier == "pro" and b.get("tier_expires_at"):
         exp = f" (hết hạn {vntime.fmt(b['tier_expires_at'], '%d/%m')})"
     lines.append(
-        f"\n💎 <b>Pro — 99k/tháng</b>{mark}{exp}\n"
+        f"\n💎 <b>Pro — {TIER_PRICE['pro']}</b>{mark}{exp}\n"
         f"• Auto-match tin cho khách\n"
         f"• Tìm kiếm bằng ngôn ngữ tự nhiên\n"
         f"• Viết bài 5 ngôn ngữ\n"
@@ -124,7 +132,7 @@ def _plans_text(uid, pn):
     if tier == "max" and b.get("tier_expires_at"):
         exp = f" (hết hạn {vntime.fmt(b['tier_expires_at'], '%d/%m')})"
     lines.append(
-        f"\n💎💎 <b>Max — 199k/tháng</b>{mark}{exp}\n"
+        f"\n💎💎 <b>Max — {TIER_PRICE['max']}</b>{mark}{exp}\n"
         f"• Tất cả của Pro\n"
         f"• Match liên broker\n"
         f"• Thống kê chi tiết\n"
@@ -144,12 +152,12 @@ def _plans_kb(uid):
     tier = db.get_tier(uid)
     kb = []
     if tier == "free":
-        kb.append([InlineKeyboardButton("💎 Đăng ký Pro (99k)",
+        kb.append([InlineKeyboardButton(f"💎 Đăng ký Pro ({TIER_PRICE_K['pro']})",
                                         callback_data="premium:want:pro")])
-        kb.append([InlineKeyboardButton("💎💎 Đăng ký Max (199k)",
+        kb.append([InlineKeyboardButton(f"💎💎 Đăng ký Max ({TIER_PRICE_K['max']})",
                                         callback_data="premium:want:max")])
     elif tier == "pro":
-        kb.append([InlineKeyboardButton("💎💎 Nâng lên Max (199k)",
+        kb.append([InlineKeyboardButton(f"💎💎 Nâng lên Max ({TIER_PRICE_K['max']})",
                                         callback_data="premium:want:max")])
     kb.append([InlineKeyboardButton("✅ Tôi đã chuyển khoản",
                                     callback_data="premium:paid")])
@@ -298,21 +306,38 @@ async def cmd_approve(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     # request used to grant a second time with the tier the broker asked
     # for, silently overriding the admin.
     req = db.get_pending_premium_request(target)
+    conv_left = conv_credit = 0.0
+    conv_from = None
     if req:
         decided = db.decide_premium_request(req["id"], True, tier=tier,
                                             days=30)
         exp = decided.get("expires_at")
+        # paid Pro -> Max: the Pro days left were converted by price
+        conv_from = decided.get("converted_from_tier")
+        conv_left = decided.get("converted_days_left") or 0.0
+        conv_credit = decided.get("converted_credit_days") or 0.0
     else:
         exp = db.set_tier(target, tier, days=30)
     exp_txt = vntime.fmt(exp) if exp else "không giới hạn"
+    conv_txt = ""
+    if conv_credit > 0:
+        old_name = (TIER_LABEL.get(conv_from) or conv_from or "").split()[0]
+        new_name = (TIER_LABEL.get(tier) or tier).split()[0]
+        conv_txt = (
+            f"{_days_vi(conv_left)} ngày {old_name} còn lại được quy đổi"
+            f" thành {_days_vi(conv_credit)} ngày {new_name}"
+            f" (theo giá {TIER_PRICE_K.get(conv_from)} /"
+            f" {TIER_PRICE_K.get(tier)}), cộng thêm vào 30 ngày.")
     try:
         await ctx.bot.send_message(
             target,
             f"🎉 Gói <b>{TIER_LABEL.get(tier)}</b> của anh đã được kích hoạt!\n"
-            f"Dùng tới {exp_txt}. Dùng /premium để xem chi tiết nhé 😊",
+            + (f"{conv_txt}\n" if conv_txt else "")
+            + f"Dùng tới {exp_txt}. Dùng /premium để xem chi tiết nhé 😊",
             parse_mode="HTML")
     except Exception:
         pass
     await update.message.reply_text(
         f"Đã kích hoạt {TIER_LABEL.get(tier)} cho {target}"
-        f" (hết hạn {exp_txt}) ✅")
+        f" (hết hạn {exp_txt}) ✅"
+        + (f"\n{conv_txt}" if conv_txt else ""))

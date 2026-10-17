@@ -1057,6 +1057,9 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await feat_templates.tpl_new(update, ctx)
         elif act == "del":
             await feat_templates.tpl_delete(update, ctx)
+    elif data.startswith("rpt:unpen:"):
+        # admin /baocao "Gỡ phạt" (admin check inside)
+        await feat_metrics.baocao_unpen_cb(update, ctx)
     elif data.startswith("rf:"):
         if not feat_premium.requires_tier(update.callback_query.from_user.id,
                                           "refresh"):
@@ -1354,6 +1357,7 @@ def main():
     app.add_handler(CommandHandler("approve", feat_premium.cmd_approve))
     app.add_handler(CommandHandler("matchstats", feat_match.cmd_matchstats))
     app.add_handler(CommandHandler("metrics", feat_metrics.cmd_metrics))
+    app.add_handler(CommandHandler("baocao", feat_metrics.cmd_baocao))
     app.add_handler(CommandHandler("skip", feat_listings.cmd_skip_photo_delete))
     app.add_handler(CommandHandler("huy", feat_listings.cmd_cancel_addphoto))
     app.add_handler(CommandHandler("thongbao", feat_notify.cmd_thongbao))

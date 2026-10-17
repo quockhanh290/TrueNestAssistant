@@ -72,6 +72,7 @@ def listing_summary(row):
         "photo_urls": list(row.get("photo_urls") or []),
         "has_post": bool(db.get_saved_post_langs(row["id"])),
         "created_at": row.get("created_at"),
+        "updated_at": row.get("updated_at"),
         "quality_score": score,
         "ai_scored": True,
         "amenities": p.get("amenities") or [],
@@ -676,3 +677,104 @@ def admin_list_reports(broker_id):
     for r in reports:
         r["reason_vi"] = db.REPORT_REASON_VI.get(r["reason"], r["reason"])
     return {"reports": reports, "count": len(reports)}, 200
+
+
+# ---------------------------------------------------------------- today
+FOLLOWUP_QUIET_DAYS = 5
+FOLLOWUP_MAX = 10
+
+
+def get_today(broker_id):
+    """GET /api/today — the mini app's home screen in one call.
+
+    "date" and the viewings window follow the Vietnam day (db.vntime), not
+    the host's (the host runs in Calgary). Every viewing of that day is
+    listed, including ones whose time has passed, earliest first.
+    "counts" reuse the exact db calls of the single APIs (/api/listings,
+    /api/clients, /api/viewings, /api/xbroker) so the numbers always agree
+    with what those screens show.
+    """
+    import datetime as _dt
+    import time as _time
+    from db import vntime
+    if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import api_clients_deals as api2
+
+    now_vn = vntime.now()
+    day = _dt.datetime(now_vn.year, now_vn.month, now_vn.day)
+    start = vntime.to_ts(day)
+    end = vntime.to_ts(day + _dt.timedelta(days=1))
+
+    # -- viewings of the Vietnam day
+    viewings = []
+    client_names = {}
+    for v in db.list_viewings_between(broker_id, start, end):
+        ids = v.get("listing_ids") or []
+        lid = ids[0] if ids else v.get("listing_id")
+        title = ""
+        if lid:
+            row = db.get_listing(lid)
+            if row and row.get("broker_id") == broker_id:
+                title = _title(master_schema.normalize_parsed(
+                    row.get("parsed") or {}))
+            else:
+                lid = None      # never leak another broker's listing
+        name = v.get("client_name") or ""
+        cid = v.get("client_id")
+        if not name and cid:
+            if cid not in client_names:
+                c = db.get_client(cid)
+                client_names[cid] = (c.get("name") or "") if (
+                    c and c.get("broker_id") == broker_id) else ""
+            name = client_names[cid]
+        viewings.append({
+            "id": v["id"],
+            "scheduled_at": v.get("scheduled_at"),
+            "time": vntime.fmt(v["scheduled_at"], "%H:%M"),
+            "client_id": cid,
+            "client_name": name,
+            "listing_id": lid,
+            "listing_title": title,
+            "status": v.get("status"),
+        })
+
+    # -- clients to follow up: open + (urgent or quiet > 5 days)
+    now = _time.time()
+    followups = []
+    for c in db.followup_clients(broker_id, quiet_days=FOLLOWUP_QUIET_DAYS,
+                                 limit=FOLLOWUP_MAX):
+        followups.append({
+            "id": c["id"],
+            "name": c.get("name") or "—",
+            "summary": api2._client_summary(c)["req_summary"],
+            "urgency": c.get("urgency"),
+            "days_since_update": int(max(0, now - (c.get("updated_at")
+                                                   or now)) // 86400),
+        })
+
+    # -- active listings not refreshed within the freshness window
+    window = utils.FRESHNESS_WINDOW_DAYS
+    cutoff = now - window * 86400
+    active = db.list_broker_listings(
+        broker_id, limit=10000, offset=0,
+        statuses=utils.PROFILE_ACTIVE_STATUSES)
+    stale = sum(1 for l in active if (l.get("updated_at") or 0) < cutoff)
+
+    # -- counts: same db calls (and limits) as the single APIs
+    counts = {
+        "listings": len(db.list_broker_listings(broker_id, limit=200,
+                                                offset=0)),
+        "clients": len(db.list_clients(broker_id, status=None, limit=100)),
+        "viewings_upcoming": len(db.list_viewings(
+            broker_id, upcoming_only=True, limit=50)),
+        "xbroker_pending": len(db.list_open_xbroker_requests(
+            exclude_broker_id=broker_id)),
+    }
+    return {
+        "date": now_vn.strftime("%Y-%m-%d"),
+        "viewings": viewings,
+        "followups": followups,
+        "stale_listings": {"count": stale, "window_days": window},
+        "counts": counts,
+    }, 200

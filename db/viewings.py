@@ -177,3 +177,17 @@ def viewings_between(broker_id, start_ts, end_ts, path=None):
     ).fetchall()
     conn.close()
     return [_parse_viewing_row(r) for r in rows]
+
+
+def list_viewings_between(broker_id, start_ts, end_ts, limit=200, path=None):
+    """All of a broker's viewings with start_ts <= scheduled_at < end_ts,
+    any status, earliest first (used for "today" in Vietnam time)."""
+    conn = connect(path)
+    rows = conn.execute(
+        "SELECT * FROM viewings WHERE broker_id = ?"
+        " AND scheduled_at >= ? AND scheduled_at < ?"
+        " ORDER BY scheduled_at ASC LIMIT ?",
+        (broker_id, start_ts, end_ts, limit),
+    ).fetchall()
+    conn.close()
+    return [_parse_viewing_row(r) for r in rows]

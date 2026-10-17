@@ -12,7 +12,7 @@ from telegram.ext import ContextTypes
 
 import config
 import db
-from db import vntime
+from db import money, vntime
 import parser as listing_parser
 from normalize import normalize_phone
 
@@ -263,22 +263,16 @@ async def _ask_deal_amount(msg_or_q, ctx, uid, c, l, edit):
 
 
 # Words allowed next to the digits of a commission reply ("15tr",
-# "15 triệu", "7.500.000đ"). Only units that parser.parse_price actually
-# reads: a unit accepted here but unreadable there ("500k", "2 củ", "1 tỷ")
-# would only lead to "em chưa hiểu số tiền" anyway (test pins this).
-_AMOUNT_UNITS = {"tr", "triệu", "trieu", "đ"}
+# "1,5 tỷ", "500k", "7.500.000đ"). The list lives in db.money next to the
+# reader itself, so the filter can never accept a unit the reader cannot
+# turn into money (tests/test_money_premium.py pins this).
+_AMOUNT_UNITS = money.AMOUNT_WORDS
 _AMOUNT_MAX_LEN = 30
 
 
 def _looks_like_amount(text):
     """True for a short, single-line money amount such as '15tr'."""
-    t = text.strip().lower()
-    if not t or len(t) > _AMOUNT_MAX_LEN or "\n" in t:
-        return False
-    if not re.search(r"\d", t):
-        return False
-    words = re.findall(r"[^\W\d_]+", t)
-    return all(w in _AMOUNT_UNITS for w in words)
+    return money.looks_like_amount(text, max_len=_AMOUNT_MAX_LEN)
 
 
 async def _handle_add_deal(update, ctx, ad, text):
@@ -303,10 +297,14 @@ async def _handle_add_deal(update, ctx, ad, text):
         await update.message.reply_text(
             "Em chưa hiểu số tiền, anh nhập lại giúp em nhé? (vd: 15tr)")
         return True
-    val, _ = listing_parser.parse_price(text)
-    if not val or val <= 0:
+    # db.money reads the WHOLE reply or nothing: "15tr5" is 15,5 triệu,
+    # and an ambiguous reply ("7.500.000k", "15") is asked again instead
+    # of being booked as a shortened number.
+    val = money.parse_money(text)
+    if not val:
         await update.message.reply_text(
-            "Em chưa hiểu số tiền, anh nhập lại giúp em nhé? (vd: 15tr)")
+            "Em chưa hiểu số tiền, anh nhập lại giúp em nhé?"
+            " (vd: 15tr, 15tr5, 500k, 1,5 tỷ)")
         return True
     deal_id = db.create_deal(uid, client_id=ad.get("client_id"),
                              client_name=ad.get("client_name") or "",
