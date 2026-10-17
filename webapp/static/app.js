@@ -1636,16 +1636,17 @@
           var btn = this;
           btn.disabled = true;
           btn.textContent = "Đang tạo...";
-          trialUse("send2client").then(function () {
-            return api("/api/share", {
-              method: "POST",
-              body: {
-                listing_ids: listingIds,
-                title: document.getElementById("sc-title").value.trim(),
-                client_id: clientId,
-              },
-            });
+          // POST /api/share consumes the trial itself (atomic, refunded on
+          // failure); a trialUse() first made every link cost two uses.
+          api("/api/share", {
+            method: "POST",
+            body: {
+              listing_ids: listingIds,
+              title: document.getElementById("sc-title").value.trim(),
+              client_id: clientId,
+            },
           }).then(function (r) {
+            trialRefresh("send2client");
             if (r.error) {
               toast(r.error_vi || "Tạo thất bại");
               btn.disabled = false;
