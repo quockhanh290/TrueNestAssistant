@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#071420">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Gia thi truong</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script>
+if (window.Telegram?.WebApp) {
+  try { document.body.classList.add('in-telegram'); } catch(e) {
+    document.addEventListener('DOMContentLoaded', function() {
+      document.body.classList.add('in-telegram');
+    });
+  }
+  const tg = window.Telegram.WebApp;
+  tg.ready(); tg.expand();
+  tg.setHeaderColor('#071420');
+  tg.setBackgroundColor('#071420');
+  // Fullscreen (Bot API 8.0+) - hide Telegram header buttons
+  function tryFullscreen() {
+    try {
+      if (tg.requestFullscreen && !tg.isFullscreen) tg.requestFullscreen();
+      // Also try to set header/bg to match (hides visual separation)
+      if (tg.setHeaderColor) tg.setHeaderColor('#071420');
+      if (tg.setBackgroundColor) tg.setBackgroundColor('#071420');
+    } catch(e) {}
+  }
+  tryFullscreen();
+  document.addEventListener('pointerdown', tryFullscreen, { once: true });
+  // Disable vertical swipes closing the app
+  if (tg.disableVerticalSwipes) { try { tg.disableVerticalSwipes(); } catch(e) {} }
+}
+</script>
+<style>
+body{margin:0;background:#071420;-webkit-user-select:none;user-select:none}
+button{font-family:inherit;cursor:pointer}
+input::placeholder{color:#7f90a1}
+.noscroll{scrollbar-width:none}
+.noscroll::-webkit-scrollbar{display:none}
+#cards{padding-bottom:96px}#cards:empty::after{content:'Đang tải...';display:block;text-align:center;color:#7f90a1;padding:48px 16px;font:400 14px/20px 'Be Vietnam Pro',sans-serif}
+</style>
+
+<style>
+/* Telegram + iOS safe areas */
+.main-wrap { padding-top: env(safe-area-inset-top); }
+</style>
+
+<style>
+.sticky-header { position: sticky; top: 0; z-index: 50; background: #071420; }
+</style>
+
+<style>
+/* Hide design back/close buttons when in Telegram Mini App */
+body.in-telegram .design-nav-btn { display: none !important; }
+</style>
+</head><body><div style="width:100%;max-width:420px;margin:0 auto;min-height:100vh;background:#071420">
