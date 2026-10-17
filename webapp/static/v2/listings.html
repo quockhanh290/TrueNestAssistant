@@ -138,10 +138,17 @@ input::placeholder{color:#7f90a1}
   
   function cardHtml(l) {
     const p = l.parsed || l;
-    const score = l.quality_score || 0;
+    const score = Math.round(l.quality_score || 0);
     const sc = scoreColor(score);
     const img = (l.photo_urls || [])[0] || '';
-    const title = esc(l.title || 'Chưa có tiêu đề');
+    // Build title if missing
+    let title = l.title;
+    if (!title || title === '-' || title === '—') {
+      const brl = l.bedroom_label || (p.bedrooms ? p.bedrooms + 'PN' : '');
+      const plc = p.district || p.building_name || '';
+      title = (brl + ' ' + plc).trim() || 'Chưa có tiêu đề';
+    }
+    title = esc(title);
     const price = fmtPrice(p.price_vnd || l.price_vnd);
     const district = esc(p.district || p.building_name || '');
     const br = l.bedroom_label || (p.bedrooms ? p.bedrooms + 'PN' : '');
@@ -149,8 +156,10 @@ input::placeholder{color:#7f90a1}
     const area = p.area_m2 ? p.area_m2 + ' m²' : '';
     const st = (l.status || '') === 'rented' ? 'Đã thuê' : 'Còn trống';
     const stColor = (l.status || '') === 'rented' ? '#8596a7' : '#7bdc75';
-    const amenities = (l.amenities || p.amenities || []).slice(0, 3);
+    const amenities = (p.amenities || l.amenities || []).slice(0, 3);
+    const amenExtra = (p.amenities || l.amenities || []).length - 3;
     const highlights = (p.highlights || []).slice(0, 2);
+    const hlExtra = (p.highlights || []).length - 2;
     
     return '<article style="display:flex;flex-direction:column;overflow:hidden;border-radius:14px;background:#14212d;border:1px solid #243241">' +
     '<div style="display:flex;gap:12px;padding:12px 12px 10px">' +
@@ -171,10 +180,12 @@ input::placeholder{color:#7f90a1}
           (area ? '<span style="display:flex;align-items:center;gap:4px">' + ICONS.area + esc(area) + '</span>' : '') +
         '</div>' +
         (amenities.length ? '<div style="display:flex;align-items:center;gap:8px;color:#8596a7;font:400 12px/16px \'Be Vietnam Pro\',sans-serif;white-space:nowrap;overflow:hidden">' +
-          amenities.map(a => '<span>' + esc(a) + '</span>').join('<span style="color:#4d6073">·</span>') + '</div>' : '') +
+          amenities.map(a => '<span>' + esc(a) + '</span>').join('<span style="color:#4d6073">·</span>') +
+          (amenExtra > 0 ? '<span style="padding:0 6px;border-radius:6px;background:rgba(137,206,255,0.12);color:#89ceff;font:600 11px/16px \'JetBrains Mono\',monospace">+' + amenExtra + '</span>' : '') + '</div>' : '') +
       '</div>' +
     '</div>' +
-    (highlights.length ? '<div style="padding:0 12px 10px;display:flex;align-items:center;gap:8px"><span style="color:#b6c2cf;font:400 12px/18px \'Be Vietnam Pro\',sans-serif">' + highlights.map(esc).join(' · ') + '</span></div>' : '') +
+    (highlights.length ? '<div style="padding:0 12px 10px;display:flex;align-items:center;gap:8px;overflow:hidden"><span style="color:#b6c2cf;font:400 12px/18px \'Be Vietnam Pro\',sans-serif;white-space:nowrap">' + highlights.map(esc).join('</span><span style="color:#4d6073"> · </span><span style="color:#b6c2cf;font:400 12px/18px \'Be Vietnam Pro\',sans-serif;white-space:nowrap">') + '</span>' +
+          (hlExtra > 0 ? '<span style="flex:none;padding:3px 8px;border-radius:6px;background:rgba(137,206,255,0.12);color:#89ceff;font:600 11px/16px \'JetBrains Mono\',monospace;white-space:nowrap">+' + hlExtra + '</span>' : '') + '</div>' : '') +
     '</article>';
   }
   
