@@ -172,6 +172,10 @@ def add_client_note_api(broker_id, client_id, note):
 def create_viewing_api(broker_id, data):
     """POST /api/viewings — schedule a viewing."""
     data = data or {}
+    # A viewing without a time used to be stored at "now"; the app always
+    # sends one, so a missing time is a client bug -> 400 (17/10/2026)
+    if data.get("scheduled_at") in (None, ""):
+        raise db.FieldError("scheduled_at", "required")
     vid = db.create_viewing(
         broker_id,
         client_id=data.get("client_id"),
@@ -352,8 +356,12 @@ def set_notify_pref_api(broker_id, pref, value):
     """PUT /api/notify/prefs — toggle one preference."""
     if pref not in db.NOTIFY_PREFS:
         return {"error": "unknown_pref"}, 400
-    db.set_notify_pref(broker_id, pref, bool(value))
-    return {"ok": True, "pref": pref, "enabled": bool(value)}, 200
+    # bool("false") is True: the db layer reads "false"/"0"/"off" as off and
+    # refuses anything else (FieldError -> 400)
+    from db.validate import to_bool
+    enabled = to_bool(value, "enabled")
+    db.set_notify_pref(broker_id, pref, enabled)
+    return {"ok": True, "pref": pref, "enabled": enabled}, 200
 
 
 # ---------------------------------------------------------------- premium

@@ -59,6 +59,57 @@ def increment_trial_usage(broker_id, feature, path=None):
         conn.close()
 
 
+def consume_trial(broker_id, feature, path=None):
+    """Use one trial if one is left: (ok, used_after).
+
+    One conditional UPDATE (`... WHERE used_count < limit`) decides, so N
+    parallel calls can never consume more than the limit. The old
+    check_trial-then-increment pair let 12 parallel taps use 12 of 3.
+    The tier check stays with the caller (tier-covered = no consumption).
+    """
+    if feature not in TRIAL_LIMITS:
+        raise ValueError(f"unknown trial feature: {feature}")
+    limit = TRIAL_LIMITS[feature]
+    now = _now()
+    conn = connect(path)
+    try:
+        conn.execute(
+            "INSERT INTO trial_usage (broker_id, feature, used_count, updated_at)"
+            " VALUES (?, ?, 0, ?) ON CONFLICT(broker_id, feature) DO NOTHING",
+            (broker_id, feature, now),
+        )
+        cur = conn.execute(
+            "UPDATE trial_usage SET used_count = used_count + 1, updated_at = ?"
+            " WHERE broker_id = ? AND feature = ? AND used_count < ?",
+            (now, broker_id, feature, limit),
+        )
+        ok = cur.rowcount == 1
+        used = conn.execute(
+            "SELECT used_count FROM trial_usage"
+            " WHERE broker_id = ? AND feature = ?",
+            (broker_id, feature),
+        ).fetchone()["used_count"]
+        conn.commit()
+        return ok, used
+    finally:
+        conn.close()
+
+
+def refund_trial(broker_id, feature, path=None):
+    """Give one consumed trial back (the paid action failed after
+    consume_trial). Never goes below 0."""
+    conn = connect(path)
+    try:
+        conn.execute(
+            "UPDATE trial_usage SET used_count = used_count - 1, updated_at = ?"
+            " WHERE broker_id = ? AND feature = ? AND used_count > 0",
+            (_now(), broker_id, feature),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def check_trial(broker_id, feature, path=None):
     """(allowed, remaining) for a trial-gated feature.
 

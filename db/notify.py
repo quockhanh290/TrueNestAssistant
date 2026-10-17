@@ -3,6 +3,8 @@ from .core import connect, _now, NOTIFY_PREFS, NOTIFY_PREF_LABELS, _migrate_matc
 import json
 import uuid
 
+from .validate import to_bool
+
 
 
 def was_notified(request_id, broker_id, path=None):
@@ -45,9 +47,12 @@ def get_notify_prefs(broker_id, path=None):
 
 
 def set_notify_pref(broker_id, pref, value, path=None):
-    """Set one notification preference. Returns False on unknown pref."""
+    """Set one notification preference. Returns False on unknown pref.
+    value: bool, 0/1 or "true"/"false" ("false" is off; bool("false") was
+    on). Anything else raises FieldError."""
     if pref not in NOTIFY_PREFS:
         return False
+    value = to_bool(value, "enabled")
     conn = connect(path)
     _migrate_broker_notify_prefs(conn)
     conn.execute(

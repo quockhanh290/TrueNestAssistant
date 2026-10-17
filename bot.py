@@ -5,6 +5,12 @@ Thin orchestrator: menu/start/help, onboarding, contacts, central routers
 
 Run:  TELEGRAM_BOT_TOKEN=... python bot.py
 """
+if __name__ == "__main__":
+    # First, before the heavier imports: under pythonw (start-all.ps1) stdout
+    # and stderr are None, so a failing import or a traceback was invisible.
+    from db import logsetup as _logsetup
+    _logsetup.setup("bot")
+
 import asyncio
 import logging
 import random
@@ -1383,5 +1389,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit as e:
+        _logsetup.log_system_exit("bot", e)
+        raise
 

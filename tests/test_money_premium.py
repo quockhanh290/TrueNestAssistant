@@ -403,8 +403,11 @@ class TestTodayApi(PendingMixin, LinhFlowTest):
         old = self.listing(uid)["id"]
         self.listing(uid)
         conn = db.connect()
-        conn.execute("UPDATE tg_listings SET updated_at = ? WHERE id = ?",
-                     (time.time() - 8 * DAY, old))
+        # 17/10/2026: freshness reads confirmed_at (last "still available"
+        # confirmation), not updated_at, which moves on any edit
+        conn.execute("UPDATE tg_listings SET updated_at = ?, confirmed_at = ?"
+                     " WHERE id = ?",
+                     (time.time() - 8 * DAY, time.time() - 8 * DAY, old))
         conn.commit()
         conn.close()
         data = self.today(uid)

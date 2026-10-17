@@ -6,6 +6,35 @@ import config
 from .refresh import log_refresh_claim
 import uuid
 
+from .validate import to_bool, to_number, choice
+
+
+# Every status a listing row may hold. "active" is a filter alias in
+# search_listings, but some readers (active_listing_count, feat_match,
+# feat_notify) also accept it as a stored value and the test fixtures store
+# it, so it stays allowed. 0 rows hold it in the real DB (17/10/2026).
+LISTING_STATUSES = ("draft", "pending_info", "submitted", "negotiating",
+                    "deposited", "rented", "expired", "uncertain", "deleted",
+                    "active")
+
+# SQL for "last confirmed available" (see core._migrate_listings_confirmed_at).
+# Module-level so every SQL reader uses the same expression.
+CONFIRMED_SQL = "COALESCE(l.confirmed_at, l.updated_at)"
+
+
+def confirmed_ts(row):
+    """When the broker last confirmed this listing is still available.
+
+    The one reader for listing freshness (propose ranking, profile score,
+    stale counts and reminders, badges). updated_at only says the row was
+    changed: a price edit or a photo upload is not a confirmation.
+    Falls back to updated_at/created_at for a row read before the migration.
+    """
+    for k in ("confirmed_at", "updated_at", "created_at"):
+        v = row.get(k)
+        if v is not None:
+            return v
+    return 0
 
 
 def active_listing_count(broker_id, path=None):
@@ -31,18 +60,20 @@ def check_listing_limit(broker_id, path=None):
 def create_listing(broker_id, raw_text="", photo_file_ids=None,
                    parsed=None, missing_fields=None, status="draft",
                    content_hash=None, path=None):
+    choice(status, "status", LISTING_STATUSES)
     listing_id = "tg:" + uuid.uuid4().hex[:12]
     now = _now()
     conn = connect(path)
     conn.execute(
         "INSERT INTO tg_listings (id, broker_id, raw_text, photo_file_ids,"
-        " parsed, missing_fields, status, content_hash, created_at, updated_at)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " parsed, missing_fields, status, content_hash, created_at, updated_at,"
+        " confirmed_at)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (listing_id, broker_id, raw_text,
          json.dumps(photo_file_ids or [], ensure_ascii=False),
          json.dumps(parsed or {}, ensure_ascii=False),
          json.dumps(missing_fields or [], ensure_ascii=False),
-         status, content_hash, now, now),
+         status, content_hash, now, now, now),
     )
     conn.execute(
         "UPDATE brokers SET listings_count = listings_count + 1"
@@ -92,6 +123,8 @@ def update_listing(listing_id, path=None, **fields):
     json_fields = {"photo_file_ids", "photo_urls", "photo_hashes",
                    "photo_phashes",
                    "parsed", "missing_fields"}
+    if "status" in fields:
+        choice(fields["status"], "status", LISTING_STATUSES)
     sets, vals = [], []
     for k, v in fields.items():
         if k not in allowed:
@@ -114,6 +147,10 @@ def update_listing(listing_id, path=None, **fields):
 
 
 def set_listing_status(listing_id, new_status, changed_by="broker", path=None):
+    """Raises FieldError for a status outside LISTING_STATUSES (the webapp
+    stored "bogus" before, and the listing vanished from every filter).
+    A status change is not a confirmation: confirmed_at is left alone."""
+    choice(new_status, "status", LISTING_STATUSES)
     conn = connect(path)
     row = conn.execute(
         "SELECT status, broker_id FROM tg_listings WHERE id = ?", (listing_id,)
@@ -149,7 +186,7 @@ def set_listing_status(listing_id, new_status, changed_by="broker", path=None):
 
 def refresh_listing(listing_id, broker_id=None, claimed_status="available",
                     velocity_flag=False, path=None):
-    """Bump updated_at to now without changing any data.
+    """Mark the listing confirmed available now (confirmed_at), data unchanged.
 
     Used by the propose flow (Khanh 2026-10-16, revised): broker confirms the
     listing is still accurate after (claimed) real-world verification,
@@ -164,9 +201,10 @@ def refresh_listing(listing_id, broker_id=None, claimed_status="available",
     if not row:
         conn.close()
         return False
+    now = _now()
     conn.execute(
-        "UPDATE tg_listings SET updated_at = ? WHERE id = ?",
-        (_now(), listing_id),
+        "UPDATE tg_listings SET confirmed_at = ?, updated_at = ? WHERE id = ?",
+        (now, now, listing_id),
     )
     conn.commit()
     conn.close()
@@ -189,6 +227,7 @@ def update_listing_field(listing_id, field, value, changed_by="broker", path=Non
     filled. If the listing was pending_info and nothing is missing any
     more, it is promoted to 'submitted'. Returns False if not found.
     """
+    value = _check_parsed_value(field, value)
     conn = connect(path)
     row = conn.execute(
         "SELECT parsed, raw_text, missing_fields, status FROM tg_listings"
@@ -257,6 +296,27 @@ def update_listing_field(listing_id, field, value, changed_by="broker", path=Non
     return True
 
 
+# parsed keys that hold money: text goes through db.money ("12tr")
+_MONEY_FIELDS = {"price_vnd"}
+
+
+def _check_parsed_value(field, value):
+    """Type of one `parsed` field from the master schema: numbers become
+    float ("12tr" for money), booleans accept "false"/"0" as False.
+    None clears a field. Strings/arrays/other keys pass unchanged.
+    Raises FieldError (webapp -> 400) for a value that cannot be read."""
+    if field in ("description", "location") or value is None:
+        return value
+    import schema as master_schema   # root module; lazy keeps db importable
+    key = master_schema.FIELD_ALIASES.get(field, field)
+    kind = master_schema.MASTER_SCHEMA.get(key, (None,))[0]
+    if kind == "number":
+        return to_number(value, field, money=key in _MONEY_FIELDS)
+    if kind == "boolean":
+        return to_bool(value, field)
+    return value
+
+
 def _log_field_edit(conn, listing_id, field, old, new, changed_by, now):
     """Audit-trail entry for a field edit, reusing tg_events."""
     conn.execute(
@@ -268,13 +328,15 @@ def _log_field_edit(conn, listing_id, field, old, new, changed_by, now):
 
 
 def touch_listing(listing_id, path=None):
-    """Refresh a listing: bump created_at/updated_at to now (repost).
-    Used by the 'Làm mới tin' button for stale (>30d) listings."""
+    """Refresh a listing: the broker confirms it is still available.
+    Bumps confirmed_at, and created_at/updated_at as before (repost order).
+    Used by 'Làm mới tin', the stale ✅ button and the refresh reminders."""
     now = _now()
     conn = connect(path)
     conn.execute(
-        "UPDATE tg_listings SET created_at = ?, updated_at = ? WHERE id = ?",
-        (now, now, listing_id),
+        "UPDATE tg_listings SET created_at = ?, updated_at = ?,"
+        " confirmed_at = ? WHERE id = ?",
+        (now, now, now, listing_id),
     )
     conn.commit()
     conn.close()
@@ -678,14 +740,15 @@ def count_search(broker_id, filters, path=None):
 
 
 def stale_listings(older_than_days=7, statuses=("submitted",), path=None):
-    """Listings not updated in N days — candidates for availability nudge."""
+    """Listings not confirmed available in N days (confirmed_at): the
+    candidates for the availability nudge. An edit is not a confirmation."""
     conn = connect(path)
     ph = ", ".join("?" for _ in statuses)
     rows = conn.execute(
         f"SELECT l.*, b.username, b.display_name FROM tg_listings l"
         f" JOIN brokers b ON b.user_id = l.broker_id"
-        f" WHERE l.status IN ({ph}) AND l.updated_at < ?"
-        " ORDER BY l.updated_at ASC",
+        f" WHERE l.status IN ({ph}) AND {CONFIRMED_SQL} < ?"
+        f" ORDER BY {CONFIRMED_SQL} ASC",
         (*statuses, _now() - older_than_days * 86400),
     ).fetchall()
     conn.close()

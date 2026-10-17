@@ -7,3 +7,5 @@ __pycache__/
 token.txt
 
 webapp_url.txt
+logs/
+backups/

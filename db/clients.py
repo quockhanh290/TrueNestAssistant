@@ -4,6 +4,8 @@ import json
 import time
 import uuid
 
+from .validate import to_number
+
 
 
 CLIENT_STATUSES = ("new", "sent", "pending_viewing", "scheduled", "viewed",
@@ -21,7 +23,7 @@ def create_client(broker_id, name="", phone="", requirements_raw="",
         urgency = "normal"
     client_id = "cli:" + uuid.uuid4().hex[:12]
     now = _now()
-    r = requirements or {}
+    r = _typed_requirements(requirements or {})
     conn = connect(path)
     conn.execute(
         "INSERT INTO clients (id, broker_id, name, phone, budget_min,"
@@ -37,6 +39,18 @@ def create_client(broker_id, name="", phone="", requirements_raw="",
     conn.commit()
     conn.close()
     return client_id
+
+
+def _typed_requirements(r):
+    """min/max price as money ("15tr" -> 15e6), bedrooms as a number.
+    FieldError (webapp -> 400) for anything unreadable, e.g. "2PN"."""
+    r = dict(r)
+    for k, field in (("min_price", "budget_min"), ("max_price", "budget_max")):
+        if k in r:
+            r[k] = to_number(r[k], field, money=True)
+    if "bedrooms" in r:
+        r["bedrooms"] = to_number(r["bedrooms"], "bedrooms")
+    return r
 
 
 def touch_contact(client_id, path=None):
@@ -177,6 +191,11 @@ def update_client(client_id, path=None, **fields):
     if "urgency" in fields and fields["urgency"] not in ("urgent", "normal",
                                                          "low"):
         fields["urgency"] = "normal"
+    for k in ("budget_min", "budget_max"):
+        if k in fields:
+            fields[k] = to_number(fields[k], k, money=True)
+    if "bedrooms" in fields:
+        fields["bedrooms"] = to_number(fields["bedrooms"], "bedrooms")
     for k, v in fields.items():
         if k not in allowed:
             continue

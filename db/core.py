@@ -295,6 +295,9 @@ def init_db(path=None):
     _migrate_refresh_log(conn)
     _migrate_listing_reports(conn)
     _migrate_referrals(conn)
+    _migrate_listings_confirmed_at(conn)
+    # last: needs every column above to exist
+    _migrate_type_triggers(conn)
     conn.commit()
     conn.close()
 
@@ -788,6 +791,87 @@ def _migrate_referrals(conn):
         "CREATE INDEX IF NOT EXISTS idx_referral_rewards_broker"
         " ON referral_rewards(broker_id, expires_at)"
     )
+
+
+def _migrate_listings_confirmed_at(conn):
+    """tg_listings.confirmed_at: the last time the broker confirmed the
+    listing is still available (create, "làm mới", stale ✅, webapp refresh).
+
+    updated_at keeps meaning "the row changed" (price edit, photo upload,
+    saved post...). Freshness, profile score, stale reminders and the stale
+    count on /api/today read confirmed_at (Khanh 17/10/2026).
+    Backfill = current updated_at (the meaning the code gave it until now).
+    Idempotent; a second process adding the column at the same moment only
+    loses the race (duplicate column), which is ignored.
+    """
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(tg_listings)")}
+    if "confirmed_at" not in cols:
+        try:
+            conn.execute("ALTER TABLE tg_listings ADD COLUMN confirmed_at REAL")
+        except sqlite3.OperationalError as e:
+            if "duplicate column" not in str(e).lower():
+                raise
+    # only copy numbers: a text updated_at stays visible to scan_types
+    # instead of spreading into the new column
+    conn.execute(
+        "UPDATE tg_listings SET confirmed_at = updated_at"
+        " WHERE confirmed_at IS NULL"
+        " AND typeof(updated_at) IN ('real', 'integer')")
+    conn.execute(
+        "UPDATE tg_listings SET confirmed_at = created_at"
+        " WHERE confirmed_at IS NULL"
+        " AND typeof(created_at) IN ('real', 'integer')")
+
+
+# Number columns (besides every *_at / *_until time column) whose type the
+# triggers enforce. Kept short on purpose: these are the ones a broker types.
+TYPED_NUMBER_COLUMNS = {
+    "clients": ("budget_min", "budget_max", "bedrooms"),
+    "deals": ("commission_vnd",),
+    "trial_usage": ("used_count",),
+}
+
+
+def typed_columns(conn):
+    """[(table, column)] the type triggers cover: every REAL/INTEGER column
+    named *_at or *_until, plus TYPED_NUMBER_COLUMNS. Derived from the live
+    schema, so a time column added later is covered on the next init_db."""
+    out = []
+    tables = [r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+        " AND name NOT LIKE 'sqlite_%' ORDER BY name")]
+    for t in tables:
+        extra = TYPED_NUMBER_COLUMNS.get(t, ())
+        for r in conn.execute(f'PRAGMA table_info("{t}")'):
+            name, decl, pk = r[1], (r[2] or "").upper(), r[5]
+            if pk or decl not in ("REAL", "INTEGER"):
+                continue
+            if name.endswith("_at") or name.endswith("_until") or name in extra:
+                out.append((t, name))
+    return out
+
+
+def _migrate_type_triggers(conn):
+    """Refuse text/blob in time and number columns, for every writer —
+    including scripts that open the file with sqlite3 directly (17/10:
+    `updated_at = datetime('now')` stored text and crashed two screens).
+
+    SQLite applies column affinity before the trigger sees NEW, so a numeric
+    string like '1760000000' is already a number here and passes.
+    The UPDATE trigger is per column (UPDATE OF col), so an old bad value in
+    another column never blocks an unrelated update. Idempotent.
+    """
+    for t, col in typed_columns(conn):
+        cond = f"typeof(NEW.\"{col}\") NOT IN ('real', 'integer', 'null')"
+        msg = f"{t}.{col} must be a number (epoch seconds for times)"
+        conn.execute(
+            f'CREATE TRIGGER IF NOT EXISTS "typechk_{t}_{col}_ins"'
+            f' BEFORE INSERT ON "{t}" WHEN {cond}'
+            f" BEGIN SELECT RAISE(ABORT, '{msg}'); END")
+        conn.execute(
+            f'CREATE TRIGGER IF NOT EXISTS "typechk_{t}_{col}_upd"'
+            f' BEFORE UPDATE OF "{col}" ON "{t}" WHEN {cond}'
+            f" BEGIN SELECT RAISE(ABORT, '{msg}'); END")
 
 
 def get_metrics_summary(since, path=None):

@@ -216,9 +216,16 @@ from .trial import (
     TRIAL_LIMITS,
     TRIAL_TIER,
     check_trial,
+    consume_trial,
     get_trial_usage,
     increment_trial_usage,
+    refund_trial,
 )
+
+from .validate import FieldError
+from .ownership import OWNER_TABLES, owner_of
+from .core import TYPED_NUMBER_COLUMNS, typed_columns
+from .listings import LISTING_STATUSES, confirmed_ts
 
 from .notify import (
     NOTIFY_PREFS,
@@ -535,4 +542,13 @@ __all__ = [
     "mark_qualified",
     "maybe_grant_inviter_reward",
     "run_fraud_checks",
+    "consume_trial",
+    "refund_trial",
+    "FieldError",
+    "OWNER_TABLES",
+    "owner_of",
+    "TYPED_NUMBER_COLUMNS",
+    "typed_columns",
+    "LISTING_STATUSES",
+    "confirmed_ts",
 ]

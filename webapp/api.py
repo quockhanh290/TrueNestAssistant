@@ -73,6 +73,9 @@ def listing_summary(row):
         "has_post": bool(db.get_saved_post_langs(row["id"])),
         "created_at": row.get("created_at"),
         "updated_at": row.get("updated_at"),
+        # last time the broker confirmed it is still available (freshness);
+        # updated_at moves on any edit (17/10/2026)
+        "confirmed_at": db.confirmed_ts(row),
         "quality_score": score,
         "ai_scored": True,
         "amenities": p.get("amenities") or [],
@@ -214,10 +217,20 @@ def update_listing(broker_id, listing_id, fields):
     row = db.get_listing(listing_id)
     if not row or row.get("broker_id") != broker_id:
         return {"error": "not_found"}, 404
+    # Check every value first (FieldError -> 400 bad_field), so a bad value
+    # never leaves the listing half-updated. Before 17/10 a value that
+    # float() could not read was skipped silently and the reply was 200.
+    from db.listings import _check_parsed_value
+    checked = {}
+    for name, value in (fields or {}).items():
+        if name in EDITABLE_FIELDS and name not in (
+                "description", "district", "street", "building_name"):
+            checked[name] = _check_parsed_value(name, value)
     updated = []
     for name, value in (fields or {}).items():
         if name not in EDITABLE_FIELDS:
             continue
+        value = checked.get(name, value)
         if name == "description":
             ok = db.update_listing_field(listing_id, "description", value,
                                          changed_by="webapp")
@@ -225,12 +238,6 @@ def update_listing(broker_id, listing_id, fields):
             ok = db.update_listing_field(
                 listing_id, "location", {name: value}, changed_by="webapp")
         else:
-            # numeric fields: coerce
-            if name in ("price_vnd", "bedrooms", "bathrooms", "area_m2"):
-                try:
-                    value = float(value) if value not in (None, "") else None
-                except (TypeError, ValueError):
-                    continue
             ok = db.update_listing_field(listing_id, name, value,
                                          changed_by="webapp")
         if ok:
@@ -244,6 +251,8 @@ def set_status(broker_id, listing_id, status):
     row = db.get_listing(listing_id)
     if not row or row.get("broker_id") != broker_id:
         return {"error": "not_found"}, 404
+    if status not in db.LISTING_STATUSES:
+        return {"error": "invalid_status"}, 400
     ok = db.set_listing_status(listing_id, status, changed_by="webapp")
     if not ok:
         return {"error": "invalid_status"}, 400
@@ -346,7 +355,12 @@ def use_trial(broker_id, feature):
         # Tier covers it — no trial consumed.
         return {"feature": feature, "used": db.get_trial_usage(broker_id, feature),
                 "remaining": -1, "limit": db.TRIAL_LIMITS[feature]}, 200
-    used = db.increment_trial_usage(broker_id, feature)
+    # One UPDATE ... WHERE used < limit: two taps at once cannot both take
+    # the last use (17/10: 12 parallel calls all got 200 with check-then-add)
+    ok, used = db.consume_trial(broker_id, feature)
+    if not ok:
+        return {"error": "trial_exhausted",
+                "required_tier": db.TRIAL_TIER[feature]}, 402
     left = db.TRIAL_LIMITS[feature] - used
     # Proactive: warn when 1 trial left (Khanh 2026-10-16)
     if left == 1:
@@ -391,9 +405,20 @@ def create_share(broker_id, listing_ids, title="", client_id=None):
             valid.append(lid)
     if not valid:
         return {"error": "no_valid_listings"}, 400
-    token = db.create_share_page(broker_id, valid, title=title,
-                                 client_id=client_id)
-    use_trial(broker_id, "send2client")  # consume trial (no-op if tier-covered)
+    # Take the trial use first (atomic), then create the page; give the use
+    # back if creating fails. Before 17/10 the page was created first and the
+    # use counted after, so parallel taps made more pages than the limit.
+    res, code = use_trial(broker_id, "send2client")
+    if code != 200:
+        return res, code
+    consumed = res.get("remaining", -1) != -1
+    try:
+        token = db.create_share_page(broker_id, valid, title=title,
+                                     client_id=client_id)
+    except Exception:
+        if consumed:
+            db.refund_trial(broker_id, "send2client")
+        raise
     import config  # noqa: E402
     url = f"{config.WEBAPP_URL.rstrip('/')}/s/{token}"
     return {"token": token, "url": url,
@@ -438,12 +463,13 @@ FRESHNESS_TIERS = [
 def freshness_info(row, now=None):
     """(age_days, emoji, label, multiplier, tier) for a listing row.
 
-    Age is measured from updated_at (last status refresh), falling back to
-    created_at. Returns tier "stale" with multiplier 0 when age > 60 days.
+    Age is measured from confirmed_at (the broker's last "still available"
+    confirmation; a price or photo edit does not count), falling back to
+    updated_at/created_at. Tier "stale" with multiplier 0 when age > 60 days.
     """
     import time
     now = now if now is not None else time.time()
-    ts = row.get("updated_at") or row.get("created_at") or now
+    ts = db.confirmed_ts(row) or now
     age_days = max(0.0, (now - ts) / 86400)
     for max_age, emoji, label, mult in FRESHNESS_TIERS:
         if age_days < max_age:
@@ -759,7 +785,7 @@ def get_today(broker_id):
     active = db.list_broker_listings(
         broker_id, limit=10000, offset=0,
         statuses=utils.PROFILE_ACTIVE_STATUSES)
-    stale = sum(1 for l in active if (l.get("updated_at") or 0) < cutoff)
+    stale = sum(1 for l in active if (db.confirmed_ts(l) or 0) < cutoff)
 
     # -- counts: same db calls (and limits) as the single APIs
     counts = {

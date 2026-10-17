@@ -30,6 +30,8 @@ $oldWebScript = Join-Path $PSScriptRoot "webapp\server.py"
 $prodDir = Join-Path (Split-Path $PSScriptRoot -Parent) "TrueNestProd"
 $webScript = Join-Path $prodDir "webapp\server.py"
 $env:BOT_DB_PATH = Join-Path $PSScriptRoot "broker_bot.db"
+# pythonw khong co console: bot va webapp ghi log vao logsot.log, logs\webapp.log (xoay vong 5 MB x 5)
+$env:TRUENEST_LOG_DIR = Join-Path $PSScriptRoot "logs"
 
 # Bot nap code luc khoi dong: restart khi repo con tep .py sua do = chay code do dang.
 $dirty = @(git -C $PSScriptRoot status --porcelain --untracked-files=no -- "*.py" | Where-Object { $_ })
@@ -64,6 +66,18 @@ if ($old.Count -gt 0) {
         Write-Host "Khong tat duoc $($left.Count) ban cu (PID $($left.ProcessId -join ', ')). Dung lai, khong bat them." -ForegroundColor Red
         exit 1
     }
+}
+
+# Migration chay MOT lan, sau khi tat ban cu va truoc khi bat ban moi: khong tien trinh nao
+# dang ghi DB, va webapp khong doc cot ma bot chua kip them. Sao luu vao backups\ truoc.
+Write-Host "Migrate DB..." -ForegroundColor Green
+Push-Location $PSScriptRoot
+python -m db.migrate
+$migrateExit = $LASTEXITCODE
+Pop-Location
+if ($migrateExit -ne 0) {
+    Write-Host "Migrate DB loi (exit $migrateExit). Dung lai, khong bat bot/webapp." -ForegroundColor Red
+    exit 1
 }
 
 Write-Host "Starting webapp..." -ForegroundColor Green

@@ -4,6 +4,8 @@ import uuid
 from .core import connect, _now
 import json
 
+from .validate import choice, to_epoch, to_id_list
+
 
 
 VIEWING_STATUSES = ("scheduled", "done", "cancelled")
@@ -15,7 +17,10 @@ def create_viewing(broker_id, client_id=None, client_name="", listing_id=None,
     listing_id is kept for backward compatibility (first of the list)."""
     viewing_id = "vw:" + uuid.uuid4().hex[:12]
     now = _now()
-    ids = list(listing_ids) if listing_ids else []
+    ids = to_id_list(listing_ids, "listing_ids")
+    scheduled_at = to_epoch(scheduled_at, "scheduled_at")
+    if listing_id is not None and not isinstance(listing_id, str):
+        to_id_list(listing_id, "listing_id")     # raises FieldError
     if listing_id and listing_id not in ids:
         ids.insert(0, listing_id)
     conn = connect(path)
@@ -75,9 +80,15 @@ def list_viewings(broker_id, upcoming_only=True, limit=20, path=None):
 def update_viewing(viewing_id, path=None, **fields):
     allowed = {"client_id", "client_name", "listing_id", "listing_ids",
                "scheduled_at", "status", "notes", "feedback"}
-    if "listing_ids" in fields and isinstance(fields["listing_ids"], list):
-        fields["listing_ids"] = json.dumps(fields["listing_ids"],
-                                           ensure_ascii=False)
+    if "listing_ids" in fields:
+        fields["listing_ids"] = json.dumps(
+            to_id_list(fields["listing_ids"], "listing_ids"),
+            ensure_ascii=False)
+    if "scheduled_at" in fields:
+        fields["scheduled_at"] = to_epoch(fields["scheduled_at"],
+                                          "scheduled_at", allow_none=False)
+    if "status" in fields:
+        choice(fields["status"], "status", VIEWING_STATUSES)
     sets = ", ".join(f"{k} = ?" for k in fields if k in allowed)
     if not sets:
         return False

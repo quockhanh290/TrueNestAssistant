@@ -57,7 +57,7 @@ def _listing_brief(l):
     loc = p.get("building_name") or p.get("district") or "?"
     price = p.get("price_vnd")
     price_s = f"{price / 1_000_000:g}tr" if price else "?/tháng"
-    days = int((time.time() - l["updated_at"]) / 86400)
+    days = int((time.time() - db.confirmed_ts(l)) / 86400)
     return f"🏠 {br_s} {loc}, {price_s} — {days} ngày chưa update"
 
 

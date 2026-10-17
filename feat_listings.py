@@ -330,7 +330,7 @@ def _detail_content(l, page, filt):
     kb = []
 
     # refresh prompt for old listings (>30 days)
-    age_days = (time.time() - l["created_at"]) / 86400
+    age_days = (time.time() - db.confirmed_ts(l)) / 86400
     if age_days > 30:
         lines.append(
             f"\n💡 Tin này đã {int(age_days)} ngày rồi, "

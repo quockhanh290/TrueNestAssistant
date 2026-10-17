@@ -228,7 +228,7 @@ async def sweep_stale_listings(ctx):
     """Weekly sweeper: DM every broker that has listings >14 days stale.
 
     Intended trigger: bot job_queue weekly run (parent wires the schedule).
-    Uses updated_at (last status refresh), falling back to created_at.
+    Uses confirmed_at (last "still available" confirmation, db.confirmed_ts).
     """
     import time
     now = time.time()
@@ -250,7 +250,7 @@ async def sweep_stale_listings(ctx):
             continue
         stale = []
         for r in rows:
-            ts = r.get("updated_at") or r.get("created_at") or 0
+            ts = db.confirmed_ts(r)
             age_d = (now - ts) / 86400
             if age_d > 14:
                 p = r.get("parsed") or {}

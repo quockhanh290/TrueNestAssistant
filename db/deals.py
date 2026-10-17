@@ -4,6 +4,8 @@ from .listings import get_listing
 from .clients import list_clients
 import uuid
 
+from .validate import to_epoch, to_number
+
 
 
 def count_listings_created(broker_id, start_ts, end_ts, path=None):
@@ -32,6 +34,9 @@ def create_deal(broker_id, client_id=None, client_name="", listing_id=None,
                 commission_vnd=None, closed_at=None, notes="", path=None):
     deal_id = "deal:" + uuid.uuid4().hex[:12]
     now = _now()
+    # "15tr5" goes through the same money reader as the bot's commission step
+    commission_vnd = to_number(commission_vnd, "commission_vnd", money=True)
+    closed_at = to_epoch(closed_at, "closed_at")
     conn = connect(path)
     conn.execute(
         "INSERT INTO deals (id, broker_id, client_id, client_name, listing_id,"

@@ -234,7 +234,8 @@ def broker_profile_score(broker_id):
         comp_sum += comp
         if comp >= 80:
             complete_count += 1
-        if (l.get("updated_at") or 0) >= fresh_cutoff:
+        # confirmed_at: a price/photo edit does not make a listing fresh
+        if (db.confirmed_ts(l) or 0) >= fresh_cutoff:
             fresh_count += 1
 
     avg_comp = comp_sum / total
@@ -673,7 +674,7 @@ def listing_line(l):
     br_s = "studio" if br == 0.0 else (f"{int(br)}PN" if br else "?PN")
     loc = p.get("building_name") or p.get("district") or "?"
     price = fmt_price(p.get("price_vnd"))
-    fresh_emoji, fresh_label = freshness_badge(l["created_at"])
+    fresh_emoji, fresh_label = freshness_badge(db.confirmed_ts(l))
 
     line1 = f"🏠 {br_s} {loc}, {price}/tháng {fresh_emoji} {fresh_label}"
 
