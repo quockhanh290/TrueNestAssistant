@@ -156,18 +156,26 @@ if (window.Telegram?.WebApp) {
       const p = l.parsed || l;
       const st = statusOf(l);
       const img = (l.photo_urls || [])[0] || '';
-      const beds = p.bedrooms ? p.bedrooms + 'PN' : '';
+      // Build title from available fields, fallback gracefully
+      let title = l.title;
+      if (!title || title === '-') {
+        const br = l.bedroom_label || (p.bedrooms ? p.bedrooms + 'PN' : '');
+        const place = p.district || p.building_name || '';
+        title = (br + ' ' + place).trim() || ('Căn #' + String(l.id || '').slice(-6));
+      }
+      const district = p.district || p.building_name || '';
+      const beds = l.bedroom_label || (p.bedrooms ? p.bedrooms + 'PN' : '');
       const area = p.area_m2 ? p.area_m2 + 'm²' : '';
-      const tags = (l.amenities || []).slice(0, 4).map(a =>
+      const tags = (l.amenities || p.amenities || []).slice(0, 4).map(a =>
         '<span class="tag">' + esc(a) + '</span>').join('');
       return '<div class="card">' +
         '<div class="card-main">' +
           (img ? '<img class="card-img" loading="lazy" src="' + esc(img) + '">' : '<div class="card-img"></div>') +
           '<div class="card-body">' +
-            '<div class="card-top"><div class="card-title">' + esc(l.title || 'Chưa có tiêu đề') + '</div>' +
-            '<div class="card-price">' + fmtPrice(p.price_vnd) + '</div></div>' +
-            '<div class="card-loc"><span class="material-symbols-outlined">pin_drop</span>' + esc(p.district || '') + '</div>' +
-            '<div class="card-meta"><span>' + esc(beds) + '</span><span>' + esc(area) + '</span></div>' +
+            '<div class="card-top"><div class="card-title">' + esc(title) + '</div>' +
+            '<div class="card-price">' + fmtPrice(p.price_vnd || l.price_vnd) + '</div></div>' +
+            (district ? '<div class="card-loc"><span class="material-symbols-outlined">pin_drop</span>' + esc(district) + '</div>' : '') +
+            '<div class="card-meta"><span>' + esc(beds) + '</span>' + (area ? '<span>' + esc(area) + '</span>' : '') + '</div>' +
           '</div>' +
         '</div>' +
         (tags ? '<div class="card-tags">' + tags + '</div>' : '') +
