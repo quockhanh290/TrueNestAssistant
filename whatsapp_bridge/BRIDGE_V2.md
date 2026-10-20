@@ -30,12 +30,12 @@ event nền tảng → chuẩn hoá Event → Batcher (theo người gửi, tick
   (cờ `is_multi`), album 30 ảnh, sticker.
 - Luật đóng đợt: text listing thứ 2 (KHÁC) → tách; text trùng → bỏ;
   LUU → đóng + lưu ngay; BO → huỷ; im lặng 15s → đóng; trần 180s → đóng.
-- Bổ sung: Zalo **không hỏi gì cả** (không có nút bấm, hỏi bằng từ khoá =
-  ma sát vừa loại bỏ). Ảnh đến sau trong 5 phút → auto-save thành **1 mục
-  riêng** trong kho + nhắn báo "Đã lưu thêm N ảnh — vào kho gộp vào căn
-  trước nếu đúng, không thì xoá". Gộp/xoá quyết ở kho, lúc broker review.
-  (Action `ask_supplement` của engine chỉ còn dùng trên WhatsApp, nơi có
-  nút bấm; bridge Zalo dịch action đó thành auto-save riêng.)
+- Bổ sung: đợt chính auto-save; riêng **đợt ảnh đến sau** (chỉ ảnh,
+  trong 5 phút sau lần flush trước) thì **cần xác nhận** vì mơ hồ —
+  có thể là ảnh của căn vừa rồi, căn mới, hoặc rác. WhatsApp: nút bấm
+  [Gộp vào căn vừa rồi] [Căn mới]. Zalo: quoted question + từ khoá
+  `GỘP` / `MỚI`. Không trả lời sau 10 phút → mặc định lưu thành mục
+  riêng (không mất ảnh), broker xử lý tiếp lúc review trong kho.
 - Đợt có text listing riêng → luôn là căn mới, không bao giờ bị gộp oan.
 
 ## 3. Receipt UX (chung)
@@ -73,6 +73,9 @@ event nền tảng → chuẩn hoá Event → Batcher (theo người gửi, tick
   Lý do: broker tự quyết định giữ/xoá/sửa khi review lại tin trong hệ
   thống của họ. Lưới an toàn: nhắn `HUY` trong 10 phút để huỷ lần lưu
   vừa rồi; để lâu hơn thì xoá trong kho như thường.
+- Đợt ảnh đến sau (chỉ ảnh, ≤5 phút sau lần lưu trước) → **cần xác
+  nhận**: quote hỏi + từ khoá `GỘP` (gộp vào căn vừa rồi) / `MỚI`
+  (lưu căn riêng); 10 phút không trả lời → mặc định lưu riêng.
 - Quote: dựng từ event thật (đủ 7 field: content, msgType, propertyExt,
   uidFrom, msgId, cliMsgId, ts, ttl).
 - Thu hồi tin (undo event) → event `retract` → gỡ khỏi đợt đang mở.
