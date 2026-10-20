@@ -30,8 +30,12 @@ event nền tảng → chuẩn hoá Event → Batcher (theo người gửi, tick
   (cờ `is_multi`), album 30 ảnh, sticker.
 - Luật đóng đợt: text listing thứ 2 (KHÁC) → tách; text trùng → bỏ;
   LUU → đóng + lưu ngay; BO → huỷ; im lặng 15s → đóng; trần 180s → đóng.
-- Photo-only trong 5 phút sau flush → hỏi bổ sung đúng 1 lần; broker
-  trả lời 1 lần rồi các đợt sau tự gộp/tách theo quyết định đó.
+- Bổ sung: Zalo **không hỏi gì cả** (không có nút bấm, hỏi bằng từ khoá =
+  ma sát vừa loại bỏ). Ảnh đến sau trong 5 phút → auto-save thành **1 mục
+  riêng** trong kho + nhắn báo "Đã lưu thêm N ảnh — vào kho gộp vào căn
+  trước nếu đúng, không thì xoá". Gộp/xoá quyết ở kho, lúc broker review.
+  (Action `ask_supplement` của engine chỉ còn dùng trên WhatsApp, nơi có
+  nút bấm; bridge Zalo dịch action đó thành auto-save riêng.)
 - Đợt có text listing riêng → luôn là căn mới, không bao giờ bị gộp oan.
 
 ## 3. Receipt UX (chung)
