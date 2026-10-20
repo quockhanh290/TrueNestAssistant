@@ -304,6 +304,176 @@ check("R4.rest auto-merges to first batch",
       len(merges) >= 2 and all(m[2] == target for m in merges),
       f"merges={len(merges)} target={target}")
 
+# ---- edge cases round 2 ----
+
+def media(sender, kind, mid, caption="", msg_id=""):
+    return Event(sender=sender, kind=kind, photo_id=mid,
+                 caption=caption, msg_id=msg_id)
+
+
+def retract(sender, target, msg_id):
+    return Event(sender=sender, kind="retract", target_id=target,
+                 msg_id=msg_id)
+
+
+# Case 16: Meta webhook retry -> same events arrive twice (same msg ids)
+s = Sim()
+evs = [Event(sender=S, kind="image", photo_id=f"p{i}", msg_id=f"m{i}",
+             caption=(LIST_A if i == 0 else "")) for i in range(3)]
+for e in evs:
+    s.feed(0.2, e)
+for e in evs:      # exact redelivery
+    s.feed(0.2, e)
+s.advance(20)
+f = s.flushes()
+dups = [a for a in s.actions if a[0] == "duplicate"]
+check("16.webhook retry deduped", len(f) == 1 and len(f[0][1].photos) == 3
+      and len(dups) == 3, f"dups={len(dups)}")
+
+# Case 17: video tour collected as media, not dropped
+s = Sim()
+s.feed(0, txt(S, LIST_A))
+s.feed(1, media(S, "video", "v1"))
+for i in range(2):
+    s.feed(1, img(S, f"p{i}"))
+s.advance(20)
+f = s.flushes()
+check("17.video kept in batch", len(f) == 1
+      and ("video", "v1") in f[0][1].others and len(f[0][1].photos) == 2)
+
+# Case 18: voice note collected (speech-to-text is a v2.x step; v2 must
+# at least not lose it)
+s = Sim()
+s.feed(0, img(S, "p0", caption=LIST_A))
+s.feed(1, media(S, "audio", "a1"))
+s.advance(20)
+f = s.flushes()
+check("18.voice note kept", len(f) == 1 and ("audio", "a1") in f[0][1].others)
+
+# Case 19: location pin attached to the batch
+s = Sim()
+s.feed(0, txt(S, LIST_A))
+s.feed(1, Event(sender=S, kind="location", msg_id="loc1",
+                meta={"lat": 16.0544, "lng": 108.2022}))
+s.advance(20)
+f = s.flushes()
+check("19.location pin kept", len(f) == 1
+      and f[0][1].locations == [{"lat": 16.0544, "lng": 108.2022}])
+
+# Case 20: document (PDF price list) collected
+s = Sim()
+s.feed(0, txt(S, LIST_A))
+s.feed(1, media(S, "document", "d1", caption="bảng giá kèm theo"))
+s.advance(20)
+f = s.flushes()
+check("20.document kept", len(f) == 1 and ("document", "d1") in f[0][1].others)
+
+# Case 21: retract (recall) removes one photo; retracting everything
+# cancels the batch
+s = Sim()
+s.feed(0, txt(S, LIST_A))
+for i, mid in enumerate(["m0", "m1", "m2"]):
+    s.feed(1, Event(sender=S, kind="image", photo_id=f"p{i}", msg_id=mid))
+s.feed(1, retract(S, "p1", "u1"))
+s.advance(20)
+f = s.flushes()
+check("21.retract removes photo", len(f) == 1
+      and f[0][1].photos == ["p0", "p2"])
+s = Sim()
+s.feed(0, Event(sender=S, kind="image", photo_id="p0", msg_id="m0"))
+s.feed(1, retract(S, "p0", "u0"))
+s.advance(20)
+check("21b.retract all cancels", len(s.cancels()) == 1 and len(s.flushes()) == 0)
+
+# Case 22: same photo forwarded twice (same media id) -> counted once
+s = Sim()
+s.feed(0, img(S, "p0", caption=LIST_A))
+s.feed(1, img(S, "p0"))
+s.feed(1, img(S, "p1"))
+s.advance(20)
+f = s.flushes()
+check("22.photo dedup in batch", len(f) == 1 and f[0][1].photos == ["p0", "p1"])
+
+# Case 23: same listing text pasted twice -> stored once
+s = Sim()
+s.feed(0, txt(S, LIST_A))
+s.feed(2, txt(S, LIST_A))
+s.advance(20)
+f = s.flushes()
+check("23.text dedup in batch", len(f) == 1 and f[0][1].texts == [LIST_A])
+
+# Case 24: HUY LINK mid-batch cancels the batch
+s = Sim()
+s.feed(0, txt(S, LIST_A))
+s.feed(1, img(S, "p0"))
+s.feed(1, kw(S, "HUY LINK"))
+s.advance(20)
+check("24.HUY LINK cancels batch", len(s.cancels()) == 1
+      and len(s.flushes()) == 0
+      and any(a[0] == "immediate" for a in s.actions))
+
+# Case 25: LUU with no open batch -> safe no-op
+s = Sim()
+acts = s.b.on_event(kw(S, "LUU"))
+check("25.LUU empty batch no-op", acts == [])
+
+# Case 26: one pasted message with TWO listings -> flagged is_multi
+s = Sim()
+s.feed(0, txt(S, LIST_A + "\n---\n" + LIST_B))
+s.advance(20)
+f = s.flushes()
+check("26.multi-listing paste flagged", len(f) == 1 and f[0][1].is_multi)
+s2 = Sim()
+s2.feed(0, txt(S, LIST_A))
+s2.advance(20)
+check("26b.single listing not flagged", not s2.flushes()[0][1].is_multi)
+
+# Case 27: supplement question unanswered; broker sends another
+# photo-only burst -> asked AGAIN (not silently merged)
+s = Sim()
+s.feed(0, txt(S, LIST_A))
+s.advance(20)
+for i in range(2):
+    s.feed(1, img(S, f"x{i}"))
+s.advance(20)
+for i in range(2, 4):
+    s.feed(1, img(S, f"x{i}"))
+s.advance(20)
+check("27.unanswered -> asked again", len(s.supplements()) == 2,
+      f"asked={len(s.supplements())}")
+
+# Case 28: after resolving "merge", a FULL listing text still flushes
+# as a NEW listing (never merged into the previous one)
+s = Sim()
+s.feed(0, txt(S, LIST_A))
+s.advance(20)
+s.feed(1, img(S, "x0"))
+s.advance(20)
+s.b.resolve_supplement(S, merge=True)
+s.feed(1, txt(S, LIST_B))
+s.advance(20)
+merges = [a for a in s.actions if a[0] == "merge_into"]
+ftexts = [b.combined_text for _, b in s.flushes()]
+check("28.full text after merge-OK stays new",
+      LIST_B in ftexts and not merges)
+
+# Case 29: platform-cap album (30 photos) -> single batch
+s = Sim()
+for i in range(30):
+    s.feed(0.1, img(S, f"p{i}", caption=(LIST_A if i == 0 else "")))
+s.advance(20)
+f = s.flushes()
+check("29.album 30 photos", len(f) == 1 and len(f[0][1].photos) == 30)
+
+# Case 30: sticker event ignored gracefully
+s = Sim()
+s.feed(0, txt(S, LIST_A))
+s.feed(1, Event(sender=S, kind="sticker"))
+s.feed(1, img(S, "p0"))
+s.advance(20)
+f = s.flushes()
+check("30.sticker ignored", len(f) == 1 and len(f[0][1].photos) == 1)
+
 # ------------------------------------------------------------- report
 # NOTE: the two checks below (R5/R6) are contract tests -- they prove we
 # send/parse payload shapes that match the platform specs. UI rendering

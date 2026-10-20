@@ -12,17 +12,27 @@ Close-of-batch rules (content first, time as fallback):
   4. Batch older than `hard_cap` seconds -> flush regardless. The cap is
      generous (180s) so a slow photo selection is never split; it only
      guards against a pathological endless stream.
-A batch flushed within `supp_window` of the previous flush for the same
-sender is flagged as a possible supplement ("ask_supplement") so the
-bridge can ask [Bổ sung vào căn vừa rồi] [Căn mới] instead of guessing.
+A photo/media-only batch flushed within `supp_window` of the previous
+flush for the same sender is flagged as a possible supplement
+("ask_supplement") so the bridge can ask [Bổ sung vào căn vừa rồi]
+[Căn mới] instead of guessing. Batches WITH their own listing text are
+always new listings and never merge.
 
-Pairing codes, HUY LINK and button replies never enter a batch.
-Reactions are ignored. Short non-listing texts inside an open batch are
-treated as the broker's note on the listing.
+Robustness rules:
+  - Duplicate platform events (Meta webhook retries share the same
+    message id) are dropped via a bounded per-sender seen-set.
+  - Identical texts and repeated photo ids inside a batch are deduped.
+  - Videos, voice notes, documents, location pins and contact cards are
+    collected as media (never silently dropped); captions on any media
+    count as batch text.
+  - A retract event (Zalo message recall) removes the targeted photo /
+    media / text from the still-open batch.
+  - HUY LINK cancels any open batch (nothing may flush under a dead link).
+  - LUU with no open batch is a safe no-op.
 
 The caller feeds normalized events (see Event) and periodically calls
 tick() with the current virtual time; the engine returns action lists.
-Photo bytes/download live outside the engine (photo_ids only here).
+Photo bytes/download live outside the engine (media ids only here).
 """
 from __future__ import annotations
 
@@ -43,7 +53,9 @@ DISTRICTS = [
 ]
 PAIRING_RE = re.compile(r"WA-[A-Z2-9]{6}|ZN-[A-Z2-9]{6}")
 
-SHORT_MAX = 40  # chars; a text this short with no markers = chat/note
+SHORT_MAX = 40        # chars; a text this short with no markers = chat/note
+MEDIA_KINDS = ("image", "video", "audio", "document", "location", "contact")
+SEEN_KEEP = 300       # message ids remembered per sender for dedup
 
 
 def parse_listing(text: str) -> dict:
@@ -81,22 +93,30 @@ def is_pairing_code(text: str) -> bool:
 @dataclass
 class Event:
     sender: str            # channel sender key (phone / zalo_id)
-    kind: str              # text | image | reaction | button | keyword
+    kind: str              # text | image | video | audio | document |
+                           # location | contact | reaction | button |
+                           # keyword | retract
     body: str = ""         # text body (kind=text/keyword) or button id
-    caption: str = ""      # caption carried by an image (WhatsApp)
-    photo_id: str = ""     # media id of an image event
+    caption: str = ""      # caption carried by a media event
+    photo_id: str = ""     # media id of a media event
+    msg_id: str = ""       # platform message id (dedup + retract lookup)
+    target_id: str = ""    # kind=retract: msg_id/photo_id being recalled
+    meta: dict = field(default_factory=dict)  # e.g. {"lat": .., "lng": ..}
 
 
 @dataclass
 class Batch:
     batch_id: int
     sender: str
-    texts: list = field(default_factory=list)
-    notes: list = field(default_factory=list)
-    photos: list = field(default_factory=list)   # photo_ids
+    texts: list = field(default_factory=list)      # listing texts
+    notes: list = field(default_factory=list)      # broker chat notes
+    photos: list = field(default_factory=list)     # image media ids
+    others: list = field(default_factory=list)     # (kind, media_id)
+    locations: list = field(default_factory=list)  # location meta dicts
+    text_ids: dict = field(default_factory=dict)   # msg_id -> listing text
     started_at: float = 0.0
     last_at: float = 0.0
-    reason: str = ""         # how the batch closed: silence|hardcap|split|save_kw
+    reason: str = ""         # silence|hardcap|split|save_kw
 
     @property
     def combined_text(self) -> str:
@@ -105,6 +125,12 @@ class Batch:
     @property
     def parsed(self) -> dict:
         return parse_listing(self.combined_text)
+
+    @property
+    def is_multi(self) -> bool:
+        """One pasted message holding 2+ listings (2 phones or 2 prices)."""
+        t = self.combined_text
+        return len(set(PHONE_RE.findall(t))) >= 2 or len(PRICE_RE.findall(t)) >= 2
 
 
 # ------------------------------------------------------------------ engine
@@ -120,6 +146,7 @@ class Batcher:
         self.recent: dict[str, tuple[int, float]] = {}  # sender -> (batch_id, flushed_at)
         self.pending_supp: dict[str, tuple[int, int]] = {}  # sender -> (batch_id, prev_batch_id)
         self.supp_mode: dict[str, dict] = {}  # sender -> {mode, target, until}
+        self._seen: dict[str, dict[str, float]] = {}  # sender -> msg_id -> ts
         self._seq = 0
 
     # ---------------------------------------------------------- internals
@@ -130,16 +157,31 @@ class Batcher:
         self.batches[sender] = b
         return b
 
+    def _is_duplicate(self, sender: str, msg_id: str, now: float) -> bool:
+        if not msg_id:
+            return False
+        seen = self._seen.setdefault(sender, {})
+        if msg_id in seen:
+            return True
+        seen[msg_id] = now
+        if len(seen) > SEEN_KEEP:  # prune the oldest half
+            for k in sorted(seen, key=seen.get)[: SEEN_KEEP // 2]:
+                del seen[k]
+        return False
+
     def _flush(self, sender: str, reason: str, now: float) -> list:
         b = self.batches.pop(sender, None)
-        if b is None or (not b.texts and not b.photos and not b.notes):
+        if b is None or (not b.texts and not b.photos and not b.notes
+                         and not b.others):
             return []
         b.reason = reason
         prev = self.recent.get(sender)
         self.recent[sender] = (b.batch_id, now)
-        # The broker already answered the supplement question for this burst:
+        # The broker already answered the supplement question for this burst.
+        # Merge mode applies ONLY to batches without their own listing text:
+        # a full listing text is always a new listing, never a supplement.
         mode = self.supp_mode.get(sender)
-        if mode and now <= mode["until"]:
+        if mode and now <= mode["until"] and not b.texts:
             if mode["mode"] == "merge":
                 return [("merge_into", b, mode["target"])]
             return [("flush", b)]  # mode == "new": always a fresh listing
@@ -174,15 +216,41 @@ class Batcher:
             "until": self._now() + self.supp_window,
         }
 
-    def _add_text(self, b: Batch, text: str, now: float):
-        text = text.strip()
+    def _add_text(self, b: Batch, text: str, now: float, msg_id: str = ""):
+        text = (text or "").strip()
         if not text:
             return
         if has_listing_markers(text):
-            b.texts.append(text)
+            if text not in b.texts:  # broker pasted the same text twice
+                b.texts.append(text)
+                if msg_id:
+                    b.text_ids[msg_id] = text
         else:
-            b.notes.append(text)
+            if text not in b.notes:
+                b.notes.append(text)
         b.last_at = now
+
+    def _retract(self, sender: str, target_id: str) -> list:
+        b = self.batches.get(sender)
+        if b is None or not target_id:
+            return [("ignore", sender)]
+        removed = False
+        if target_id in b.photos:
+            b.photos.remove(target_id)
+            removed = True
+        before = len(b.others)
+        b.others = [o for o in b.others if o[1] != target_id]
+        removed = removed or len(b.others) != before
+        t = b.text_ids.pop(target_id, None)
+        if t is not None and t in b.texts:
+            b.texts.remove(t)
+            removed = True
+        if not removed:
+            return [("ignore", sender)]
+        if not b.texts and not b.photos and not b.notes and not b.others:
+            self.batches.pop(sender, None)  # everything recalled: batch gone
+            return [("cancel", sender)]
+        return [("retracted", sender, target_id)]
 
     # ---------------------------------------------------------- public
 
@@ -190,51 +258,77 @@ class Batcher:
         now = self._now()
         sender = ev.sender
 
+        if self._is_duplicate(sender, ev.msg_id, now):
+            return [("duplicate", ev)]
+
         if ev.kind == "reaction":
             return [("ignore", ev)]
         if ev.kind == "button":
             return [("immediate", ev)]
+        if ev.kind == "retract":
+            return self._retract(sender, ev.target_id)
 
         if ev.kind == "keyword":
             kw = (ev.body or "").strip().upper()
+            if kw == "HUY LINK":
+                acts = []
+                if self.batches.pop(sender, None) is not None:
+                    acts.append(("cancel", sender))
+                acts.append(("immediate", ev))
+                return acts
             if kw == "LUU":
                 return self._flush(sender, "save_kw", now)
             if kw == "BO":
                 if self.batches.pop(sender, None) is not None:
                     return [("cancel", sender)]
                 return [("ignore_chat", ev)]
-            return [("immediate", ev)]  # HUY LINK etc.
+            return [("immediate", ev)]
 
         if ev.kind == "text" and is_pairing_code(ev.body):
             return [("immediate", ev)]
 
-        if ev.kind == "image":
+        if ev.kind in MEDIA_KINDS:
             b = self.batches.get(sender)
             if b is None:
                 b = self._open(sender, now)
-            b.photos.append(ev.photo_id or f"photo-{len(b.photos)}")
+            if ev.kind == "image":
+                pid = ev.photo_id or f"photo-{len(b.photos)}"
+                if pid not in b.photos:  # same photo forwarded twice
+                    b.photos.append(pid)
+            else:
+                entry = (ev.kind, ev.photo_id or ev.msg_id)
+                if entry not in b.others:
+                    b.others.append(entry)
+                if ev.kind == "location" and ev.meta:
+                    b.locations.append(dict(ev.meta))
             b.last_at = now
             if ev.caption:
-                self._add_text(b, ev.caption, now)
+                self._add_text(b, ev.caption, now, ev.msg_id)
             return []
 
         if ev.kind == "text":
             text = (ev.body or "").strip()
             b = self.batches.get(sender)
             if b is not None and b.texts and has_listing_markers(text):
-                # second full listing -> close current, start new one
+                if text in b.texts:
+                    # accidental double-paste of the same listing: dedupe,
+                    # don't split. (A genuinely re-forwarded listing arrives
+                    # after the previous batch has flushed.)
+                    self._add_text(b, text, now, ev.msg_id)
+                    return []
+                # second, DIFFERENT full listing -> close current, start new
                 acts = self._flush(sender, "split", now)
                 b = self._open(sender, now)
-                self._add_text(b, text, now)
+                self._add_text(b, text, now, ev.msg_id)
                 return acts
             if b is None:
                 if not has_listing_markers(text) and len(text) <= SHORT_MAX:
                     return [("ignore_chat", ev)]
                 b = self._open(sender, now)
-            self._add_text(b, text, now)
+            self._add_text(b, text, now, ev.msg_id)
             return []
 
-        return [("ignore", ev)]
+        return [("ignore", ev)]  # stickers and other unknown kinds
 
     def tick(self) -> list:
         now = self._now()
