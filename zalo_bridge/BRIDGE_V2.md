@@ -64,9 +64,11 @@ event nền tảng → chuẩn hoá Event → Batcher (theo người gửi, tick
   Khanh), chỉ 1:1 DM (`ThreadType.User`).
 - Engine: **port 1:1 sang JS** (`batch.js`), dùng đúng bộ 49 sim case
   làm test suite để đảm bảo hành vi giống hệt bản Python.
-- Xác nhận: Zalo personal **không có nút bấm** → quote reply + từ khoá.
-  — QUYẾT ĐỊNH CHỜ KHANH: (a) LUU/BO chủ động, hoặc
-  (b) auto-save + undo bằng `HUY` trong 10 phút. Đề xuất: (b).
+- Xác nhận: Zalo personal **không có nút bấm** → **AUTO-SAVE** (Khanh
+  chốt 2026-10-20): đợt đóng là lưu ngay vào kho, không hỏi trước.
+  Lý do: broker tự quyết định giữ/xoá/sửa khi review lại tin trong hệ
+  thống của họ. Lưới an toàn: nhắn `HUY` trong 10 phút để huỷ lần lưu
+  vừa rồi; để lâu hơn thì xoá trong kho như thường.
 - Quote: dựng từ event thật (đủ 7 field: content, msgType, propertyExt,
   uidFrom, msgId, cliMsgId, ts, ttl).
 - Thu hồi tin (undo event) → event `retract` → gỡ khỏi đợt đang mở.
