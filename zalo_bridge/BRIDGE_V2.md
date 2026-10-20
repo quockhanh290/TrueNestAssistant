@@ -55,7 +55,7 @@ event nền tảng → chuẩn hoá Event → Batcher (theo người gửi, tick
 - Xác nhận: **nút bấm native** [Lưu vào kho] [Bỏ qua] (tối đa 3 nút,
   title ≤ 20 ký tự — payload builder `build_interactive_payload`,
   parse `parse_button_reply`).
-- Tải ảnh/video: `GET /{media_id}` → URL tạm → bytes → đưa backend
+- Tải ảnh: `GET /{media_id}` → URL tạm → bytes → đưa backend
   (`photos.py`: dHash + pHash + R2 `truenest-images`, prefix `broker/`).
 - Caption WhatsApp nằm trên event ảnh đầu — engine đã chứng minh đúng
   với caption ở mọi vị trí, không phụ thuộc giả định này.
@@ -108,3 +108,27 @@ event nền tảng → chuẩn hoá Event → Batcher (theo người gửi, tick
 
 - Nút bấm/quote hiển thị trên máy broker như thế nào.
 - Số test free của Meta cho WhatsApp; tài khoản receiver cho Zalo.
+
+## 9. Quyết định bổ sung (Khanh chốt 2026-10-20)
+
+- **Luật quote (chung):** mọi tin báo của bridge (đã lưu, thất bại, hỏi
+  bổ sung, nhắc xác nhận, hướng dẫn) đều **quoted vào tin gốc của broker**.
+  Không quote = broker không biết tin nào được nhắc tới.
+- **Lưu thất bại:** bridge giữ hàng chờ retry cục bộ; chỉ gửi "đã lưu"
+  sau khi lưu thành công thật. Retry hết cỡ vẫn lỗi → nhắn
+  (quoted vào đợt đó): "Không lưu được đợt này — gửi lại giúp em nhé".
+- **Persist đợt đang mở:** state engine (đợt mở, seen ids, supp_mode)
+  ghi xuống DB; bridge restart là khôi phục, không mất tin đang gom.
+- **Nhận ảnh thôi:** engine vẫn gom video/audio/PDF/location để báo cáo
+  đúng ("bỏ qua 1 video"), nhưng **bước lưu chỉ lấy ảnh**. Không âm thầm
+  lưu media loại khác vào listing.
+- **Trùng căn lúc lưu (Zalo auto-save):** luôn **tạo mới**; nếu dedup
+  nghi trùng → tin báo đã lưu ghi thêm "có vẻ trùng với [tóm tắt căn
+  cũ] — vào kho kiểm tra giúp em". Broker tự xử lúc review.
+- **GỘP = căn gần nhất**; câu hỏi quote kèm tóm tắt căn đó.
+- **is_multi (1 tin dán 2 căn):** lưu nguyên + cảnh báo trong tin báo
+  "có vẻ chứa 2 căn — vào kho tách giúp em".
+- **HUY:** chỉ huỷ **lần lưu gần nhất**, trong 10 phút. Quá 10 phút →
+  trả lời (quoted): "quá hạn huỷ nhanh rồi, vào kho xoá giúp em nhé".
+- **WhatsApp không bấm Lưu/Bỏ qua:** nhắc 1 lần sau 1 giờ (quoted vào
+  thẻ xác nhận); chưa bấm = chưa lưu.
