@@ -9,7 +9,9 @@ Close-of-batch rules (content first, time as fallback):
   1. A second full-listing text arrives -> current batch flushes ("split").
   2. Broker sends LUU keyword -> flush with save intent. BO -> cancel.
   3. Silence for `silence` seconds since the last event -> flush.
-  4. Batch older than `hard_cap` seconds -> flush regardless.
+  4. Batch older than `hard_cap` seconds -> flush regardless. The cap is
+     generous (180s) so a slow photo selection is never split; it only
+     guards against a pathological endless stream.
 A batch flushed within `supp_window` of the previous flush for the same
 sender is flagged as a possible supplement ("ask_supplement") so the
 bridge can ask [Bổ sung vào căn vừa rồi] [Căn mới] instead of guessing.
@@ -108,7 +110,7 @@ class Batch:
 # ------------------------------------------------------------------ engine
 
 class Batcher:
-    def __init__(self, now=None, silence: float = 15.0, hard_cap: float = 60.0,
+    def __init__(self, now=None, silence: float = 15.0, hard_cap: float = 180.0,
                  supp_window: float = 300.0):
         self._now = now or time.time
         self.silence = silence
@@ -116,6 +118,8 @@ class Batcher:
         self.supp_window = supp_window
         self.batches: dict[str, Batch] = {}
         self.recent: dict[str, tuple[int, float]] = {}  # sender -> (batch_id, flushed_at)
+        self.pending_supp: dict[str, tuple[int, int]] = {}  # sender -> (batch_id, prev_batch_id)
+        self.supp_mode: dict[str, dict] = {}  # sender -> {mode, target, until}
         self._seq = 0
 
     # ---------------------------------------------------------- internals
@@ -133,6 +137,12 @@ class Batcher:
         b.reason = reason
         prev = self.recent.get(sender)
         self.recent[sender] = (b.batch_id, now)
+        # The broker already answered the supplement question for this burst:
+        mode = self.supp_mode.get(sender)
+        if mode and now <= mode["until"]:
+            if mode["mode"] == "merge":
+                return [("merge_into", b, mode["target"])]
+            return [("flush", b)]  # mode == "new": always a fresh listing
         # A follow-up batch WITHOUT its own listing text, flushed soon
         # after another batch, is likely extra photos for the previous
         # listing -> ask, don't guess. A batch WITH full listing text is
@@ -141,8 +151,28 @@ class Batcher:
         if (prev and not b.texts
                 and now - prev[1] <= self.supp_window
                 and prev[0] != b.batch_id):
+            self.pending_supp[sender] = (b.batch_id, prev[0])
             return [("ask_supplement", b, prev[0])]
         return [("flush", b)]
+
+    def resolve_supplement(self, sender: str, merge: bool):
+        """Record the broker's answer to a supplement question.
+
+        merge=True  -> broker confirmed the extra photos belong to the
+                       previous listing; later batches in this burst
+                       auto-merge into it without re-asking.
+        merge=False -> they're a separate listing; stop asking for the
+                       rest of the burst.
+        """
+        pend = self.pending_supp.pop(sender, None)
+        if pend is None:
+            return  # double-tap / late click: keep the existing supp_mode
+        target = pend[1]
+        self.supp_mode[sender] = {
+            "mode": "merge" if merge else "new",
+            "target": target,
+            "until": self._now() + self.supp_window,
+        }
 
     def _add_text(self, b: Batch, text: str, now: float):
         text = text.strip()

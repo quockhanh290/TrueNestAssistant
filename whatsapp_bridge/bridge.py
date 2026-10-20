@@ -246,6 +246,39 @@ def handle_message(phone: str, body: str, sender_name: str, has_media: bool):
 
 # ---------------------------------------------------------------- HTTP server
 
+def build_interactive_payload(to_phone: str, body: str, buttons: list) -> dict:
+    """Build a WhatsApp Cloud API interactive message payload.
+
+    buttons: list of (button_id, title). Cloud API allows at most 3 reply
+    buttons per message; titles are truncated to 20 chars per the spec.
+    """
+    items = []
+    for bid, title in buttons[:3]:
+        items.append({
+            "type": "reply",
+            "reply": {"id": str(bid)[:256], "title": str(title)[:20]},
+        })
+    return {
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": to_phone,
+        "type": "interactive",
+        "interactive": {
+            "type": "button",
+            "body": {"text": body},
+            "action": {"buttons": items},
+        },
+    }
+
+
+def parse_button_reply(msg: dict) -> str | None:
+    """Extract the button id from an inbound interactive webhook message."""
+    if (msg or {}).get("type") != "interactive":
+        return None
+    return (((msg.get("interactive") or {}).get("button_reply") or {})
+            .get("id"))
+
+
 def _extract_messages(event: dict):
     """Yield (phone, body, sender_name, has_media) for inbound user messages."""
     for entry in event.get("entry", []):

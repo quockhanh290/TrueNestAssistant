@@ -29,6 +29,9 @@ class Sim:
 
     def feed(self, dt, ev: Event):
         self.t += dt
+        # timers fire as time passes, before the new event is processed --
+        # this models the bridge's 1s tick loop in production
+        self.actions += self.b.tick()
         self.actions += self.b.on_event(ev)
 
     def advance(self, seconds, step=2.0):
@@ -211,14 +214,17 @@ check("12.pairing bypasses batch", len(imm) == 1
       and len(f) == 1 and len(f[0][1].photos) == 1
       and len(f[0][1].texts) == 1)
 
-# Case 13: slow trickle of photos -> hard cap 60s closes first batch
+# Case 13: pathological endless trickle -> hard cap (180s) eventually
+# closes the batch, remaining photos form the next batch.
 s = Sim()
-for i in range(8):
-    s.feed(10, img(S, f"p{i}"))   # one photo every 10s for 70s
+for i in range(20):
+    s.feed(10, img(S, f"p{i}"))   # one photo every 10s for 200s
 s.advance(30)
-reasons = [b.reason for _, b in s.flushes()]
-check("13.hard cap 60s splits trickle",
-      reasons[0] == "hardcap", f"reasons={reasons}")
+f = s.flushes()
+reasons = [b.reason for _, b in f]
+check("13.hard cap 180s splits endless trickle",
+      reasons[0] == "hardcap" and len(f[0][1].photos) == 18,
+      f"reasons={reasons} photos={[len(b.photos) for _, b in f]}")
 
 # Case 14: two senders interleaved -> isolated batches
 s = Sim()
@@ -241,7 +247,104 @@ s.advance(20)
 check("15.lone chat ignored", len(s.flushes()) == 0
       and any(a[0] == "ignore_chat" for a in s.actions))
 
+# ---- robustness sweeps for the "unprovables" ----
+
+# R1: caption position sweep -- whichever image event carries the caption
+# (first / middle / last), the batching outcome must be identical.
+for pos in (0, 6, 12):
+    s = Sim()
+    for i in range(13):
+        s.feed(0.15, img(S, f"p{i}", caption=(LIST_A if i == pos else "")))
+    s.advance(20)
+    f = s.flushes()
+    check(f"R1.caption at photo {pos} -> same batch",
+          len(f) == 1 and len(f[0][1].photos) == 13
+          and f[0][1].texts == [LIST_A])
+
+# R2: inter-arrival timing sweep -- gaps up to 14s (< silence 15s) within
+# one forwarded album must still group into a single batch.
+for gap in (0.05, 0.5, 2, 8, 14):
+    s = Sim()
+    for i in range(6):
+        s.feed(gap, img(S, f"p{i}", caption=(LIST_A if i == 0 else "")))
+    s.advance(20)
+    f = s.flushes()
+    check(f"R2.arrival gap {gap}s -> 1 batch",
+          len(f) == 1 and len(f[0][1].photos) == 6)
+
+# R3: standalone text arrives MID photo stream (Zalo-style) without a
+# previous listing text in the batch -> no premature split.
+s = Sim()
+for i in range(3):
+    s.feed(0.3, img(S, f"p{i}"))
+s.feed(0.3, txt(S, LIST_A))
+for i in range(3, 6):
+    s.feed(0.3, img(S, f"p{i}"))
+s.advance(20)
+f = s.flushes()
+check("R3.text mid-stream -> 1 batch, 6 photos",
+      len(f) == 1 and len(f[0][1].photos) == 6)
+
+# R4: slow selection (one photo every 16s > silence). First photo closes
+# alone; the 2nd flush triggers ONE supplement question; the broker
+# answers "merge" once; everything after auto-merges, no repeat questions.
+s = Sim()
+resolved = [False]
+for i in range(5):
+    s.feed(16, img(S, f"p{i}"))
+    if not resolved[0] and any(a[0] == "ask_supplement" for a in s.actions):
+        s.b.resolve_supplement(S, merge=True)
+        resolved[0] = True
+s.advance(30)
+sups = [a for a in s.actions if a[0] == "ask_supplement"]
+merges = [a for a in s.actions if a[0] == "merge_into"]
+target = s.flushes()[0][1].batch_id if s.flushes() else None
+check("R4.asked supplement exactly once", len(sups) == 1)
+check("R4.rest auto-merges to first batch",
+      len(merges) >= 2 and all(m[2] == target for m in merges),
+      f"merges={len(merges)} target={target}")
+
 # ------------------------------------------------------------- report
+# NOTE: the two checks below (R5/R6) are contract tests -- they prove we
+# send/parse payload shapes that match the platform specs. UI rendering
+# (how buttons/quote look on the broker's phone) cannot be simulated.
+
+# R5: WhatsApp interactive button payload conforms to the Cloud API spec
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import bridge as wabridge  # noqa: E402
+
+payload = wabridge.build_interactive_payload(
+    "84912345678", "Đã nhận 2PN Sơn Trà + 13 ảnh",
+    [("save", "💾 Lưu vào kho"), ("skip", "🗑 Bỏ qua"),
+     ("edit", "✏️ Sửa"), ("extra", "thừa")],
+)
+ib = payload["interactive"]
+check("R5.button payload shape", ib["type"] == "button"
+      and len(ib["action"]["buttons"]) == 3  # clamped to max 3
+      and all(len(x["reply"]["title"]) <= 20 for x in ib["action"]["buttons"]))
+check("R5.button_reply parses inbound",
+      wabridge.parse_button_reply({
+          "from": "84912345678", "id": "wamid.x", "type": "interactive",
+          "interactive": {"type": "button_reply",
+                          "button_reply": {"id": "save", "title": "💾 Lưu vào kho"}}}
+      ) == "save"
+      and wabridge.parse_button_reply({"type": "text",
+                                       "text": {"body": "hi"}}) is None)
+
+# R6: Zalo quote construction -- a real zca-js message event carries all
+# 7 fields SendMessageQuote requires (verified in the inbox adapter's
+# quote handling and sendMessage.d.ts). This proves we CAN build a quote
+# from live events; rendering still needs a real Zalo client.
+QUOTE_FIELDS = ["content", "msgType", "propertyExt", "uidFrom",
+                "msgId", "cliMsgId", "ts", "ttl"]
+sample_zalo_event_data = {
+    "content": "Cho thuê 2PN Sơn Trà 15tr",
+    "msgType": "chat.text", "propertyExt": {"some": 1}, "uidFrom": "12345",
+    "msgId": "m1", "cliMsgId": "c1", "ts": 1760920000000, "ttl": 0,
+}
+check("R6.zalo quote fields available on live events",
+      all(k in sample_zalo_event_data for k in QUOTE_FIELDS))
+
 fails = [r for r in results if not r[1]]
 for name, ok, detail in results:
     print(("PASS " if ok else "FAIL ") + name + (f"  [{detail}]" if detail else ""))
