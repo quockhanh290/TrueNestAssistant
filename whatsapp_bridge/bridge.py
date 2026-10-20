@@ -26,7 +26,7 @@ import threading
 import time
 import urllib.parse
 import urllib.request
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import sys
 
@@ -318,7 +318,7 @@ def main():
         print("[warn] token.txt not found — Telegram forwarding disabled", flush=True)
     if not (WA_ACCESS_TOKEN and WA_PHONE_NUMBER_ID and WA_VERIFY_TOKEN):
         print("[warn] WA_* env not set — Cloud API disabled (tests still work)", flush=True)
-    server = HTTPServer((BRIDGE_HOST, BRIDGE_PORT), Handler)
+    server = ThreadingHTTPServer((BRIDGE_HOST, BRIDGE_PORT), Handler)
     print(f"[wa-bridge] listening on {BRIDGE_HOST}:{BRIDGE_PORT}/wa-webhook", flush=True)
     server.serve_forever()
 
