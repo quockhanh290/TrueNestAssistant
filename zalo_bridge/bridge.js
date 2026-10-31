@@ -1,32 +1,37 @@
-/* TrueNest Zalo -> Telegram bridge.
+/* TrueNest Zalo intake bridge v2.
  *
- * A dedicated Zalo personal account (nick phu, NEVER the main account)
- * receives listing forwards via 1:1 DM. This bridge:
- *   1. Redeems pairing codes (ZN-XXXXXX) -> links zalo_id to telegram_id.
- *   2. For linked senders: parses listing-like messages, forwards to the
- *      broker's Telegram via bot Linh (Bot API), entering normal intake flow.
- *   3. For unknown senders: replies once with pairing instructions.
+ * A dedicated Zalo personal account (NEVER Khanh's main account)
+ * receives listing forwards via 1:1 DM. v2 (spec: BRIDGE_V2.md):
+ * messages are grouped by the batching engine (batch.js, port of the
+ * Python engine), closed batches AUTO-SAVE as draft listings through
+ * save_cli.py -> bridge_save.py, photo-only follow-ups ask GỘP/MỚI,
+ * HUY undoes the latest save within 10 minutes. State persists in
+ * <data>/bridge-state.json so open batches survive restarts.
  *
  * Run: node bridge.js            (uses saved credentials)
  *      node bridge.js --pair     (QR login, first time only)
  *
  * Env:
  *   BOT_DB_PATH        (optional, sqlite db path)
- *   ZALO_BRIDGE_DATA   (optional, dir for credentials; default ./data)
+ *   ZALO_BRIDGE_DATA   (optional, dir for credentials+state; default ./data)
  */
 
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 const https = require("node:https");
-const { execFileSync } = require("node:child_process");
+const { execFile, execFileSync } = require("node:child_process");
 const { Zalo, ThreadType, LoginQRCallbackEventType } = require("zca-js");
+const { createCore } = require("./core.js");
 
 // ---- config ----
 const ROOT = path.resolve(__dirname, "..");
 const DATA = process.env.ZALO_BRIDGE_DATA || path.join(__dirname, "data");
 const CRED_PATH = path.join(DATA, "zalo-credentials.json");
 const QR_PATH = path.join(DATA, "zalo-qr.png");
+const STATE_PATH = path.join(DATA, "bridge-state.json");
 const DB_CLI = path.join(__dirname, "db_cli.py");
+const SAVE_CLI = path.join(__dirname, "save_cli.py");
 const TOKEN_TXT = path.join(ROOT, "token.txt");
 
 fs.mkdirSync(DATA, { recursive: true, mode: 0o700 });
@@ -40,16 +45,15 @@ function readBotToken() {
 }
 const BOT_TOKEN = readBotToken();
 if (!BOT_TOKEN) {
-  console.error("token.txt missing - cannot send to Telegram. Exiting.");
+  console.error("token.txt missing - cannot notify Telegram. Exiting.");
   process.exit(1);
 }
 
-// ---- db access via python (respects api.py/db-package law) ----
+// ---- db access via python (pairing links) ----
 function dbCall(...args) {
   try {
     const out = execFileSync("python3", [DB_CLI, ...args], {
-      encoding: "utf8",
-      timeout: 15000,
+      encoding: "utf8", timeout: 15000,
     });
     return JSON.parse(out.trim().split("\n").pop());
   } catch (e) {
@@ -58,193 +62,120 @@ function dbCall(...args) {
   }
 }
 
-// ---- telegram send ----
-function tgApi(method, payload) {
+// ---- save via python one-shot (bridge_save.py) ----
+function saveCli(args) {
   return new Promise((resolve) => {
-    const body = JSON.stringify(payload);
-    const req = https.request(
-      {
-        hostname: "api.telegram.org",
-        path: `/bot${BOT_TOKEN}/${method}`,
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Content-Length": body.length },
-      },
-      (res) => {
-        let data = "";
-        res.on("data", (c) => (data += c));
-        res.on("end", () => {
-          try {
-            resolve(JSON.parse(data));
-          } catch {
-            resolve({ ok: false });
-          }
-        });
-      }
-    );
-    req.on("error", () => resolve({ ok: false }));
-    req.setTimeout(20000, () => {
-      req.destroy();
-      resolve({ ok: false });
-    });
-    req.write(body);
-    req.end();
+    execFile("python3", [SAVE_CLI, ...args], { timeout: 120000 },
+      (err, stdout) => {
+        if (err) { console.error("saveCli failed:", err.message); return resolve(null); }
+        try { resolve(JSON.parse(stdout.trim().split("\n").pop())); }
+        catch { resolve(null); }
+      });
   });
 }
 
-// ---- listing parse (mirrors inbox/adapters/zalo/broker-bot.js) ----
-function parseListing(text) {
-  const out = { price_vnd: null, bedrooms: null, phone: null, district: null };
-  const t = (text || "").toLowerCase();
-  let m = t.match(/(\d+(?:[.,]\d+)?)\s*(tr|triệu|million)/);
-  if (m) out.price_vnd = Math.round(parseFloat(m[1].replace(",", ".")) * 1e6);
-  if (!out.price_vnd) {
-    m = t.match(/(\d{7,9})(?:\s*(vnd|đ|d))?/);
-    if (m) out.price_vnd = parseInt(m[1], 10);
-  }
-  m = t.match(/(\d+)\s*(pn|phòng ngủ|bed)/);
-  if (m) out.bedrooms = parseInt(m[1], 10);
-  else if (/studio/.test(t)) out.bedrooms = 0;
-  m = (text || "").replace(/[\s.]/g, "").match(/(0\d{9}|84\d{9})/);
-  if (m) out.phone = m[1];
-  const districts = ["hải châu", "sơn trà", "ngũ hành sơn", "liên chiểu", "cẩm lệ", "thanh khê", "hòa vang"];
-  for (const d of districts) {
-    if (t.includes(d)) {
-      out.district = d;
-      break;
-    }
-  }
-  return out;
-}
-
-function looksLikeListing(text, photoCount) {
-  if (!text || text.length < 20) return false;
-  const p = parseListing(text);
-  return !!(p.price_vnd || (p.bedrooms !== null && photoCount > 0) || (p.phone && p.price_vnd));
-}
-
-// ---- rate limiting (per zalo sender) ----
-const lastReply = new Map(); // zaloId -> ts (for unlinked guidance)
-const msgCount = new Map(); // zaloId -> {n, windowStart}
-function tooFast(zaloId, limit = 20, windowMs = 60_000) {
-  const now = Date.now();
-  let e = msgCount.get(zaloId);
-  if (!e || now - e.windowStart > windowMs) {
-    e = { n: 0, windowStart: now };
-    msgCount.set(zaloId, e);
-  }
-  e.n += 1;
-  return e.n > limit;
-}
-
-const PAIRING_RE = /^\s*ZN-[A-Z0-9]{6}\s*$/i;
-const UNLINK_RE = /^\s*HUY LINK\s*$/i;
-
-const GUIDE_TEXT =
-  "Chào bạn, đây là tài khoản nhận tin của TrueNest.\n\n" +
-  "Để liên kết: mở bot TrueNest trên Telegram, gửi /linkzalo để lấy mã, " +
-  "rồi gửi mã đó vào đây.\n\n" +
-  "Sau khi liên kết, bạn forward tin listing vào đây là tin tự về Telegram của bạn.";
-
-async function handleMessage(api, msg) {
+async function withTempPhotos(photoBuffers, fn) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "zalo-bridge-"));
   try {
-    if (msg.isSelf) return;
-    if (msg.type !== ThreadType.User) return; // 1:1 DM only, ignore groups
-
-    const text = typeof msg.data?.content === "string" ? msg.data.content : "";
-    const zaloId = String(msg.data?.uidFrom || msg.threadId || "");
-    const zaloName = msg.data?.senderName || "";
-    if (!zaloId) return;
-    if (tooFast(zaloId)) return; // silent drop on flood
-
-    // 1. pairing code?
-    if (PAIRING_RE.test(text)) {
-      const r = dbCall("redeem", text.trim().toUpperCase(), zaloId, zaloName);
-      if (r.ok) {
-        await api.sendMessage(
-          { msg: "✅ Đã liên kết! Từ giờ bạn forward tin listing vào đây, tin sẽ tự về Telegram của bạn." },
-          zaloId,
-          ThreadType.User
-        );
-        await tgApi("sendMessage", {
-          chat_id: r.telegram_id,
-          text: "🔗 <b>Đã liên kết Zalo!</b>\n\nTừ giờ bạn forward tin listing vào tài khoản Zalo nhận tin, tin sẽ tự về đây để bạn xác nhận.",
-          parse_mode: "HTML",
-        });
-      } else {
-        const why =
-          r.error === "expired"
-            ? "mã đã hết hạn (15 phút)"
-            : r.error === "used"
-            ? "mã đã được dùng rồi"
-            : "mã không đúng";
-        await api.sendMessage(
-          { msg: `❌ ${why}. Mở bot Telegram gửi /linkzalo để lấy mã mới nhé.` },
-          zaloId,
-          ThreadType.User
-        );
-      }
-      return;
-    }
-
-    // 2. unlink?
-    if (UNLINK_RE.test(text)) {
-      const r = dbCall("unlink", zaloId);
-      await api.sendMessage(
-        { msg: r.ok ? "✅ Đã hủy liên kết." : "Bạn chưa liên kết tài khoản nào." },
-        zaloId,
-        ThreadType.User
-      );
-      return;
-    }
-
-    // 3. linked?
-    const link = dbCall("lookup", zaloId);
-    const telegramId = link.ok ? link.telegram_id : null;
-    if (!telegramId) {
-      const now = Date.now();
-      if (now - (lastReply.get(zaloId) || 0) > 3600_000) {
-        lastReply.set(zaloId, now);
-        await api.sendMessage({ msg: GUIDE_TEXT }, zaloId, ThreadType.User);
-      }
-      return;
-    }
-
-    // 4. listing forward -> parse + push to Telegram
-    const photoCount = Array.isArray(msg.data?.attachments)
-      ? msg.data.attachments.filter((a) => a.type === "photo" || a.type === "image").length
-      : 0;
-    if (!looksLikeListing(text, photoCount)) {
-      return; // not a listing, ignore quietly
-    }
-    const p = parseListing(text);
-    const lines = ["📥 <b>Tin mới từ Zalo</b>", ""];
-    if (p.price_vnd) lines.push(`💰 ${p.price_vnd.toLocaleString("vi-VN")}đ`);
-    if (p.bedrooms !== null) lines.push(`🏠 ${p.bedrooms === 0 ? "Studio" : p.bedrooms + "PN"}`);
-    if (p.district) lines.push(`📍 ${p.district}`);
-    if (p.phone) lines.push(`📱 ${p.phone}`);
-    if (photoCount) lines.push(`🖼️ ${photoCount} ảnh`);
-    lines.push("", "Reply tin này để nhập vào kho (luồng intake bình thường).");
-    // keep original text for the broker to review
-    const preview = text.length > 600 ? text.slice(0, 600) + "…" : text;
-    lines.push("", `<i>${escapeHtml(preview)}</i>`);
-
-    await tgApi("sendMessage", {
-      chat_id: telegramId,
-      text: lines.join("\n"),
-      parse_mode: "HTML",
-    });
-    await api.sendMessage(
-      { msg: "✅ Đã chuyển tin qua Telegram của bạn. Mở bot để xác nhận nhé." },
-      zaloId,
-      ThreadType.User
-    );
-  } catch (e) {
-    console.error("handleMessage error:", e.message);
+    photoBuffers.forEach((buf, i) =>
+      fs.writeFileSync(path.join(dir, String(i).padStart(3, "0") + ".jpg"), buf));
+    return await fn(dir);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 }
 
-function escapeHtml(s) {
-  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const saveDeps = {
+  async saveListing({ tgId, text, photoBuffers }) {
+    const txtFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "zb-t-")), "t.txt");
+    fs.writeFileSync(txtFile, text || "", "utf8");
+    try {
+      return await withTempPhotos(photoBuffers, (dir) =>
+        saveCli(["save", "--tg", String(tgId), "--text-file", txtFile, "--photos", dir]));
+    } finally {
+      fs.rmSync(path.dirname(txtFile), { recursive: true, force: true });
+    }
+  },
+  async appendPhotos({ listingId, photoBuffers }) {
+    return withTempPhotos(photoBuffers, (dir) =>
+      saveCli(["append", "--listing", listingId, "--photos", dir]));
+  },
+  async undoListing(listingId) {
+    return saveCli(["undo", "--listing", listingId]);
+  },
+};
+
+// ---- telegram notify ----
+function tgSend(chatId, text) {
+  const body = JSON.stringify({ chat_id: chatId, text });
+  const req = https.request(
+    { hostname: "api.telegram.org", path: `/bot${BOT_TOKEN}/sendMessage`,
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) } },
+    (res) => res.resume());
+  req.on("error", () => {});
+  req.write(body);
+  req.end();
+}
+
+// ---- state persistence (atomic) ----
+function loadState() {
+  try { return JSON.parse(fs.readFileSync(STATE_PATH, "utf8")); }
+  catch { return null; }
+}
+function storeState(obj) {
+  const tmp = STATE_PATH + ".tmp";
+  fs.writeFileSync(tmp, JSON.stringify(obj), { mode: 0o600 });
+  fs.renameSync(tmp, STATE_PATH);
+}
+
+// ---- zca message -> normalized engine event ----
+function quoteDataOf(data) {
+  if (!data || data.msgId === undefined) return null;
+  return {
+    content: typeof data.content === "string" ? data.content : "",
+    msgType: data.msgType, propertyExt: data.propertyExt,
+    uidFrom: data.uidFrom, msgId: data.msgId, cliMsgId: data.cliMsgId,
+    ts: data.ts, ttl: data.ttl,
+  };
+}
+
+function normalize(api, core, msg) {
+  if (msg.isSelf) return;
+  if (msg.type !== ThreadType.User) return;      // 1:1 DM only
+  const data = msg.data || {};
+  const sender = String(data.uidFrom || msg.threadId || "");
+  if (!sender) return;
+  const raw = { quoteData: quoteDataOf(data), name: data.senderName || "" };
+  const msgId = String(data.msgId || "");
+
+  const content = data.content;
+  if (typeof content === "string") {
+    core.handleMessage(sender, { sender, kind: "text", body: content, msg_id: msgId }, raw)
+      .catch((e) => console.error("handleMessage:", e.message));
+    return;
+  }
+  // photo/video/file messages: content is an object with an href
+  const atts = Array.isArray(data.attachments) && data.attachments.length
+    ? data.attachments : null;
+  const items = atts || (content && typeof content === "object" ? [content] : []);
+  if (!items.length) {
+    core.handleMessage(sender, { sender, kind: "sticker", msg_id: msgId }, raw)
+      .catch(() => {});
+    return;
+  }
+  items.forEach((att, i) => {
+    const url = att.href || att.hdUrl || att.hd_url || "";
+    const typeStr = String(att.type || data.msgType || "");
+    let kind = "document";
+    if (/photo|image/i.test(typeStr) || (!atts && /photo|image/i.test(String(data.msgType || "")))) kind = "image";
+    else if (/video/i.test(typeStr)) kind = "video";
+    const pid = String(att.msgId || att.id || (items.length > 1 ? `${msgId}:${i}` : msgId));
+    if (kind === "image" && url) core.notePhotoUrl(pid, url);
+    core.handleMessage(sender,
+      { sender, kind, photo_id: pid, msg_id: items.length > 1 ? `${msgId}:${i}` : msgId },
+      raw).catch((e) => console.error("handleMessage:", e.message));
+  });
 }
 
 async function main() {
@@ -254,15 +185,12 @@ async function main() {
   let api;
   if (wantPair || !fs.existsSync(CRED_PATH)) {
     console.log("QR login: scan", QR_PATH);
-    api = await zalo.loginQR(
-      {},
-      (event, data) => {
-        if (event === LoginQRCallbackEventType.QR_GENERATED && data?.qrCode) {
-          fs.writeFileSync(QR_PATH, Buffer.from(data.qrCode.split(",")[1] || data.qrCode, "base64"));
-          console.log("QR saved to", QR_PATH);
-        }
+    api = await zalo.loginQR({}, (event, data) => {
+      if (event === LoginQRCallbackEventType.QR_GENERATED && data?.qrCode) {
+        fs.writeFileSync(QR_PATH, Buffer.from(data.qrCode.split(",")[1] || data.qrCode, "base64"));
+        console.log("QR saved to", QR_PATH);
       }
-    );
+    });
     fs.writeFileSync(CRED_PATH, JSON.stringify(api.getContext?.() || {}), { mode: 0o600 });
     console.log("Credentials saved.");
   } else {
@@ -270,9 +198,40 @@ async function main() {
     api = await zalo.login(creds);
   }
 
-  api.listener.on("message", (msg) => handleMessage(api, msg));
+  const core = createCore({
+    send: async (zaloId, text, quote) => {
+      const payload = quote ? { msg: text, quote } : { msg: text };
+      await api.sendMessage(payload, zaloId, ThreadType.User);
+    },
+    download: async (url) => {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) return null;
+        return Buffer.from(await res.arrayBuffer());
+      } catch { return null; }
+    },
+    dbCall,
+    tgSend,
+    loadState,
+    storeState,
+    ...saveDeps,
+  });
+
+  api.listener.on("message", (msg) => normalize(api, core, msg));
+  // message recall (undo) — supported by zca-js listener; harmless if absent
+  if (typeof api.listener.on === "function") {
+    api.listener.on("undo", (msg) => {
+      const data = msg?.data || {};
+      const sender = String(data.uidFrom || msg?.threadId || "");
+      const target = String(data.msgId || "");
+      if (sender && target) {
+        core.handleUndo(sender, target).catch((e) => console.error("undo:", e.message));
+      }
+    });
+  }
+  setInterval(() => core.tick().catch((e) => console.error("tick:", e.message)), 1000);
   api.listener.start();
-  console.log("Zalo bridge listening (1:1 DMs only).");
+  console.log("Zalo bridge v2 listening (1:1 DMs only, auto-save).");
 }
 
 main().catch((e) => {

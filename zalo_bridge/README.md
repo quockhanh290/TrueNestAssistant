@@ -1,36 +1,59 @@
-# Zalo → Telegram Bridge
+# Zalo Intake Bridge v2
 
-Tài khoản Zalo nhận tin (nick phụ) → forward listing về Telegram broker qua bot Linh.
+Tài khoản Zalo **phụ** (không dùng tài khoản chính của Khanh) nhận tin
+forward 1:1 từ broker. Khác v1 (chuyển tiếp về Telegram), v2 **tự lưu
+thẳng vào kho**: tin được gom thành đợt bởi batching engine, đợt đóng
+là lưu ngay dạng nháp — broker tự review/xoá/sửa trong kho của họ.
+Spec: `BRIDGE_V2.md`.
 
-## Luồng
+## Flow
 
-1. Broker chat bot Linh trên Telegram → `/linkzalo` → nhận mã `ZN-XXXXXX` (15 phút, 1 lần).
-2. Broker gửi mã vào Zalo cho tài khoản nhận tin → liên kết `zalo_id ↔ telegram_id`.
-3. Broker forward tin listing vào Zalo → bridge parse → gửi qua Telegram → broker xác nhận theo luồng intake bình thường.
-4. Gửi `HUY LINK` vào Zalo để hủy liên kết.
-
-## Cài đặt (máy Windows của Khanh)
-
-```powershell
-cd D:\TrueNest\TrueNestAssistant\zalo_bridge
-npm install
-node bridge.js --pair   # quét QR bằng app Zalo của nick PHỤ (không dùng nick chính)
-node bridge.js          # chạy bình thường
+```
+broker forward (text/ảnh rời nhau, mọi thứ tự)
+  -> zca-js -> normalize -> Batcher JS (batch.js) -> đợt đóng
+  -> AUTO-SAVE qua save_cli.py -> bridge_save.py -> listing "draft"
+  -> tin báo (quote tin gốc): "✅ Đã lưu vào kho: 2PN Sơn Trà 15tr + 3 ảnh"
+Đợt chỉ-ảnh <=5 phút sau lần lưu trước -> hỏi GỘP / MỚI (quote)
+  GỘP = thêm ảnh vào căn vừa rồi | MỚI = lưu căn riêng
+  10 phút không trả lời -> lưu riêng.
+HUY (<=10 phút) = huỷ lần lưu gần nhất. HUY LINK = huỷ liên kết.
 ```
 
-- Credentials lưu ở `zalo_bridge/data/zalo-credentials.json` (0600).
-- Bridge gọi `db_cli.py` để đọc/ghi pairing + mapping qua `db` package (đúng luật architecture).
-- Gửi Telegram qua Bot API trực tiếp, dùng token trong `token.txt`.
+- Mọi tin báo đều quote tin gốc của broker.
+- Lưu lỗi: retry outbox 60s/300s/900s, chỉ báo "đã lưu" khi lưu thật.
+- State (đợt đang mở, pending, outbox) persist ở `data/bridge-state.json`.
+- Chỉ lưu ẢNH; video/file được đếm và báo "bỏ qua" trong tin báo.
+- Trùng căn: vẫn tạo mới; nghi trùng theo hash ảnh thì ghi chú trong
+  tin báo để broker review.
 
-## An toàn
+## Files
 
-- Chỉ nhận DM 1:1 (`ThreadType.User`), bỏ qua group.
-- Người lạ chưa link: chỉ nhận 1 tin hướng dẫn/giờ, tin listing không đi đâu.
-- Rate limit 20 tin/phút/người gửi, vượt thì drop im lặng.
-- Ảnh: hiện tại chỉ đếm số ảnh; tải + forward ảnh sẽ thêm ở bước sau.
+| File | Vai trò |
+|---|---|
+| `bridge.js` | bootstrap zca-js (QR/credentials), normalize message, tick 1s |
+| `core.js` | bộ não: auto-save, hỏi bổ sung, HUY, outbox — test độc lập được |
+| `batch.js` | batching engine, port 1:1 từ `../whatsapp_bridge/batch.py` |
+| `simulate.js` | bộ 46 case hành vi cho engine JS (`node simulate.js`) |
+| `test_core.js` | unit test core với deps giả (`node test_core.js`) |
+| `save_cli.py` | one-shot gọi `bridge_save.py` (lưu/append/undo) |
+| `db_cli.py` | one-shot pairing (redeem/lookup/unlink) |
+| `../bridge_save.py` | đường lưu backend dùng chung (gốc repo) |
 
-## Lưu ý
+## Run
 
-- Dùng nick Zalo phụ riêng. Không chạy bằng nick chính.
-- Cho broker kết bạn với acc nhận trước để giảm nguy cơ bị Zalo soi.
-- Tăng dần số broker, đừng ồ ạt ngày đầu.
+```bash
+npm install
+node bridge.js --pair   # lần đầu: quét QR bằng tài khoản Zalo phụ
+node bridge.js          # các lần sau
+```
+
+## One-time bot wiring (Khanh, trong bot.py)
+
+```python
+import feat_zalo
+app.add_handler(CommandHandler("linkzalo", feat_zalo.cmd_linkzalo))
+app.add_handler(CommandHandler("unlinkzalo", feat_zalo.cmd_unlinkzalo))
+```
+
+Broker chạy `/linkzalo` trong bot rồi gửi mã `ZN-XXXXXX` cho tài khoản
+Zalo nhận tin 1 lần duy nhất.
