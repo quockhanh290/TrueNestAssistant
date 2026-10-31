@@ -62,11 +62,15 @@ def parse_listing(text: str) -> dict:
     out = {}
     m = PRICE_RE.search(text or "")
     if m:
-        num = float(m.group(1).replace(",", ".").replace(" ", ""))
-        unit = m.group(2).lower()
-        mult = {"tỷ": 1e9, "ty": 1e9, "tr": 1e6, "triệu": 1e6,
-                "trieu": 1e6, "million": 1e6, "k": 1e3}.get(unit, 1)
-        out["price_vnd"] = int(num * mult)
+        try:
+            num = float(m.group(1).replace(",", ".").replace(" ", ""))
+        except ValueError:
+            num = None    # e.g. "1.500.000k": not a usable price, skip it
+        if num is not None:
+            unit = m.group(2).lower()
+            mult = {"tỷ": 1e9, "ty": 1e9, "tr": 1e6, "triệu": 1e6,
+                    "trieu": 1e6, "million": 1e6, "k": 1e3}.get(unit, 1)
+            out["price_vnd"] = int(num * mult)
     m = BED_RE.search(text or "")
     if m:
         out["bedrooms"] = int(m.group(1))
@@ -114,6 +118,7 @@ class Batch:
     others: list = field(default_factory=list)     # (kind, media_id)
     locations: list = field(default_factory=list)  # location meta dicts
     text_ids: dict = field(default_factory=dict)   # msg_id -> listing text
+    anchor_msg_id: str = ""  # first event's msg id: the message to quote
     started_at: float = 0.0
     last_at: float = 0.0
     reason: str = ""         # silence|hardcap|split|save_kw
@@ -134,6 +139,28 @@ class Batch:
 
 
 # ------------------------------------------------------------------ engine
+
+def batch_to_dict(b: "Batch") -> dict:
+    return {
+        "batch_id": b.batch_id, "sender": b.sender,
+        "texts": b.texts, "notes": b.notes, "photos": b.photos,
+        "others": [list(o) for o in b.others],
+        "locations": b.locations, "text_ids": b.text_ids,
+        "anchor_msg_id": b.anchor_msg_id,
+        "started_at": b.started_at, "last_at": b.last_at,
+        "reason": b.reason,
+    }
+
+
+def batch_from_dict(d: dict) -> "Batch":
+    return Batch(batch_id=d["batch_id"], sender=d["sender"],
+                 texts=d["texts"], notes=d["notes"], photos=d["photos"],
+                 others=[tuple(o) for o in d["others"]],
+                 locations=d["locations"], text_ids=d["text_ids"],
+                 anchor_msg_id=d.get("anchor_msg_id", ""),
+                 started_at=d["started_at"], last_at=d["last_at"],
+                 reason=d.get("reason", ""))
+
 
 class Batcher:
     def __init__(self, now=None, silence: float = 15.0, hard_cap: float = 180.0,
@@ -156,6 +183,34 @@ class Batcher:
         b = Batch(batch_id=self._seq, sender=sender, started_at=now, last_at=now)
         self.batches[sender] = b
         return b
+
+    # ------------------------------------------------- persistence (v2)
+
+    def snapshot(self) -> dict:
+        """Serialize the full engine state (JSON-safe) for restart survival."""
+        return {
+            "seq": self._seq,
+            "batches": {s: batch_to_dict(b) for s, b in self.batches.items()},
+            "recent": {s: list(v) for s, v in self.recent.items()},
+            "pending_supp": {s: list(v) for s, v in self.pending_supp.items()},
+            "supp_mode": self.supp_mode,
+            "seen": self._seen,
+        }
+
+    @classmethod
+    def restore(cls, snap: dict, **kwargs) -> "Batcher":
+        eng = cls(**kwargs)
+        if not snap:
+            return eng
+        eng._seq = snap.get("seq", 0)
+        for s, d in (snap.get("batches") or {}).items():
+            eng.batches[s] = batch_from_dict(d)
+        eng.recent = {s: tuple(v) for s, v in (snap.get("recent") or {}).items()}
+        eng.pending_supp = {s: tuple(v) for s, v in
+                            (snap.get("pending_supp") or {}).items()}
+        eng.supp_mode = snap.get("supp_mode") or {}
+        eng._seen = snap.get("seen") or {}
+        return eng
 
     def _is_duplicate(self, sender: str, msg_id: str, now: float) -> bool:
         if not msg_id:
@@ -215,6 +270,10 @@ class Batcher:
             "target": target,
             "until": self._now() + self.supp_window,
         }
+
+    def _touch_anchor(self, b: Batch, ev: "Event"):
+        if not b.anchor_msg_id and ev.msg_id:
+            b.anchor_msg_id = ev.msg_id
 
     def _add_text(self, b: Batch, text: str, now: float, msg_id: str = ""):
         text = (text or "").strip()
@@ -291,6 +350,7 @@ class Batcher:
             b = self.batches.get(sender)
             if b is None:
                 b = self._open(sender, now)
+            self._touch_anchor(b, ev)
             if ev.kind == "image":
                 pid = ev.photo_id or f"photo-{len(b.photos)}"
                 if pid not in b.photos:  # same photo forwarded twice
@@ -309,6 +369,8 @@ class Batcher:
         if ev.kind == "text":
             text = (ev.body or "").strip()
             b = self.batches.get(sender)
+            if b is not None:
+                self._touch_anchor(b, ev)
             if b is not None and b.texts and has_listing_markers(text):
                 if text in b.texts:
                     # accidental double-paste of the same listing: dedupe,
@@ -319,12 +381,14 @@ class Batcher:
                 # second, DIFFERENT full listing -> close current, start new
                 acts = self._flush(sender, "split", now)
                 b = self._open(sender, now)
+                self._touch_anchor(b, ev)
                 self._add_text(b, text, now, ev.msg_id)
                 return acts
             if b is None:
                 if not has_listing_markers(text) and len(text) <= SHORT_MAX:
                     return [("ignore_chat", ev)]
                 b = self._open(sender, now)
+                self._touch_anchor(b, ev)
             self._add_text(b, text, now, ev.msg_id)
             return []
 
